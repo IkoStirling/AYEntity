@@ -1,0 +1,34 @@
+cmake_minimum_required(VERSION 3.20)
+
+project(AYEntityTest)
+
+set(SOURCES
+    TestMain.cpp
+    EntityTest.cpp
+    ComponentTest.cpp
+    SparseSetTest.cpp
+    WorldTest.cpp
+    EntityHandleTest.cpp
+    SystemTest.cpp
+)
+
+add_executable(${PROJECT_NAME} ${SOURCES})
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../interface
+    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../AYFoundation/AYTest
+)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    AYEntity
+    AYTest
+    AYCore
+    AYGameLoop
+    AYSerializer
+)
+
+target_compile_options(${PROJECT_NAME} PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>: /W4 /wd4200>
+    $<$<CXX_COMPILER_ID:GNU,Clang>: -Wall -Wextra -Wpedantic>
+)
