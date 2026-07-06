@@ -168,6 +168,8 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
     uint32_t skippedLoad = 0;
 
+    uint32_t skippedSkinned = 0;  // Phase 1 SC-01: routed to SkinnedMeshRenderSystem.
+
     uint32_t submitted = 0;
 
 
@@ -195,31 +197,17 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             || !meshComp->isValid()) {
 
             ++skippedInvalid;
-
-            if (frameIndex < 3) {
-
-                std::fprintf(stderr,
-
-                             "[RenderSystem] skip entity=%u transform=%p mesh=%p visible=%d "
-
-                             "meshPath='%s' materialPath='%s'\n",
-
-                             entity->getId(), static_cast<void*>(transform),
-
-                             static_cast<void*>(meshComp),
-
-                             meshComp != nullptr ? static_cast<int>(meshComp->visible) : -1,
-
-                             meshComp != nullptr ? meshComp->meshPath.c_str() : "",
-
-                             meshComp != nullptr ? meshComp->materialPath.c_str() : "");
-
-            }
-
             continue;
-
         }
 
+        // Phase 1 SC-01: skinned entities are owned by
+        // SkinnedMeshRenderSystem (separate scene-builder callback).
+        // Skip them here so the two passes don't double-submit the
+        // same draw.
+        if (meshComp->skinned) {
+            ++skippedSkinned;
+            continue;
+        }
 
 
         const std::string key = assetKey(meshComp->meshPath, meshComp->materialPath);
@@ -277,6 +265,7 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
     logBuildSceneSummary(frameIndex, matched, skippedInvalid, skippedLoad, submitted,
 
                          scene.items().size());
+    (void)skippedSkinned;  // reserved for future per-frame diagnostic.
 
 }
 

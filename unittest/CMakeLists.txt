@@ -10,6 +10,7 @@ set(SOURCES
     WorldTest.cpp
     EntityHandleTest.cpp
     SystemTest.cpp
+    SkinnedAnimationTest.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -18,6 +19,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../interface
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../AYFoundation/AYTest
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../AYRuntime/AYAnimation/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../AYRuntime/AYAnimation/include/ayanimation
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../AYFoundation/AYMath/include
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

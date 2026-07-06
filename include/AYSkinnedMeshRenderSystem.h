@@ -10,6 +10,12 @@
 #include <string>
 #include <unordered_map>
 
+namespace ayt::render
+{
+struct RenderScene;
+struct MaterialHandle;
+}
+
 namespace ayt::entity
 {
 

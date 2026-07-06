@@ -22,6 +22,10 @@ void registerRenderSystem();
 
 void registerEntityComponents();
 
+// Phase 1 AN-03 + E-04: animation tick + skinned draw submission.
+void registerAnimationSystem();
+void registerSkinnedMeshRenderSystem();
+
 
 
 } // namespace ayt::entity

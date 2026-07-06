@@ -36,7 +36,12 @@ struct MeshComponent : public IComponent {
     bool visible = true;
     int32_t layer = 0;
 
-    MeshComponent() = default;
+    MeshComponent() {
+        // AY_PROPERTY expands to `Type name;` with no initializer, so
+        // explicit ctor assignment is required to leave the field in
+        // a defined state (uninitialized bool would read garbage).
+        skinned = false;
+    }
 
     explicit MeshComponent(const char* path)
         : meshPath(path ? path : "") {}

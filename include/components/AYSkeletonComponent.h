@@ -19,11 +19,12 @@ namespace ayt::entity
 struct SkeletonComponent : public IComponent {
     const char* getName() const override { return "SkeletonComponent"; }
 
-    // Asset reference (resolved lazily by AnimationSystem on first tick).
-    std::string skeletonPath;
+    // Asset reference. Declared via AY_PROPERTY (which expands to
+    // `Type name;` + serializer metadata). Don't redeclare.
+    AY_PROPERTY(std::string, skeletonPath, kAttrSerialize)
 
-    // Loaded runtime data. `_skeleton` and `_player` are populated by the
-    // adapter; callers should not write to them directly.
+    // Loaded runtime data. `_skeleton` and `_player` are populated by
+    // the adapter; callers should not write to them directly.
     ayt::anim::Skeleton       skeleton;
     ayt::anim::AnimationPlayer player;
 
@@ -36,6 +37,12 @@ struct SkeletonComponent : public IComponent {
 
     bool isValid() const { return loaded && jointCount > 0; }
 
+    SkeletonComponent() {
+        // AY_PROPERTY emits `Type name;` with no default; ctor
+        // assignment is required to leave it in a defined state.
+        skeletonPath.clear();
+    }
+
     // Cleanup hook called by EntitySubSystem when the component is
     // detached. Releases heap-allocated skin matrices.
     ~SkeletonComponent() {
@@ -43,8 +50,6 @@ struct SkeletonComponent : public IComponent {
         skinMatrices = nullptr;
         jointCount = 0;
     }
-
-    AY_PROPERTY(std::string, skeletonPath, kAttrSerialize)
 };
 #undef AY_CURRENT_CLASS
 
