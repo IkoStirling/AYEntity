@@ -11,6 +11,9 @@ set(SOURCES
     src/AYRenderSystem.cpp
     src/AYEntityReflection.cpp
     src/AYEntityModule.cpp
+    src/AYResourceAnimationAdapter.cpp
+    src/AYAnimationSystem.cpp
+    src/AYSkinnedMeshRenderSystem.cpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
@@ -28,6 +31,8 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     AYSerializer
     AYRenderer
     AYMath
+    AYAnimation
+    AYResource
 )
 
 if(AY_ENTITY_PRECOMPILE_COMPONENTS)

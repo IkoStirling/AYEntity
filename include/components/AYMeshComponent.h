@@ -1,21 +1,35 @@
 #pragma once
-// AYMesh.h - 网格渲染组件
+// AYMeshComponent.h — Phase 1 E-03: draw-metadata struct.
+// The `skinned` flag routes the entity to SkinnedMeshRenderSystem
+// instead of RenderSystem when paired with a SkeletonComponent.
+//
+// Note: `meshPath` / `materialPath` are declared via AY_PROPERTY
+// (the macro emits `Type name;`). Don't redeclare them as plain
+// fields — that triggers C2086 "重定义".
 
-#include <AYCore.h>
 #include <IAYEntity.h>
+
 #include <string>
 
 namespace ayt::entity
 {
 
-// =============================================================================
-// MeshComponent - 网格渲染组件
-// =============================================================================
+#define AY_CURRENT_CLASS MeshComponent
 struct MeshComponent : public IComponent {
     const char* getName() const override { return "MeshComponent"; }
 
-    std::string meshPath;
-    std::string materialPath;
+    // Path fields declared via the AY_PROPERTY macro below. The
+    // expand emits `Type name;` and registers a serializer metadata
+    // entry — keep these macro-only.
+    AY_PROPERTY(std::string, meshPath,    kAttrSerialize)
+    AY_PROPERTY(std::string, materialPath, kAttrSerialize)
+
+    // Phase 1 E-03: when true, RenderSystem skips this entity and
+    // SkinnedMeshRenderSystem takes over. Set after adding a
+    // SkeletonComponent (the system sets it automatically when the
+    // skeleton loads; gameplay code can also set it directly for
+    // bind-pose previews).
+    AY_PROPERTY(bool, skinned, kAttrSerialize)
 
     bool castShadow = true;
     bool receiveShadow = true;
@@ -24,17 +38,20 @@ struct MeshComponent : public IComponent {
 
     MeshComponent() = default;
 
-    explicit MeshComponent(const char* path) : meshPath(path) {}
+    explicit MeshComponent(const char* path)
+        : meshPath(path ? path : "") {}
 
     MeshComponent(const char* mesh, const char* material)
-        : meshPath(mesh), materialPath(material) {}
+        : meshPath(mesh ? mesh : ""),
+          materialPath(material ? material : "") {}
 
-    void setMesh(const char* path) { meshPath = path; }
-    void setMaterial(const char* path) { materialPath = path; }
+    void setMesh(const char* path) { meshPath = path ? path : ""; }
+    void setMaterial(const char* path) { materialPath = path ? path : ""; }
 
     bool isValid() const { return !meshPath.empty(); }
 };
+#undef AY_CURRENT_CLASS
 
-AY_COMPONENT(MeshComponent);
+AY_FINALIZE_REGISTRATION_METADATA(MeshComponent)
 
 } // namespace ayt::entity
