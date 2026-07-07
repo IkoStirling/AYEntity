@@ -13,6 +13,8 @@
 namespace ayt::entity
 {
 
+class Entity;
+
 class AnimationSystem : public ISystem {
 public:
     const char* getName() const override { return "AnimationSystem"; }
@@ -26,6 +28,8 @@ private:
     // a clip don't re-parse. Animations are copyable (vector-of-tracks
     // is copyable); this map owns one copy per unique path.
     std::unordered_map<std::string, ayt::anim::Animation> _clipCache;
+    // Last clip path bound per entity; play() only runs when this changes.
+    std::unordered_map<const Entity*, std::string> _entityBoundClip;
 };
 
 void registerAnimationSystem();

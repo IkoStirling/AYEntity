@@ -207,4 +207,27 @@ TEST_CASE(animation_component_defaults_match_demo_expectations)
     CHECK(a.playRate == 1.0f);
 }
 
+TEST_CASE(animation_player_time_resets_on_play)
+{
+    ayt::anim::Animation clip;
+    buildRotationClip(clip);
+    ayt::anim::Skeleton skel;
+    buildFourBoneSkeleton(skel);
+
+    ayt::anim::AnimationPlayer player;
+    player.setSkeleton(&skel);
+    player.play(&clip);
+    player.tick(0.5f);
+    const float tAfterTick = player.getTime();
+    CHECK(tAfterTick > 0.0f);
+
+    player.tick(0.5f);
+    CHECK(player.getTime() > tAfterTick);
+
+    // AnimationSystem must NOT call play() every frame — it resets _time.
+    player.play(&clip);
+    player.tick(0.01f);
+    CHECK(player.getTime() < tAfterTick);
+}
+
 TEST_SUITE_END
