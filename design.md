@@ -932,6 +932,26 @@ AYEntity/
 | 序列化 | 组件仅用 `AY_FINALIZE_REGISTRATION_METADATA` |
 | RenderSystem | 诊断日志（matched / skip / submitted / sceneItems） |
 
+### 15.6 GL-01 系统 tick 顺序契约
+
+`World::registerSystem<T>(priority)` 按 priority 升序排序；`World::update(dt)` 依次
+调 `onUpdate`。`bootstrapModule()` 必须在以下顺序内注册系统：
+
+| 优先级 | 系统 | 责任 |
+|--------|------|------|
+| 0–399 | （未占用） | 留给调试 / 测试 CounterSystem 等 |
+| 450 | `AnimationSystem` | tick AnimationPlayer,刷新 `SkeletonComponent::skinMatrices` |
+| 500 | `SkinnedMeshRenderSystem` | 注册 scene-builder,把 skinned 实体写进 RenderScene |
+| 500 | `RenderSystem` | 注册 scene-builder,把非 skinned 实体写进 RenderScene |
+| 600+ | （未占用） | 留给 Physics / Audio / Script / 工具系统 |
+
+**契约**：`AnimationSystem` 必须早于所有 render 系统（priority 450 < 500），
+否则渲染端会读到上一帧的 bone matrices,快方向切换时会出现 1 帧延迟。
+
+**验证**：`unittest/SkinnedAnimationTest.cpp::animation_system_priority_before_render_systems`
+在每次构建时跑 `bootstrapModule()` → 枚举 `World::systemCount()` → 断言
+三个 priority 值与上表一致。改 priority 是破坏性变更,必须同时更新本表 + 单测。
+
 ---
 
 ## 16. 参考

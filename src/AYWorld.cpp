@@ -170,4 +170,16 @@ EntityHandle World::getEntityHandle(uint32_t id) {
     return _entityPool[id];
 }
 
+int32_t World::getSystemPriorityAt(size_t index) const
+{
+    if (index >= _systems.size()) return 0;
+    return _systems[index]->getPriority();
+}
+
+const char* World::getSystemNameAt(size_t index) const
+{
+    if (index >= _systems.size()) return "";
+    return _systems[index]->getName();
+}
+
 } // namespace ayt::entity

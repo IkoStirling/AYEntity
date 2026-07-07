@@ -30,7 +30,9 @@
 #include <AYTest.h>
 
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 using namespace ayt::entity;
 
@@ -228,6 +230,60 @@ TEST_CASE(animation_player_time_resets_on_play)
     player.play(&clip);
     player.tick(0.01f);
     CHECK(player.getTime() < tAfterTick);
+}
+
+// GL-01: World must schedule AnimationSystem (priority 450) BEFORE any
+// render system (priority 500) so per-bone skin matrices are fresh when
+// the renderer reads them. bootstrapModule() registers them in the right
+// order; this test pins that order as an executable invariant.
+//
+// Without this invariant a single frame of animation could be rendered
+// with the previous frame's bone matrices — visually correct most of
+// the time, but visible as a 1-frame lag on quick direction changes.
+TEST_CASE(animation_system_priority_before_render_systems)
+{
+    bootstrapModule();
+    const World& world = World::instance();
+
+    // Find indices for the systems we care about.
+    int32_t animPriority   = INT32_MAX;
+    int32_t renderPriority = INT32_MAX;
+    int32_t skinnedRenderPriority = INT32_MAX;
+    bool    sawAnim = false;
+    bool    sawRender = false;
+    bool    sawSkinnedRender = false;
+
+    for (size_t i = 0; i < world.systemCount(); ++i) {
+        const char* name = world.getSystemNameAt(i);
+        const int32_t pri = world.getSystemPriorityAt(i);
+        if (std::strcmp(name, "AnimationSystem") == 0) {
+            animPriority = pri;
+            sawAnim = true;
+        } else if (std::strcmp(name, "RenderSystem") == 0) {
+            renderPriority = pri;
+            sawRender = true;
+        } else if (std::strcmp(name, "SkinnedMeshRenderSystem") == 0) {
+            skinnedRenderPriority = pri;
+            sawSkinnedRender = true;
+        }
+    }
+
+    CHECK(sawAnim);
+    CHECK(sawRender);
+    CHECK(sawSkinnedRender);
+
+    // AnimationSystem runs first (lower priority = earlier in tick loop).
+    CHECK(animPriority < renderPriority);
+    CHECK(animPriority < skinnedRenderPriority);
+
+    // And the priority values themselves are the contracts documented
+    // in AYEntityModule.cpp — pin them so a future refactor that
+    // accidentally flips them is caught here.
+    CHECK(animPriority == 450);
+    CHECK(renderPriority == 500);
+    CHECK(skinnedRenderPriority == 500);
+
+    World::instance().shutdown();
 }
 
 TEST_SUITE_END

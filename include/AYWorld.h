@@ -43,6 +43,15 @@ public:
     template<typename T>
     void registerSystem(int32_t priority = 0);
 
+    // GL-01: introspection helpers for tick-order tests / diagnostics.
+    // Returns systems sorted by priority ascending (the same order the
+    // World ticks them). Lets unit tests assert that e.g. AnimationSystem
+    // (priority 450) is registered before RenderSystem (priority 500)
+    // without having to expose the system list directly.
+    size_t systemCount() const { return _systems.size(); }
+    int32_t getSystemPriorityAt(size_t index) const;
+    const char* getSystemNameAt(size_t index) const;
+
     template<typename T>
     SparseSet<T>* getStorage();
 
