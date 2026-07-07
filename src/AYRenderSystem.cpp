@@ -275,15 +275,9 @@ void registerRenderSystem()
 
 {
 
-    static bool registered = false;
-
-    if (registered) {
-
-        return;
-
-    }
-
-    registered = true;
+    // GL-01: idempotent across World::shutdown — see the matching
+    // comment in AYAnimationSystem.cpp. The bootstrapModule() guard
+    // is the only one we need.
 
     World::instance().registerSystem<RenderSystem>(500);
 

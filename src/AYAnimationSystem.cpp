@@ -145,9 +145,13 @@ void AnimationSystem::onUpdate(float dt)
 
 void registerAnimationSystem()
 {
-    static bool registered = false;
-    if (registered) return;
-    registered = true;
+    // GL-01: idempotent across World::shutdown. The static-guard pattern
+    // here used to skip re-registration on repeat calls, but that made
+    // the system vanish after the first World::shutdown()/initialize()
+    // cycle (the guard stayed set, _systems was cleared). The guard in
+    // bootstrapModule() is the only one we need — the unit test
+    // animation_system_priority_before_render_systems relies on this
+    // function being safe to call after a World reset.
     World::instance().registerSystem<AnimationSystem>(AnimationSystem::kPriority);
 }
 
