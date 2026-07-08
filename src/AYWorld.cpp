@@ -182,4 +182,16 @@ const char* World::getSystemNameAt(size_t index) const
     return _systems[index]->getName();
 }
 
+ISystem* World::findSystemByName(const char* name) const
+{
+    if (!name) return nullptr;
+    for (const auto& sys : _systems) {
+        if (sys && sys->getName()
+            && std::strcmp(sys->getName(), name) == 0) {
+            return sys.get();
+        }
+    }
+    return nullptr;
+}
+
 } // namespace ayt::entity

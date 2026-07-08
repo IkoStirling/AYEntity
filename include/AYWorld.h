@@ -52,6 +52,13 @@ public:
     int32_t getSystemPriorityAt(size_t index) const;
     const char* getSystemNameAt(size_t index) const;
 
+    // LG-04 (S3.1): lookup a system by its getName() string. Returns
+    // nullptr if no system with that name is registered. Linear scan
+    // over _systems — system counts are small (tens), not a hot path.
+    // Used by AYScript's System host tick path to map a Logia script
+    // name to a registered C++ ISystem instance.
+    ISystem* findSystemByName(const char* name) const;
+
     template<typename T>
     SparseSet<T>* getStorage();
 
