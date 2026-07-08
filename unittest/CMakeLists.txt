@@ -11,6 +11,7 @@ set(SOURCES
     EntityHandleTest.cpp
     SystemTest.cpp
     SkinnedAnimationTest.cpp
+    CharacterEntityTest.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})

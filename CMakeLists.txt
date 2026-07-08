@@ -14,6 +14,7 @@ set(SOURCES
     src/AYResourceAnimationAdapter.cpp
     src/AYAnimationSystem.cpp
     src/AYSkinnedMeshRenderSystem.cpp
+    src/AYCharacterEntity.cpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
