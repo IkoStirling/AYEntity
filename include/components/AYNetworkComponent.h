@@ -60,6 +60,4 @@ private:
     bool _isStreamed = true;
 };
 
-AY_COMPONENT(NetworkComponent);
-
 } // namespace ayt::entity

@@ -19,7 +19,10 @@
 
 #include "AYCharacterEntity.h"
 
-#include "include/AYEntityImpl.h"  // Entity::create / Entity::destroy
+#include "AYEntity.h"                  // umbrella: instantiates
+                                      //   Entity::addComponent<T>()
+                                      //   for every T included below.
+#include "include/AYEntityImpl.h"      // Entity::create / Entity::destroy
 #include "include/AYWorld.h"
 #include "include/components/AYAnimationComponent.h"
 #include "include/components/AYMeshComponent.h"

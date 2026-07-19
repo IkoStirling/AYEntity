@@ -7,7 +7,7 @@
 #include <ayanimation/Animation.h>
 #include <ayanimation/AnimationPlayer.h>
 #include <ayanimation/Skeleton.h>
-#include <AYMathTypes.h>
+#include <aymath/MathTypes.h>
 
 #include <cstdint>
 #include <string>
@@ -52,7 +52,5 @@ struct SkeletonComponent : public IComponent {
     }
 };
 #undef AY_CURRENT_CLASS
-
-AY_FINALIZE_REGISTRATION_METADATA(SkeletonComponent)
 
 } // namespace ayt::entity

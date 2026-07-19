@@ -68,6 +68,12 @@ public:
     template<typename T>
     static void registerComponentType(const char* name);
 
+    template<typename T>
+    static bool isComponentTypeRegistered() {
+        const size_t typeHash = typeid(T).hash_code();
+        return getComponentTypeNames().find(typeHash) != getComponentTypeNames().end();
+    }
+
     Entity* getEntityByHandle(const EntityHandle& handle);
     EntityHandle getEntityHandle(uint32_t id);
 

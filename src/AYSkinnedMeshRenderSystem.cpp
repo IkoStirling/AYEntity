@@ -20,8 +20,8 @@
 #include <AYRenderer.h>
 #include <AYRendererSubSystem.h>
 #include <AYWorld.h>
-#include <AYMathTransform.h>
-#include <AYMathUtils.h>
+#include <aymath/MathTransform.h>
+#include <aymath/MathUtils.h>
 
 #include <cstdio>
 #include <cstring>

@@ -38,6 +38,12 @@ bool hasSystemNamed(const World& world, const char* name)
 
 } // namespace
 
+void bootstrapEntityCore()
+{
+    registerEntitySubSystem();
+    registerEntityComponents();
+}
+
 void bootstrapModule()
 {
     World& world = World::instance();
@@ -58,10 +64,7 @@ void bootstrapModule()
     if (!hasSystemNamed(world, "RenderSystem")) {
         registerRenderSystem();
     }
-    // EntitySubSystem is a ISubSystem (not ISystem) — registered
-    // unconditionally. It does not participate in the priority-sorted
-    // _systems list.
-    registerEntitySubSystem();
+    bootstrapEntityCore();
 
     static bool loggedOnce = false;
     if (!loggedOnce) {

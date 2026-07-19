@@ -1,6 +1,7 @@
 # AYEntity Design
 
-> **变更记录（2026-07）**：引擎集成、`bootstrapModule`、`SparseSet` 指针语义 — 见 [§15](#15-引擎集成与模块引导2026-07)。
+> **变更记录（2026-07）**：引擎集成、`bootstrapModule`、`SparseSet` 指针语义 — 见 [§15](#15-引擎集成与模块引导2026-07)。  
+> **变更记录（2026-07-09）**：Simulation / Presentation 分轨（`SystemLane`）— 见 [§14](#14-simulation-vs-presentation-systemlane)；总览见 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../ENGINE-DETERMINISM-ARCHITECTURE.md)。
 
 ## 1. 概述
 
@@ -61,7 +62,8 @@ AYEntity 是 AY Engine 的**实体组件系统（Entity-Component-System, ECS）
 | **AYNetwork** | 使用方 | 通过 IReplicable 接口复制组件状态 |
 | **AYResource** | 使用方 | 实体持有关卡/资产引用 |
 | **AYRenderer** | 使用方 | `RenderSystem` 查询 Transform + MeshComponent，提交 `RenderScene` |
-| **AYPhysics** | 使用方 | 查询 Transform + RigidBody 组件物理模拟 |
+| **AYPhysics** | 使用方 | 查询 Transform + RigidBody 组件物理模拟（Jolt 路径，见 AYPhysics §8.3） |
+| **Determinism** | 架构约束 | `SystemLane` 分轨；DET-04 落地 `SimTransformComponent` — 见 [§14](#14-simulation-vs-presentation-systemlane) |
 
 ---
 
@@ -842,6 +844,13 @@ endif()
 - [x] NetworkComponent（**预占位** - 当前接口定义，待 AYNetwork 实现后重构）
 - [ ] 与 AYNetwork ReplicationManager 配合
 
+### Phase 6: 确定性 Sim 轨（按需，DET-04）
+- [ ] `SystemLane` 元数据（Present / Sim / Bridge）
+- [ ] `SimTransformComponent` + `SimToPresentBridge`
+- [ ] Sim 系统稳定遍历顺序文档化
+
+> 不阻塞 Phase 0–2。触发条件与 DET 工作包见 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../ENGINE-DETERMINISM-ARCHITECTURE.md) §7–§9。
+
 ---
 
 ## 13. 与工业级引擎对比
@@ -855,6 +864,74 @@ endif()
 | 网络复制 | 规划 | ✅ | ✅ | ✅ |
 | 查询方式 | ✅ 模板+字符串 | 模板 | 模板 | 模板 |
 | Fold Expression | ✅ C++23 | ❌ | ❌ | ❌ |
+
+---
+
+## 14. Simulation vs Presentation (`SystemLane`)
+
+> **权威文档**：[`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../ENGINE-DETERMINISM-ARCHITECTURE.md)  
+> 本节定义 ECS 侧的**分轨契约**；不要求当前代码立即实现 `SystemLane` 枚举。
+
+### 14.1 动机
+
+引擎 presentation 层（渲染、蒙皮动画、Editor）继续使用 native `Float32`。
+可选的**确定性仿真**（帧同步、输入回放、rollback）在独立的 **Sim 轨**运行，通过 Bridge 向 presentation 提供插值后的 `TransformComponent`。
+
+两套世界共用 `World` 与实体 ID，但 **System 所属轨道**与**可写组件**必须分离，避免日后把 Jolt / GPU / 无序遍历引入 lockstep 路径。
+
+### 14.2 轨道定义
+
+```cpp
+enum class SystemLane : uint8_t {
+    Present,  // 表现：float，可变 dt，允许 Job 并行
+    Sim,      // 仿真：未来 Fixed；fixedUpdate / simFrame；单线程或确定性有序阶段
+    Bridge,   // Sim → Present：读 Sim 状态 + alpha，写 float Transform
+};
+```
+
+| 轨道 | 现有 System 示例 | 时间源 | 可写组件（当前 / 未来） |
+|------|------------------|--------|-------------------------|
+| **Present** | `AnimationSystem`, `RenderSystem`, `SkinnedMeshRenderSystem` | `update(dt)` | `TransformComponent` (float), `MeshComponent`, … |
+| **Sim** | （未来）movement、det 碰撞、Gameplay `System` host | `fixedUpdate(fixedDt)` + `simFrame` | `SimTransformComponent` (DET-04), 玩法状态 |
+| **Bridge** | （未来）`SimToPresentBridge` | 每 presentation 帧 | 只写 float `TransformComponent` |
+
+**调度**：Sim 轨由 `AYGameLoop::fixedUpdate` 驱动（见 [`AYGameLoop/design.md`](../AYGameLoop/design.md)）；Present 轨由 `update` + `FrameInterpolator` 驱动。
+
+### 14.3 新增 System 时的审查清单
+
+在 code review / design 中声明 `SystemLane`（可先写在 `design.md` 或 PR 描述，代码元数据 DET-04 再补）：
+
+1. 该逻辑是否参与**跨端一致的仿真**？→ **Sim**
+2. 是否只影响画面 / 编辑器 / 音频？→ **Present**
+3. 是否把 Sim 状态映射到渲染？→ **Bridge**（且仅此一类应写 float `Transform`）
+
+### 14.4 Sim 轨禁止项（DET-01 之前即生效）
+
+即使尚未引入 `Fixed32`，Sim 轨代码也不得：
+
+- 用 `std::unordered_map` / `unordered_set` 的迭代顺序驱动玩法分支
+- 使用未 seed 的 `rand()`、`random_device`、墙钟 `time()` 影响结果
+- 从 `AYTask` 并行写同一实体的 Sim 组件
+- 调用 **Jolt**（`AYPhysics`）或 GPU readback 作为玩法依据
+
+### 14.5 组件命名约定（未来）
+
+| 组件 | 数值空间 | 消费者 |
+|------|----------|--------|
+| `TransformComponent` | `Float32` | Render、Editor、非 lockstep 网络复制 |
+| `SimTransformComponent` | `FixedVec3`（DET-01） | Sim 系统、lockstep checksum |
+| 玩法 hitbox / 受击判定 | Sim 代理体 | **不要**在 lockstep 中采样蒙皮后的骨骼矩阵 |
+
+命中判定应使用 Sim 代理（胶囊 / AABB），由动画在 Present 轨驱动视觉，与 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../ENGINE-DETERMINISM-ARCHITECTURE.md) §5.3 一致。
+
+### 14.6 与网络 / 回放的关系
+
+| 网络模型 | ECS 用法 |
+|----------|----------|
+| **状态复制**（`AYNetwork` P0） | 可复制 float `TransformComponent`；服务器 Jolt 为权威 |
+| **Lockstep / 输入回放** | 仅 Sim 组件参与 checksum；Present 轨本地插值 |
+
+详见 [`AYNetwork/design.md`](../AYNetwork/design.md) 与 [`AYExtension/design.md`](../AYExtension/design.md) §8.1。
 
 ---
 
@@ -956,6 +1033,7 @@ AYEntity/
 
 ## 16. 参考
 
+- [Engine determinism architecture](../../ENGINE-DETERMINISM-ARCHITECTURE.md) — dual-layer Sim/Present, DET-01..08
 - [Flecs ECS](https://github.com/SanderMertens/flecs)
 - [Entt ECS](https://github.com/skypjack/entt)
 - [Unity Entity Component System](https://docs.unity3d.com/Packages/com.unity.entities@latest/)

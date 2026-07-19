@@ -74,6 +74,4 @@ private:
     IScriptBridge* _bridge = nullptr;
 };
 
-AY_COMPONENT(ScriptComponent);
-
 } // namespace ayt::entity

@@ -96,6 +96,9 @@ public:
     namespace { \
         struct AYT_ComponentRegistrar_##T { \
             AYT_ComponentRegistrar_##T() { \
+                if (::ayt::entity::World::isComponentTypeRegistered<T>()) { \
+                    return; \
+                } \
                 ::ayt::entity::World::registerComponentType<T>(#T); \
             } \
         }; \

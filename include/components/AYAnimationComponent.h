@@ -35,6 +35,4 @@ struct AnimationComponent : public IComponent {
 };
 #undef AY_CURRENT_CLASS
 
-AY_FINALIZE_REGISTRATION_METADATA(AnimationComponent)
-
 } // namespace ayt::entity

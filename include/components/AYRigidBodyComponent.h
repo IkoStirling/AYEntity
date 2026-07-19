@@ -91,6 +91,4 @@ private:
     float _friction = 0.5f;
 };
 
-AY_COMPONENT(RigidBodyComponent);
-
 } // namespace ayt::entity

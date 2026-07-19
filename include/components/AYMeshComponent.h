@@ -57,6 +57,4 @@ struct MeshComponent : public IComponent {
 };
 #undef AY_CURRENT_CLASS
 
-AY_FINALIZE_REGISTRATION_METADATA(MeshComponent)
-
 } // namespace ayt::entity

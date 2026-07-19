@@ -3,7 +3,6 @@
 
 #include <AYCore.h>
 #include <IAYEntity.h>
-#include <AYMathTypes.h>
 
 namespace ayt::entity
 {
@@ -58,7 +57,5 @@ struct Transform : public IComponent {
     }
 };
 #undef AY_CURRENT_CLASS
-
-AY_FINALIZE_REGISTRATION_METADATA(Transform)
 
 } // namespace ayt::entity

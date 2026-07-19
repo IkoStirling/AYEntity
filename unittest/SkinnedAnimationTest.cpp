@@ -26,7 +26,7 @@
 #include <ayanimation/AnimationPlayer.h>
 #include <ayanimation/Skeleton.h>
 
-#include <AYMathTypes.h>
+#include <aymath/MathTypes.h>
 #include <AYTest.h>
 
 #include <cmath>
