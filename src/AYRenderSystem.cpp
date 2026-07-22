@@ -70,7 +70,8 @@ void logBuildSceneSummary(uint32_t frameIndex, uint32_t matched, uint32_t skippe
 
 {
 
-    if (frameIndex < 5 || frameIndex % 120 == 0) {
+    // Startup-only — periodic spam made Play-mode stderr unreadable.
+    if (frameIndex < 5) {
 
         std::fprintf(stderr,
 
@@ -254,7 +255,14 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
 
 
-        scene.add(resources.mesh, resources.material, transformToWorldMatrix(*transform));
+        ayt::render::DrawItem item;
+        item.mesh         = resources.mesh;
+        item.material     = resources.material;
+        item.world        = transformToWorldMatrix(*transform);
+        item.shadowFlags  = ayt::render::makeShadowFlags(meshComp->castShadow,
+                                                         meshComp->receiveShadow);
+
+        scene.add(item);
 
         ++submitted;
 
