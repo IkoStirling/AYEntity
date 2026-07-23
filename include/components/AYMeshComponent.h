@@ -34,6 +34,9 @@ struct MeshComponent : public IComponent {
     bool castShadow = true;
     bool receiveShadow = true;
     bool visible = true;
+    // When true, RenderSystem marks the material BlendMode::Alpha so
+    // TransparentPass draws it (FO skips Alpha). .aymat has no blend field.
+    bool alphaBlend = false;
     int32_t layer = 0;
 
     MeshComponent() {

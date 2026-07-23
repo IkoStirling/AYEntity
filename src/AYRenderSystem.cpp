@@ -16,10 +16,8 @@
 
 #include "aymath/MathTransform.h"
 
-
-
+#include <algorithm>
 #include <cstdio>
-
 #include <unordered_map>
 
 
@@ -253,7 +251,11 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
         }
 
-
+        // .aymat has no blend field — MeshComponent::alphaBlend is the host tag.
+        if (meshComp->alphaBlend) {
+            renderer.setMaterialBlendMode(resources.material,
+                                          ayt::render::BlendMode::Alpha);
+        }
 
         ayt::render::DrawItem item;
         item.mesh         = resources.mesh;
@@ -261,6 +263,22 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         item.world        = transformToWorldMatrix(*transform);
         item.shadowFlags  = ayt::render::makeShadowFlags(meshComp->castShadow,
                                                          meshComp->receiveShadow);
+
+        // TransparentPass sorts descending by sortKey (far → near).
+        // Distance² × 100 → int; farther objects get larger keys.
+        {
+            const ayt::math::FVector3 cam = renderer.mainCameraPosition();
+            const float tx = item.world.row[0].w;
+            const float ty = item.world.row[1].w;
+            const float tz = item.world.row[2].w;
+            const float dx = tx - cam.x;
+            const float dy = ty - cam.y;
+            const float dz = tz - cam.z;
+            const float distSq = dx * dx + dy * dy + dz * dz;
+            const float scaled = distSq * 100.0f;
+            item.sortKey = static_cast<int32_t>(
+                std::min(scaled, 2.0e9f));
+        }
 
         scene.add(item);
 
