@@ -2,14 +2,20 @@
 // AYSkeletonComponent.h — Phase 1 E-01: ECS bridge to AYAnimation's
 // Skeleton + AnimationPlayer. Owns the playback state and the per-bone
 // skin matrices that the renderer uploads to the Skeleton UBO.
+//
+// P0 (2026-07-26): skeleton field is now a concrete
+// ayt::resource::Skeleton (not the deleted ayt::anim::Skeleton). The
+// adapter that previously copied fields from ISkeleton -> ayt::anim::Skeleton
+// is gone; AnimationPlayer consumes ISkeleton directly via setSkeleton.
 
 #include <IAYEntity.h>
-#include <ayanimation/Animation.h>
 #include <ayanimation/AnimationPlayer.h>
-#include <ayanimation/Skeleton.h>
 #include <aymath/MathTypes.h>
 
+#include <assetsImpl/AYSkeleton.h>
+
 #include <cstdint>
+#include <memory>
 #include <string>
 
 namespace ayt::entity
@@ -25,7 +31,7 @@ struct SkeletonComponent : public IComponent {
 
     // Loaded runtime data. `_skeleton` and `_player` are populated by
     // the adapter; callers should not write to them directly.
-    ayt::anim::Skeleton       skeleton;
+    ayt::resource::Skeleton    skeleton;
     ayt::anim::AnimationPlayer player;
 
     // Heap-allocated skin matrices (world * inverseBind), one entry per

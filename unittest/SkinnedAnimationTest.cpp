@@ -1,5 +1,10 @@
 // SkinnedAnimationTest.cpp — Phase 1 E-04 / AN-03 acceptance tests.
 //
+// P0 (2026-07-26): tests build skeletons/clips using
+// ayt::resource::Skeleton / ayt::resource::Animation (the now-canonical
+// types). AYResourceAnimationAdapter has been deleted — AnimationPlayer
+// consumes ISkeleton/IAnimation directly.
+//
 // Validates the CPU-side end-to-end pipeline WITHOUT requiring shaderc,
 // GPU, or AYResource binary I/O:
 //   1. AnimationSystem::onUpdate advances the player and produces
@@ -7,10 +12,6 @@
 //   2. After one tick, skin matrices change (proves evaluation ran).
 //   3. After many ticks with looping, the player clamps / wraps as
 //      expected.
-//
-// Phase 2 follow-up: GPU test that exercises SkinnedMeshRenderSystem
-// with createMaterialFromPhoskia. That path needs shaderc + bgfx so
-// it lives behind a manual visual demo, not a unit test.
 
 #include <AYEntity.h>
 #include <AYEntityModule.h>
@@ -22,10 +23,10 @@
 #include <components/AYSkeletonComponent.h>
 #include <components/AYTransformComponent.h>
 
-#include <ayanimation/Animation.h>
 #include <ayanimation/AnimationPlayer.h>
-#include <ayanimation/Skeleton.h>
 
+#include <assetsImpl/AYAnimation.h>
+#include <assetsImpl/AYSkeleton.h>
 #include <aymath/MathTypes.h>
 #include <AYTest.h>
 
@@ -42,50 +43,42 @@ namespace
 // Build a 4-bone T-pose skeleton programmatically (no .ayskel binary
 // needed for this test). Bones arranged as root → upperArm → lowerArm →
 // hand, all at rest. Each bone has an identity bind matrix.
-void buildFourBoneSkeleton(ayt::anim::Skeleton& out)
+void buildFourBoneSkeleton(ayt::resource::Skeleton& out)
 {
     using namespace ayt::math;
 
-    // Bone names match what a real FBX skeleton would emit; the
-    // adapter test below uses different names to verify bone lookup.
+    out.setBoneCount(4);
     static const char* kNames[4] = { "Root", "UpperArm", "LowerArm", "Hand" };
     for (int i = 0; i < 4; ++i) {
-        ayt::anim::Bone b;
+        ayt::resource::Bone b;
         b.name = kNames[i];
         b.parentIndex = (i == 0) ? -1 : i - 1;
+        b.localPosition  = FVector3(0,0,0);
+        b.localRotation  = FQuaternion::identity();
+        b.localScale     = FVector3(1,1,1);
         b.inverseBindMatrix = Float4x4::identity();
-        out.addBone(b);
+        out.setBone(i, b);
     }
-
-    // Rest pose: identity rotations, unit scales, zero translations.
-    FVector3    pos[4]    = { {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0} };
-    FQuaternion rot[4]    = { FQuaternion::identity(),
-                              FQuaternion::identity(),
-                              FQuaternion::identity(),
-                              FQuaternion::identity() };
-    FVector3    scl[4]    = { {1,1,1}, {1,1,1}, {1,1,1}, {1,1,1} };
-    out.setRestPoses(pos, rot, scl);
 }
 
 // Build a 2-second clip that rotates the root bone 90° around Y at
-// t=1.0. Tests will sample t=0 (rest) and t=0.5 (mid-rotation) to
-// verify the player advances.
-void buildRotationClip(ayt::anim::Animation& out)
+// t=2.0. Times are in ticks (tps=30 → 0/1/2 seconds).
+void buildRotationClip(ayt::resource::Animation& out)
 {
-    out.setName("RootRotate90");
-    out.setDuration(2.0f);
-    out.setTicksPerSecond(30.0f);
+    using namespace ayt::math;
 
-    // Two-key frame: identity at t=0, 90° around Y at t=2.
-    ayt::anim::KeyframeTrack track;
-    track.nodeName = "Root";
-    track.property = "rotation";
-    track.type     = ayt::anim::TrackType::Quaternion;
-    track.times    = { 0.0f, 2.0f };
-    ayt::math::FQuaternion q0 = ayt::math::FQuaternion::identity();
-    ayt::math::FQuaternion q1 = ayt::math::FQuaternion::fromAxisAngle(
-        ayt::math::FVector3(0.0f, 1.0f, 0.0f),
-        static_cast<float>(MATH_PI * 0.5));
+    out.setName("RootRotate90");
+    out.setTicksPerSecond(30.0f);
+    out.setDuration(2.0f);
+
+    ayt::resource::AnimTrack track;
+    track.nodeName  = "Root";
+    track.property  = "rotation";
+    track.valueType = ayt::resource::AnimTrackType::Quaternion;
+    track.times     = { 0.0f, 60.0f };   // ticks (tps=30 → 0s, 2s)
+    FQuaternion q0 = FQuaternion::identity();
+    FQuaternion q1 = FQuaternion::fromAxisAngle(
+        FVector3(0,1,0), static_cast<float>(MATH_PI * 0.5));
     track.values = {
         q0.x, q0.y, q0.z, q0.w,
         q1.x, q1.y, q1.z, q1.w,
@@ -99,13 +92,10 @@ TEST_SUITE(SkinnedAnimationTests)
 
 // Phase 1 E-04 + AN-03 acceptance: the AnimationSystem tick path
 // runs end-to-end on a manually-constructed skeleton + animation
-// (bypassing the AYResource loader/adapter for this test — the
-// adapter has its own test below).
+// (bypassing the AYResource loader for this test — the loader has
+// its own dedicated test).
 TEST_CASE(animation_system_produces_skin_matrices_after_tick)
 {
-    // Construct a single entity with the four components a skinned
-    // mesh needs: Transform + MeshComponent(skinned) + SkeletonComponent
-    // + AnimationComponent.
     World& world = World::instance();
     Entity* e = world.createEntity();
     CHECK(e != nullptr);
@@ -128,9 +118,9 @@ TEST_CASE(animation_system_produces_skin_matrices_after_tick)
     skel->player.setSkeleton(&skel->skeleton);
 
     // Drive the animation system directly. We DO NOT go through
-    // adapter::loadAnimation (which needs a real .ayanm on disk);
-    // instead we hand-inject a clip via the player.
-    ayt::anim::Animation clip;
+    // ResourceManager (which needs a real .ayanm on disk); instead
+    // we hand-inject a clip via the player.
+    ayt::resource::Animation clip;
     buildRotationClip(clip);
     skel->player.setLoop(true);
     skel->player.setPlayRate(1.0f);
@@ -211,9 +201,9 @@ TEST_CASE(animation_component_defaults_match_demo_expectations)
 
 TEST_CASE(animation_player_time_resets_on_play)
 {
-    ayt::anim::Animation clip;
+    ayt::resource::Animation clip;
     buildRotationClip(clip);
-    ayt::anim::Skeleton skel;
+    ayt::resource::Skeleton skel;
     buildFourBoneSkeleton(skel);
 
     ayt::anim::AnimationPlayer player;
@@ -238,8 +228,8 @@ TEST_CASE(animation_player_time_resets_on_play)
 // order; this test pins that order as an executable invariant.
 //
 // Without this invariant a single frame of animation could be rendered
-// with the previous frame's bone matrices — visually correct most of
-// the time, but visible as a 1-frame lag on quick direction changes.
+// with the previous frame's bone matrices — visually correct most of the
+// time, but visible as a 1-frame lag on quick direction changes.
 TEST_CASE(animation_system_priority_before_render_systems)
 {
     bootstrapModule();

@@ -23,6 +23,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../AYRuntime/AYAnimation/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../AYRuntime/AYAnimation/include/ayanimation
     ${CMAKE_CURRENT_SOURCE_DIR}/../../AYFoundation/AYMath/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../AYRuntime/AYResource/interface
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../AYRuntime/AYResource/interface/assetsDefs
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../AYRuntime/AYResource/include
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

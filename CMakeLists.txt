@@ -11,7 +11,6 @@ set(SOURCES
     src/AYRenderSystem.cpp
     src/AYEntityReflection.cpp
     src/AYEntityModule.cpp
-    src/AYResourceAnimationAdapter.cpp
     src/AYAnimationSystem.cpp
     src/AYSkinnedMeshRenderSystem.cpp
     src/AYCharacterEntity.cpp

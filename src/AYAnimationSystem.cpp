@@ -2,8 +2,7 @@
 //
 // Per-frame: for every entity with SkeletonComponent + AnimationComponent,
 //   1. Lazy-load skeleton / clip the first tick the path is set
-//      (adapter converts AYResource's IAnimation/IAnimation into
-//      AYAnimation's runtime types).
+//      (ResourceManager::load<ISkeleton/IAnimation>).
 //   2. If AnimationComponent::autoplay is true, advance the player's
 //      time by `dt * playRate`, sample tracks, evaluate the pose.
 //   3. Copy per-bone skin matrices from the player into the
@@ -11,15 +10,20 @@
 //      them to the SkinnedLit's `Skeleton` UBO.
 //
 // Priority 450 < RenderSystem's 500 — animation always ticks first.
+//
+// P0 (2026-07-26): clip cache holds shared_ptr<IAnimation> (instead of
+// copying the now-deleted ayt::anim::Animation type). Adapter deleted —
+// AnimationPlayer consumes ISkeleton/IAnimation directly.
 
 #include "AYAnimationSystem.h"
-#include "AYResourceAnimationAdapter.h"
 
 #include <components/AYAnimationComponent.h>
 #include <components/AYSkeletonComponent.h>
 
 #include <AYEntity.h>
 #include <AYWorld.h>
+#include <IAYSkeleton.h>
+#include <AYResourceManager.h>
 
 #include <cstdio>
 #include <cstring>
@@ -50,8 +54,22 @@ void AnimationSystem::onUpdate(float dt)
         // animations are cached by clipPath so multiple entities
         // sharing a clip share the parsed track data.
         if (!skel->loaded) {
-            if (!adapter::loadSkeleton(skel->skeletonPath, skel->skeleton)) {
+            auto skelRes = ayt::resource::ResourceManager::instance()
+                              .load<ayt::resource::ISkeleton>(skel->skeletonPath);
+            if (!skelRes || skelRes->getBoneCount() == 0) {
+                std::fprintf(stderr,
+                             "[AnimationSystem] loadSkeleton('%s') failed\n",
+                             skel->skeletonPath.c_str());
                 continue;
+            }
+            // Copy from the ISkeleton resource into the component's
+            // concrete Skeleton. setBoneCount resizes the parallel
+            // arrays; setBone fills each entry (and re-registers the
+            // name map + root indices).
+            const size_t n = skelRes->getBoneCount();
+            skel->skeleton.setBoneCount(n);
+            for (size_t i = 0; i < n; ++i) {
+                skel->skeleton.setBone(i, skelRes->getBones()[i]);
             }
             // Allocate skin matrices matching joint count.
             skel->jointCount = static_cast<uint32_t>(
@@ -74,19 +92,20 @@ void AnimationSystem::onUpdate(float dt)
 
         // Lazy-load the clip if not cached.
         if (_clipCache.find(anim->clipPath) == _clipCache.end()) {
-            if (!adapter::loadAnimation(anim->clipPath, _clipCache[anim->clipPath])) {
+            auto animRes = ayt::resource::ResourceManager::instance()
+                              .load<ayt::resource::IAnimation>(anim->clipPath);
+            if (!animRes) {
                 std::fprintf(stderr,
                              "[AnimationSystem] loadAnimation('%s') failed\n",
                              anim->clipPath.c_str());
-                _clipCache.erase(anim->clipPath);
                 continue;
             }
-            const ayt::anim::Animation& loaded = _clipCache[anim->clipPath];
+            _clipCache.emplace(anim->clipPath, animRes);
             std::fprintf(stderr,
-                         "[AnimationSystem] loadAnimation ok '%s' tracks=%zu duration=%.2fs\n",
+                         "[AnimationSystem] loadAnimation ok '%s' tracks=%u duration=%.2fs\n",
                          anim->clipPath.c_str(),
-                         loaded.getTrackCount(),
-                         loaded.getDuration());
+                         animRes->getTrackCount(),
+                         animRes->getDuration());
             std::fflush(stderr);
         }
 
@@ -96,7 +115,7 @@ void AnimationSystem::onUpdate(float dt)
         const std::string& boundClip = _entityBoundClip[e];
         if (boundClip != anim->clipPath) {
             _entityBoundClip[e] = anim->clipPath;
-            skel->player.play(&_clipCache[anim->clipPath]);
+            skel->player.play(_clipCache[anim->clipPath].get());
         }
 
         if (anim->autoplay) {
