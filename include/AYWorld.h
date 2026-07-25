@@ -25,6 +25,7 @@ public:
 
     bool initialize();
     void shutdown();
+    bool isInitialized() const { return _initialized; }
     void update(float dt);
 
     Entity* createEntity();

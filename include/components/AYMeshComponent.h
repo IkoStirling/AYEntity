@@ -7,6 +7,7 @@
 // (the macro emits `Type name;`). Don't redeclare them as plain
 // fields — that triggers C2086 "重定义".
 
+#include <AYCore.h>
 #include <IAYEntity.h>
 
 #include <string>
@@ -37,6 +38,15 @@ struct MeshComponent : public IComponent {
     // When true, RenderSystem marks the material BlendMode::Alpha so
     // TransparentPass draws it (FO skips Alpha). .aymat has no blend field.
     bool alphaBlend = false;
+    // Editor selection inverted-hull: RenderSystem tags DrawItem and
+    // TransparentPass uses front-face cull + outline material.
+    bool outlineHull = false;
+    // Unexpanded object scale for outline depth prepass (selection
+    // entity transform uses a padded scale for the rim hull).
+    // math::FVector3 is intentional — AY_PropRegistrar::calculateOffset
+    // uses alignas(C) placement-new so SIMD-aligned fields are safe.
+    bool hasOutlineSourceScale = false;
+    math::FVector3 outlineSourceScale = {1.0f, 1.0f, 1.0f};
     int32_t layer = 0;
 
     MeshComponent() {

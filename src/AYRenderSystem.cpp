@@ -263,6 +263,13 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         item.world        = transformToWorldMatrix(*transform);
         item.shadowFlags  = ayt::render::makeShadowFlags(meshComp->castShadow,
                                                          meshComp->receiveShadow);
+        item.outlineHull  = meshComp->outlineHull;
+        if (meshComp->outlineHull && meshComp->hasOutlineSourceScale) {
+            Transform depthXf = *transform;
+            depthXf.scale = meshComp->outlineSourceScale;
+            item.hasOutlineDepthWorld = true;
+            item.outlineDepthWorld = transformToWorldMatrix(depthXf);
+        }
 
         // TransparentPass sorts descending by sortKey (far → near).
         // Distance² × 100 → int; farther objects get larger keys.

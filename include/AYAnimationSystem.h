@@ -7,6 +7,13 @@
 // directly. The AnimationPlayer takes the raw interface pointer via
 // play(IAnimation*); ResourceManager keeps the resource alive as long as
 // any shared_ptr in the cache holds a refcount.
+//
+// Phase 1.5 (2026-07-26): each entity's AnimationPlayer exposes a per-tick
+// queue of crossed AnimNotify markers; we drain that queue with
+// consumePendingNotifies() after the skin-matrix memcpy and emit each
+// record as an AnimNotifyEvent into the engine EventBus (see AYEventSystem).
+// Cross-module game code (audio, VFX, UI, gameplay) subscribes to the
+// event type without depending on AYEntity or AYAnimation.
 
 #include <IAYEntity.h>
 

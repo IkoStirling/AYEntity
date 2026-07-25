@@ -33,6 +33,11 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     AYMath
     AYAnimation
     AYResource
+    # Phase 1.5: AnimNotify bridge — AnimationSystem::onUpdate emits
+    # AnimNotifyEvent via the engine EventBus; this link makes the type
+    # definition available to subscribers inside this module's tests
+    # too.
+    AYEventSystem
 )
 
 if(AY_ENTITY_PRECOMPILE_COMPONENTS)

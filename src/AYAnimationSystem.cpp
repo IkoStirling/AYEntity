@@ -25,6 +25,12 @@
 #include <IAYSkeleton.h>
 #include <AYResourceManager.h>
 
+// Phase 1.5 — AnimNotify bridge: drain the player's per-frame fired
+// markers and emit each as AnimNotifyEvent on the engine EventBus.
+#include <ayanimation/AnimNotifyEvent.h>
+#include <ayanimation/AnimationPlayer.h>
+#include <ayevent/EventBus.h>
+
 #include <cstdio>
 #include <cstring>
 
@@ -128,6 +134,43 @@ void AnimationSystem::onUpdate(float dt)
             if (src != nullptr) {
                 std::memcpy(skel->skinMatrices, src,
                             skel->jointCount * sizeof(ayt::math::Float4x4));
+            }
+
+            // Phase 1.5 (2026-07-26) — AnimNotify EventBus bridge.
+            //
+            // The player recorded any marker crossings during the tick
+            // (above). Drain the queue now (after memcpy so subscribers
+            // can safely read the up-to-date skin matrices) and emit
+            // each record as an AnimNotifyEvent on the engine bus. The
+            // emit is synchronous + main-thread, so subscribers receive
+            // their events before this system returns. The optional
+            // host sink path is independent — that one fired inside
+            // tick() already.
+            //
+            // We capture the shared_ptr lookup once; the loop body uses
+            // a stable pointer to the IAnimation's name.
+            const std::string& clipPathKey = _clipCache.contains(anim->clipPath)
+                ? anim->clipPath
+                : std::string();
+            const ayt::resource::IAnimation* clipRes = clipPathKey.empty()
+                ? nullptr
+                : _clipCache[clipPathKey].get();
+            const char* clipNameStable = clipRes ? clipRes->getName() : "unknown";
+            const std::uint32_t entityId = e->getId();
+
+            const auto& records = skel->player.consumePendingNotifies();
+            if (!records.empty()) {
+                ayt::event::EventBus& bus = ayt::event::EventBus::instance();
+                for (const auto& rec : records) {
+                    bus.emit<ayt::anim::AnimNotifyEvent>(
+                        ayt::anim::AnimNotifyEvent{
+                            entityId,
+                            clipNameStable,
+                            rec.name,
+                            rec.time,
+                            rec.payload,
+                        });
+                }
             }
 
             static uint32_t s_poseLog = 0;
