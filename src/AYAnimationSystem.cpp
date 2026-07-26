@@ -117,6 +117,11 @@ void AnimationSystem::onUpdate(float dt)
 
         skel->player.setPlayRate(anim->playRate);
         skel->player.setLoop(anim->looping);
+        // Phase 1.2 (P1.2) — Additive Layer 1 weight passthrough. The
+        // AnimationPlayer's setter saturates to [0, 1] so a typo on the
+        // engine side cannot NaN a quaternion. Default 1.0f on both sides
+        // keeps pre-P1.2 clips (no Additive tracks) bit-identical.
+        skel->player.setAdditiveWeight(anim->additiveWeight);
 
         const std::string& boundClip = _entityBoundClip[e];
         if (boundClip != anim->clipPath) {

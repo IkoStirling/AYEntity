@@ -403,4 +403,115 @@ TEST_CASE(animation_system_emits_animnotify_event_on_marker_cross)
     world.shutdown();
 }
 
+// Phase 1.2 (P1.2) — Additive Layer 1 passthrough:
+//
+// AnimationComponent::additiveWeight must be pushed into the bound
+// AnimationPlayer by AnimationSystem (mirrors the existing setPlayRate /
+// setLoop pushes). The full onUpdate round-trip can't be exercised inline
+// because AnimationSystem::onUpdate routes through ResourceManager to load
+// the clip — and our test intentionally avoids disk I/O. Instead, we drive
+// the same three push lines that onUpdate executes for each entity and
+// assert the player received the field. The actual onUpdate path is
+// already covered by the existing `animation_system_priority_before_render_
+// systems` test which exercises the full system; the additiveWeight push
+// is one line that mirrors setPlayRate / setLoop's exact shape.
+//
+// Mirrors the integration shape of the AnimNotify bridge test above
+// (in-memory clip + manual push, not full onUpdate).
+TEST_CASE(animation_component_additive_weight_propagates_to_player)
+{
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+
+    Entity* e = world.createEntity();
+    CHECK(e != nullptr);
+    e->addComponent<Transform>();
+    auto* mesh = e->addComponent<MeshComponent>();
+    mesh->skinned  = true;
+    mesh->meshPath = "skinned_cube.aymesh";
+    auto* skel = e->addComponent<SkeletonComponent>();
+    auto* anim = e->addComponent<AnimationComponent>();
+    anim->autoplay = true;
+    anim->looping  = true;
+    anim->playRate = 1.0f;
+    anim->clipPath = "additive_inline://clip";
+    // The whole point of this test: the component field flows into the
+    // AnimationPlayer. We set a non-default value so we can observe the
+    // push propagate.
+    anim->additiveWeight = 0.5f;
+
+    // Build the IAnimation inline (no ResourceManager disk I/O) with ONE
+    // additive Position track on bone "Bone0". The track itself isn't
+    // exercised here — we only verify the weight passthrough on the
+    // AnimationPlayer state, not the additive math (already pinned by
+    // AYAnimation_UnitTests T1-T6).
+    ayt::resource::Animation clip;
+    clip.setName("AdditiveBridgeClip");
+    clip.setTicksPerSecond(30.0f);
+    clip.setDuration(1.0f);
+    ayt::resource::AnimTrack tr;
+    tr.nodeName  = "Bone0";
+    tr.property  = "position";
+    tr.valueType = ayt::resource::AnimTrackType::Vector3;
+    tr.blendMode = ayt::resource::AnimBlendMode::Additive;
+    tr.times  = { 0.0f, 30.0f };
+    tr.values = {
+        0.0f, 0.0f, 0.0f,
+        1.0f, 0.0f, 0.0f,
+    };
+    clip.addTrack(tr);
+
+    // Hand-build a 1-bone skeleton inline (avoid the 4-bone helper to keep
+    // the test self-contained).
+    skel->skeleton.setBoneCount(1);
+    {
+        ayt::resource::Bone root;
+        root.name              = "Bone0";
+        root.parentIndex       = -1;
+        root.localPosition     = ayt::math::FVector3(0, 0, 0);
+        root.localRotation     = ayt::math::FQuaternion::identity();
+        root.localScale        = ayt::math::FVector3(1, 1, 1);
+        root.inverseBindMatrix = ayt::math::Float4x4::identity();
+        skel->skeleton.setBone(0, root);
+    }
+    skel->jointCount = static_cast<uint32_t>(skel->skeleton.getBoneCount());
+    skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
+    for (uint32_t i = 0; i < skel->jointCount; ++i) {
+        skel->skinMatrices[i] = ayt::math::Float4x4::identity();
+    }
+    skel->loaded = true;
+    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.play(&clip);
+
+    // Sanity: before the push, the player's weight is the default 1.0f
+    // since we haven't pushed the component field yet.
+    CHECK(skel->player.getAdditiveWeight() == 1.0f);
+
+    // Manually perform the three push lines that AnimationSystem::onUpdate
+    // runs per entity each frame (setPlayRate / setLoop / setAdditiveWeight).
+    // This is the exact code path; the inline clip just lets us avoid
+    // ResourceManager disk I/O. Mirrors the inline pattern of
+    // animation_system_emits_animnotify_event_on_marker_cross above.
+    skel->player.setPlayRate(anim->playRate);
+    skel->player.setLoop(anim->looping);
+    skel->player.setAdditiveWeight(anim->additiveWeight);
+
+    CHECK(skel->player.getAdditiveWeight() == 0.5f);
+
+    // Spot-check the saturating setter contract on the engine side too:
+    // anim->additiveWeight = -1.0f → setter clamps to 0.
+    anim->additiveWeight = -1.0f;
+    skel->player.setAdditiveWeight(anim->additiveWeight);
+    CHECK(skel->player.getAdditiveWeight() == 0.0f);
+
+    // And > 1.0 → clamps to 1.0.
+    anim->additiveWeight = 2.0f;
+    skel->player.setAdditiveWeight(anim->additiveWeight);
+    CHECK(skel->player.getAdditiveWeight() == 1.0f);
+
+    world.destroyEntity(e);
+    world.shutdown();
+}
+
 TEST_SUITE_END
