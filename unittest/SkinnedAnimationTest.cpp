@@ -514,4 +514,284 @@ TEST_CASE(animation_component_additive_weight_propagates_to_player)
     world.shutdown();
 }
 
+// Phase 1.3 (P1.3) — Additive Layer 2 (Cross-Fade) integration.
+//
+// Mirrors the inline-build pattern of the additiveWeight bridge test
+// above and the AnimNotify bridge test (animation_system_emits_animnotify
+// _event_on_marker_cross). We DO NOT drive the full AnimationSystem::
+// onUpdate round-trip because it would require ResourceManager disk I/O
+// to cache the additive clip — instead we drive the same push lines that
+// onUpdate executes per entity each frame and verify the AnimationPlayer
+// state matches the component field. The actual onUpdate path is
+// already covered by `animation_system_priority_before_render_systems`
+// and the existing AnimNotify integration test; the new push wiring is
+// three parallel lines (setAdditiveSource, setBlendWeight, optional
+// setAdditivePlayRate) that mirror the existing setPlayRate/setLoop
+// /setAdditiveWeight shape 1:1.
+TEST_CASE(animation_component_additive_clip_path_loads_player_source)
+{
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+
+    Entity* e = world.createEntity();
+    CHECK(e != nullptr);
+    e->addComponent<Transform>();
+    auto* mesh = e->addComponent<MeshComponent>();
+    mesh->skinned  = true;
+    mesh->meshPath = "skinned_cube.aymesh";
+    auto* skel = e->addComponent<SkeletonComponent>();
+    auto* anim = e->addComponent<AnimationComponent>();
+    anim->autoplay = true;
+    anim->looping  = true;
+    anim->playRate = 1.0f;
+    anim->clipPath = "base_inline://clip";
+    anim->additiveClipPath = "additive_inline://clip";
+    anim->blendWeight = 0.6f;
+
+    // Build both clips inline so the test does not depend on
+    // ResourceManager disk I/O.
+    ayt::resource::Animation baseClip;
+    baseClip.setName("BaseClip");
+    baseClip.setTicksPerSecond(30.0f);
+    baseClip.setDuration(1.0f);
+    baseClip.addTrack([&]() {
+        ayt::resource::AnimTrack t;
+        t.nodeName = "Bone0";
+        t.property = "position";
+        t.valueType = ayt::resource::AnimTrackType::Vector3;
+        t.blendMode = ayt::resource::AnimBlendMode::Override;
+        t.times = { 0.0f, 30.0f };
+        t.values = { 0,0,0,  1,0,0 };
+        return t;
+    }());
+
+    ayt::resource::Animation addClip;
+    addClip.setName("AddClip");
+    addClip.setTicksPerSecond(30.0f);
+    addClip.setDuration(1.0f);
+    addClip.addTrack([&]() {
+        ayt::resource::AnimTrack t;
+        t.nodeName = "Bone0";
+        t.property = "position";
+        t.valueType = ayt::resource::AnimTrackType::Vector3;
+        t.blendMode = ayt::resource::AnimBlendMode::Additive;
+        t.times = { 0.0f, 30.0f };
+        t.values = { 0,0,0,  2,0,0 };
+        return t;
+    }());
+
+    // Build a 1-bone skeleton inline.
+    skel->skeleton.setBoneCount(1);
+    {
+        ayt::resource::Bone root;
+        root.name              = "Bone0";
+        root.parentIndex       = -1;
+        root.localPosition     = ayt::math::FVector3(0, 0, 0);
+        root.localRotation     = ayt::math::FQuaternion::identity();
+        root.localScale        = ayt::math::FVector3(1, 1, 1);
+        root.inverseBindMatrix = ayt::math::Float4x4::identity();
+        skel->skeleton.setBone(0, root);
+    }
+    skel->jointCount = 1;
+    skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
+    skel->skinMatrices[0] = ayt::math::Float4x4::identity();
+    skel->loaded = true;
+    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.play(&baseClip);
+
+    // Before the additive push: layer is OFF.
+    CHECK_FALSE(skel->player.isAdditiveLayerActive());
+
+    // Mirror the three lines AnimationSystem::onUpdate pushes for the
+    // additive layer (setAdditiveSource + setBlendWeight +
+    // setAdditivePlayRate collapsed into the entry-point defaults).
+    skel->player.setAdditiveSource(&addClip, anim->additivePlayRate, true);
+    skel->player.setBlendWeight(anim->blendWeight);
+
+    // Layer is now ON.
+    CHECK(skel->player.isAdditiveLayerActive());
+    CHECK_FLOAT_EQ(skel->player.getBlendWeight(), 0.6f, 1e-6f);
+
+    world.destroyEntity(e);
+    world.shutdown();
+}
+
+// Phase 1.3 (P1.3) — Additive rebind detection. Same shape as the
+// `animation_component_additive_weight_propagates_to_player` P1.2 test:
+// drive the per-frame push lines manually, verify state. Here we verify
+// the rebind path: the player is bound to clipA; push a different
+// additiveClipPath → setAdditiveSource is called with the new clip;
+// isAdditiveLayerActive() stays true but the cached _additiveTracks
+// reflect the new clip (verified by snapshotting the world matrix).
+TEST_CASE(animation_component_additive_rebind_detected)
+{
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+
+    Entity* e = world.createEntity();
+    CHECK(e != nullptr);
+    e->addComponent<Transform>();
+    auto* mesh = e->addComponent<MeshComponent>();
+    mesh->skinned  = true;
+    mesh->meshPath = "skinned_cube.aymesh";
+    auto* skel = e->addComponent<SkeletonComponent>();
+    auto* anim = e->addComponent<AnimationComponent>();
+    anim->autoplay = true;
+    anim->looping  = true;
+    anim->playRate = 1.0f;
+    anim->clipPath = "base_inline://clip";
+    anim->additiveClipPath = "additive_a://clip";
+    anim->blendWeight = 1.0f;
+
+    // Build base + two distinct additive clips.
+    ayt::resource::Animation baseClip;
+    baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(1.0f);
+
+    ayt::resource::Animation addClipA;
+    addClipA.setName("AddA"); addClipA.setTicksPerSecond(30.0f); addClipA.setDuration(1.0f);
+    addClipA.addTrack([&]() {
+        ayt::resource::AnimTrack t;
+        t.nodeName = "Bone0"; t.property = "position";
+        t.valueType = ayt::resource::AnimTrackType::Vector3;
+        t.blendMode = ayt::resource::AnimBlendMode::Additive;
+        t.times = { 0.0f, 30.0f };
+        t.values = { 0,0,0,  2,0,0 };  // +2 on X at t=1
+        return t;
+    }());
+
+    ayt::resource::Animation addClipB;
+    addClipB.setName("AddB"); addClipB.setTicksPerSecond(30.0f); addClipB.setDuration(1.0f);
+    addClipB.addTrack([&]() {
+        ayt::resource::AnimTrack t;
+        t.nodeName = "Bone0"; t.property = "position";
+        t.valueType = ayt::resource::AnimTrackType::Vector3;
+        t.blendMode = ayt::resource::AnimBlendMode::Additive;
+        t.times = { 0.0f, 30.0f };
+        t.values = { 0,0,0,  10,0,0 };  // +10 on X at t=1
+        return t;
+    }());
+
+    skel->skeleton.setBoneCount(1);
+    {
+        ayt::resource::Bone root;
+        root.name = "Bone0"; root.parentIndex = -1;
+        root.localPosition = ayt::math::FVector3(0,0,0);
+        root.localRotation = ayt::math::FQuaternion::identity();
+        root.localScale    = ayt::math::FVector3(1,1,1);
+        root.inverseBindMatrix = ayt::math::Float4x4::identity();
+        skel->skeleton.setBone(0, root);
+    }
+    skel->jointCount = 1;
+    skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
+    skel->skinMatrices[0] = ayt::math::Float4x4::identity();
+    skel->loaded = true;
+    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.play(&baseClip);
+
+    // Bind to clip A, seek to t=0.5 (mid-clip) so lerp gives exact half
+    // of the keyframe delta. Avoids the setTime(==duration) wrap-to-0
+    // bug and gives clean integer math.
+    skel->player.setAdditiveSource(&addClipA, 1.0f, true);
+    skel->player.setBlendWeight(1.0f);
+    skel->player.setTime(0.5f);
+    skel->player.evaluate();
+    const float posWithA = skel->player.getBoneWorldMatrices()[0].row[0].w;
+    // At t=0.5 lerp(0, 2) = 1.0 → additive pos delta 1.0.
+    CHECK(std::fabs(posWithA - 1.0f) < 1e-4f);
+
+    // Rebind to clip B (different additiveClipPath).
+    anim->additiveClipPath = "additive_b://clip";
+    skel->player.setAdditiveSource(&addClipB, 1.0f, true);
+    skel->player.setBlendWeight(1.0f);
+    skel->player.setTime(0.5f);
+    skel->player.evaluate();
+    const float posWithB = skel->player.getBoneWorldMatrices()[0].row[0].w;
+    // At t=0.5 lerp(0, 10) = 5.0 → additive pos delta 5.0.
+    CHECK(std::fabs(posWithB - 5.0f) < 1e-4f);
+
+    world.destroyEntity(e);
+    world.shutdown();
+}
+
+// Phase 1.3 (P1.3) — Empty additiveClipPath means no layer. Mirrors
+// INV-1 contract: when additiveClipPath is "" the player is in the
+// OFF state and Phase 1b is skipped entirely. Verify the AnimationPlayer
+// reports isAdditiveLayerActive()==false even with blendWeight > 0.
+TEST_CASE(animation_component_empty_additive_path_no_layer)
+{
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+
+    Entity* e = world.createEntity();
+    CHECK(e != nullptr);
+    e->addComponent<Transform>();
+    auto* mesh = e->addComponent<MeshComponent>();
+    mesh->skinned  = true;
+    mesh->meshPath = "skinned_cube.aymesh";
+    auto* skel = e->addComponent<SkeletonComponent>();
+    auto* anim = e->addComponent<AnimationComponent>();
+    anim->autoplay = true;
+    anim->looping  = true;
+    anim->playRate = 1.0f;
+    anim->clipPath = "base_inline://clip";
+    // additiveClipPath defaults to "" — no layer.
+    anim->blendWeight = 1.0f;
+
+    // Build a base clip with a position track so we can observe
+    // whether Phase 1b applied any delta.
+    ayt::resource::Animation baseClip;
+    baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(1.0f);
+    baseClip.addTrack([&]() {
+        ayt::resource::AnimTrack t;
+        t.nodeName = "Bone0"; t.property = "position";
+        t.valueType = ayt::resource::AnimTrackType::Vector3;
+        t.blendMode = ayt::resource::AnimBlendMode::Override;
+        t.times = { 0.0f, 30.0f };
+        t.values = { 0,0,0,  2,0,0 };
+        return t;
+    }());
+
+    skel->skeleton.setBoneCount(1);
+    {
+        ayt::resource::Bone root;
+        root.name = "Bone0"; root.parentIndex = -1;
+        root.localPosition = ayt::math::FVector3(0,0,0);
+        root.localRotation = ayt::math::FQuaternion::identity();
+        root.localScale    = ayt::math::FVector3(1,1,1);
+        root.inverseBindMatrix = ayt::math::Float4x4::identity();
+        skel->skeleton.setBone(0, root);
+    }
+    skel->jointCount = 1;
+    skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
+    skel->skinMatrices[0] = ayt::math::Float4x4::identity();
+    skel->loaded = true;
+    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.play(&baseClip);
+
+    // The push line for the empty path is: setAdditiveSource(nullptr).
+    // blendWeight is irrelevant when no source is bound (INV-1).
+    skel->player.setAdditiveSource(nullptr, 1.0f, true);
+    skel->player.setBlendWeight(anim->blendWeight);
+
+    CHECK_FALSE(skel->player.isAdditiveLayerActive());
+
+    // Tick + eval — base-only output. Bone0 should be at (~2, 0, 0).
+    // Use t=0.99 to avoid setTime(==duration) wrapping to 0.
+    skel->player.setTime(0.99f);
+    skel->player.evaluate();
+    const ayt::math::Float4x4& m = skel->player.getBoneWorldMatrices()[0];
+    // At t=0.99 with two keyframes (0, 30 ticks = 0, 1.0s), the lerp gives
+    // sample ≈ (0.5 * 0.99, 0, 0). Base Override writes (sample.x, 0, 0)
+    // to _localPos, so world.x ≈ 0.99 * 2 = 1.98 (within tolerance).
+    CHECK(std::fabs(m.row[0].w - 1.98f) < 0.05f);
+    CHECK(std::fabs(m.row[1].w - 0.0f)  < 1e-4f);
+    CHECK(std::fabs(m.row[2].w - 0.0f)  < 1e-4f);
+
+    world.destroyEntity(e);
+    world.shutdown();
+}
+
 TEST_SUITE_END

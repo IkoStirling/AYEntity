@@ -45,6 +45,23 @@ private:
                        std::shared_ptr<ayt::resource::IAnimation>> _clipCache;
     // Last clip path bound per entity; play() only runs when this changes.
     std::unordered_map<const Entity*, std::string> _entityBoundClip;
+
+    // Phase 1.3 (P1.3) — Additive Layer 2 (Cross-Fade) bridge:
+    //   additive clip cache mirrors _clipCache for the layer's source.
+    //   ResourceManager keeps the resource alive as long as a shared_ptr
+    //   holds. Independent from _clipCache because the additive source
+    //   has its own lazy-load + lifetime.
+    //
+    //   _lastAppliedAdditivePath mirrors _entityBoundClip for additive
+    //   rebind detection. Per-entity, last path that was actually pushed
+    //   via setAdditiveSource (could be "" if no layer is active).
+    //
+    //   UPGRADE-HOOK(P1.5): when a stack of additive layers ships, this
+    //   becomes _additiveClipCaches[slotIndex] and _lastAppliedAdditivePaths
+    //   [slotIndex].
+    std::unordered_map<std::string,
+                       std::shared_ptr<ayt::resource::IAnimation>> _additiveClipCache;
+    std::unordered_map<const Entity*, std::string> _lastAppliedAdditivePath;
 };
 
 void registerAnimationSystem();

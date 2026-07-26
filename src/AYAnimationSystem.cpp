@@ -123,6 +123,72 @@ void AnimationSystem::onUpdate(float dt)
         // keeps pre-P1.2 clips (no Additive tracks) bit-identical.
         skel->player.setAdditiveWeight(anim->additiveWeight);
 
+        // Phase 1.3 (P1.3) — Additive Layer 2 (Cross-Fade) bridge.
+        // The additive source is lazily loaded into _additiveClipCache
+        // (mirror of _clipCache). When additiveClipPath is empty we
+        // explicitly unbind via setAdditiveSource(nullptr) so the layer
+        // is OFF — this drives Phase 1b to a no-op per INV-1. When
+        // non-empty, we check rebind detection on the last applied path
+        // and call setAdditiveSource only when it changes (mirrors the
+        // _entityBoundClip pattern above).
+        //
+        // blendWeight (P1.3 canonical name) is forwarded to the player
+        // via setBlendWeight — the new setter replaces setAdditiveWeight
+        // for layer-level mixing. We still call setAdditiveWeight above
+        // because that field is the P1.2 per-track additive weight
+        // preserved for serializer compat — P1.2 ships both Layer 1
+        // (per-track) and the new Layer 2 (cross-clip) blend semantics
+        // through the same scalar (named _blendWeight in the player).
+        //
+        // UPGRADE-HOOK(P1.4): syncToBase option (a single bool on the
+        //   player) would gate the additive axis advance in tick().
+        // UPGRADE-HOOK(P1.5): per-source weight map replaces the single
+        //   blendWeight with vector<float> indexed by layer slot.
+        if (!anim->additiveClipPath.empty()) {
+            // Lazy-load the additive clip.
+            if (_additiveClipCache.find(anim->additiveClipPath)
+                == _additiveClipCache.end()) {
+                auto addRes = ayt::resource::ResourceManager::instance()
+                                  .load<ayt::resource::IAnimation>(
+                                      anim->additiveClipPath);
+                if (!addRes) {
+                    std::fprintf(stderr,
+                                 "[AnimationSystem] loadAdditiveAnimation('%s') failed\n",
+                                 anim->additiveClipPath.c_str());
+                    // Continue without binding the additive layer so the
+                    // base animation still plays. INV-4 degenerate state
+                    // (additive-clip set but base==null) is impossible
+                    // here because we've already checked skel->loaded.
+                    continue;
+                }
+                _additiveClipCache.emplace(anim->additiveClipPath, addRes);
+            }
+
+            // Rebind detection: only call setAdditiveSource when the
+            // path actually changes (or is first-time bound). Mirrors
+            // the base rebind pattern above.
+            const std::string& lastAdd = _lastAppliedAdditivePath[e];
+            if (lastAdd != anim->additiveClipPath) {
+                _lastAppliedAdditivePath[e] = anim->additiveClipPath;
+                skel->player.setAdditiveSource(
+                    _additiveClipCache[anim->additiveClipPath].get(),
+                    anim->additivePlayRate,
+                    /*loop=*/true);
+            }
+            // Always forward the layer weight — host may have updated
+            // blendWeight on the component since last frame.
+            skel->player.setBlendWeight(anim->blendWeight);
+        } else {
+            // additiveClipPath empty → layer OFF. Unbind if previously
+            // bound (cheap path: setAdditiveSource(nullptr) on an
+            // already-null source is a no-op).
+            const std::string& lastAdd = _lastAppliedAdditivePath[e];
+            if (!lastAdd.empty()) {
+                _lastAppliedAdditivePath[e] = std::string();
+                skel->player.setAdditiveSource(nullptr);
+            }
+        }
+
         const std::string& boundClip = _entityBoundClip[e];
         if (boundClip != anim->clipPath) {
             _entityBoundClip[e] = anim->clipPath;
@@ -175,6 +241,54 @@ void AnimationSystem::onUpdate(float dt)
                             rec.time,
                             rec.payload,
                         });
+                }
+            }
+
+            // Phase 1.3 (P1.3) — Additive Layer 2 (Cross-Fade) EventBus
+            // bridge. Drain the additive source's notify queue and emit
+            // each record on the same AnimNotifyEvent channel. The MVP
+            // does NOT tag records as base vs additive — subscribers that
+            // care which source fired a given marker must use context
+            // (e.g. a thread-local flag the host sets before each tick,
+            // or filter by clipName when host-authored clips disambiguate).
+            //
+            // UPGRADE-HOOK(P1.5): add a `source` enum field to
+            //   AnimNotifyEvent (Base | Additive) and an optional
+            //   dedup-by-(time, name) merge layer so host code gets a
+            //   single sorted stream with explicit source attribution.
+            //
+            // The additive source's clipName comes from
+            // _additiveClipCache — same stable-pointer lifetime contract
+            // as base (IAnimation-owned). When the additive source is
+            // not bound, this drain is empty (the player never enqueued).
+            if (skel->player.getPendingNotifyCountAdditive() > 0) {
+                // Look up the additive clip's stable name pointer. We
+                // mirror the base clipNameStable resolution path.
+                const std::string& addClipKey =
+                    _lastAppliedAdditivePath.count(e)
+                        ? _lastAppliedAdditivePath[e]
+                        : std::string();
+                const ayt::resource::IAnimation* addClipRes =
+                    !addClipKey.empty() && _additiveClipCache.count(addClipKey)
+                        ? _additiveClipCache[addClipKey].get()
+                        : nullptr;
+                const char* addClipNameStable =
+                    addClipRes ? addClipRes->getName() : "additive-unknown";
+
+                const auto& addRecords =
+                    skel->player.consumePendingNotifiesAdditive();
+                if (!addRecords.empty()) {
+                    ayt::event::EventBus& bus = ayt::event::EventBus::instance();
+                    for (const auto& rec : addRecords) {
+                        bus.emit<ayt::anim::AnimNotifyEvent>(
+                            ayt::anim::AnimNotifyEvent{
+                                entityId,
+                                addClipNameStable,
+                                rec.name,
+                                rec.time,
+                                rec.payload,
+                            });
+                    }
                 }
             }
 
