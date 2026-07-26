@@ -794,4 +794,263 @@ TEST_CASE(animation_component_empty_additive_path_no_layer)
     world.shutdown();
 }
 
+// ---------------------------------------------------------------------------
+// P1.4 — Cross-Fade Full Ship integration tests.
+//
+// Three tests, mirroring the P1.3 additive bridge pattern at lines 531-797
+// above: spin up a world, attach components, run the three-line push that
+// AnimationSystem::onUpdate executes per entity per frame (here we do it
+// manually to bypass ResourceManager disk I/O), and assert that the
+// component field lands correctly on the player. These cover the
+// syncToBase / refPoseCapture / blendCurve knobs from
+// AYAnimationSystem::onUpdate without depending on phase 1.5 + P1.3
+// notify queue plumbing (each test stands alone).
+// ---------------------------------------------------------------------------
+
+// E1 — animation_component_p1_4_blend_curve_pushed_to_player
+//
+// Setting blendCurveDuration > 0 on the component, then invoking the
+// per-frame bridge push (here manually), must invoke
+// AnimationPlayer::blendWeightOverTime() on the player so
+// isBlendCurveActive() reports true. Past the duration, the bridge also
+// hands the static weight over via a subsequent blendWeightOverTime()
+// call (caller-driven) — but we only need to verify the bridge mapping
+// here.
+TEST_CASE(animation_component_p1_4_blend_curve_pushed_to_player)
+{
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+
+    Entity* e = world.createEntity();
+    CHECK(e != nullptr);
+    e->addComponent<Transform>();
+    auto* mesh = e->addComponent<MeshComponent>();
+    mesh->skinned = true;
+    mesh->meshPath = "skinned_cube.aymesh";
+    auto* skel = e->addComponent<SkeletonComponent>();
+    auto* anim = e->addComponent<AnimationComponent>();
+    anim->autoplay = true;
+    anim->looping = true;
+    anim->playRate = 1.0f;
+    anim->clipPath = "base_inline://clip";
+    anim->additiveClipPath = "additive_inline://clip";
+    anim->blendWeight = 1.0f;
+    anim->blendCurveFrom     = 0.0f;
+    anim->blendCurveTo       = 1.0f;
+    anim->blendCurveDuration = 0.5f;   // > 0 → bridge invokes blendWeightOverTime
+    anim->blendCurveEasing   = static_cast<uint8_t>(ayt::anim::BlendEasing::EaseInOut);
+
+    // Build a trivial skeleton so the player has a target.
+    skel->skeleton.setBoneCount(1);
+    {
+        ayt::resource::Bone root;
+        root.name = "Bone0"; root.parentIndex = -1;
+        root.localPosition = ayt::math::FVector3(0,0,0);
+        root.localRotation = ayt::math::FQuaternion::identity();
+        root.localScale    = ayt::math::FVector3(1,1,1);
+        root.inverseBindMatrix = ayt::math::Float4x4::identity();
+        skel->skeleton.setBone(0, root);
+    }
+    skel->jointCount = 1;
+    skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
+    skel->skinMatrices[0] = ayt::math::Float4x4::identity();
+    skel->loaded = true;
+    skel->player.setSkeleton(&skel->skeleton);
+
+    ayt::resource::Animation baseClip;
+    baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(1.0f);
+    ayt::resource::Animation addClip;
+    addClip.setName("Add"); addClip.setTicksPerSecond(30.0f); addClip.setDuration(1.0f);
+    skel->player.play(&baseClip);
+
+    // The same per-frame push sequence AnimationSystem::onUpdate runs.
+    skel->player.setAdditiveSource(&addClip, anim->additivePlayRate, true);
+    skel->player.setBlendWeight(anim->blendWeight);
+
+    // P1.4 cross-fade bridge: duration > 0 ⇒ blendWeightOverTime fires.
+    CHECK(anim->blendCurveDuration > 0.0f);
+    skel->player.blendWeightOverTime(
+        anim->blendCurveFrom,
+        anim->blendCurveTo,
+        anim->blendCurveDuration,
+        static_cast<ayt::anim::BlendEasing>(anim->blendCurveEasing));
+    CHECK(skel->player.isBlendCurveActive());
+
+    // E1's bridge test scope is now bounded: verify that the bridge
+    // reach (component → AnimationPlayer::blendWeightOverTime) lands
+    // the curve-active flag. The auto-disarm path is fully covered by
+    // the corresponding AnimationPlayer unit tests (A1/A3 duration0
+    // auto-disarm invariants); a SkinnedAnimationTest re-assertion
+    // would be redundant. We deliberately stop here.
+
+    world.destroyEntity(e);
+    world.shutdown();
+}
+
+// E2 — animation_component_p1_4_sync_to_base_bridge_flag
+//
+// Component-level syncToBase = true must flip the player's
+// _syncToBase flag through the per-frame bridge — verified via
+// player.isAdditiveSyncToBase(). Without the bridge the flag stays
+// off (player default).
+TEST_CASE(animation_component_p1_4_sync_to_base_bridge_flag)
+{
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+
+    Entity* e = world.createEntity();
+    CHECK(e != nullptr);
+    e->addComponent<Transform>();
+    auto* mesh = e->addComponent<MeshComponent>();
+    mesh->skinned = true;
+    mesh->meshPath = "skinned_cube.aymesh";
+    auto* skel = e->addComponent<SkeletonComponent>();
+    auto* anim = e->addComponent<AnimationComponent>();
+    anim->autoplay = true;
+    anim->looping = true;
+    anim->playRate = 1.0f;
+    anim->clipPath = "base_inline://clip";
+    anim->additiveClipPath = "additive_inline://clip";
+    anim->blendWeight = 1.0f;
+    anim->syncToBase = true;  // P1.4 — flip the flag
+
+    skel->skeleton.setBoneCount(1);
+    {
+        ayt::resource::Bone root;
+        root.name = "Bone0"; root.parentIndex = -1;
+        root.localPosition = ayt::math::FVector3(0,0,0);
+        root.localRotation = ayt::math::FQuaternion::identity();
+        root.localScale    = ayt::math::FVector3(1,1,1);
+        root.inverseBindMatrix = ayt::math::Float4x4::identity();
+        skel->skeleton.setBone(0, root);
+    }
+    skel->jointCount = 1;
+    skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
+    skel->skinMatrices[0] = ayt::math::Float4x4::identity();
+    skel->loaded = true;
+    skel->player.setSkeleton(&skel->skeleton);
+
+    ayt::resource::Animation baseClip;
+    baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(2.0f);
+    ayt::resource::Animation addClip;
+    addClip.setName("Add"); addClip.setTicksPerSecond(30.0f); addClip.setDuration(0.5f);
+    skel->player.play(&baseClip);
+
+    // Manually mirror the bridge's push sequence (the test bypasses
+    // AnimationSystem to avoid cross-module entanglements).
+    skel->player.setAdditiveSource(&addClip, anim->additivePlayRate, true);
+    skel->player.setBlendWeight(anim->blendWeight);
+    // Bridge line:
+    skel->player.setAdditiveSyncToBase(anim->syncToBase);
+    CHECK(skel->player.isAdditiveSyncToBase());
+
+    // INV-6 — post-tick the two playheads are locked. We exercise by
+    // setting a notify at additive t=0.4 (= base t=0.4 under sync; in
+    // independent mode additive t=0.4 maps to base t=0.4 too because
+    // both started at 0). The discriminator: if we then tick 1s, base
+    // goes 0→1.0; additive under sync mirrors that exactly. Independent
+    // mode would wrap (additive duration 0.5) so additive notifies at
+    // 0.4 and 0.4 (after wrap) both fire. Both modes produce the same
+    // count here; what we verify is the player's lock-step bit is on.
+    addClip.addNotify(ayt::resource::AnimNotifyMarker{"AddMid", 0.4f, 0.0f});
+    skel->player.setAdditiveSource(&addClip);  // rebind with marker
+    skel->player.setAdditiveSyncToBase(true);
+    skel->player.setTime(0.0f);
+    skel->player.tick(0.5f);   // both axes 0 → 0.5
+    // Marker at 0.4 is in [0, 0.5] for additive.
+    CHECK(skel->player.getPendingNotifyCountAdditive() == 1u);
+
+    world.destroyEntity(e);
+    world.shutdown();
+}
+
+// E3 — animation_component_p1_4_ref_pose_capture_bridge_flag
+//
+// Component-level refPoseCapture = true must flip the player's
+// _refPoseCapture through the bridge. We verify by toggling the flag
+// and confirming the player reflects it; evaluate() must not crash
+// regardless of the flag value.
+TEST_CASE(animation_component_p1_4_ref_pose_capture_bridge_flag)
+{
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+
+    Entity* e = world.createEntity();
+    CHECK(e != nullptr);
+    e->addComponent<Transform>();
+    auto* mesh = e->addComponent<MeshComponent>();
+    mesh->skinned = true;
+    mesh->meshPath = "skinned_cube.aymesh";
+    auto* skel = e->addComponent<SkeletonComponent>();
+    auto* anim = e->addComponent<AnimationComponent>();
+    anim->autoplay = true;
+    anim->looping = true;
+    anim->playRate = 1.0f;
+    anim->clipPath = "base_inline://clip";
+    anim->additiveClipPath = "additive_inline://clip";
+    anim->blendWeight = 1.0f;
+    anim->refPoseCapture = true;  // P1.4 — flip the flag
+
+    skel->skeleton.setBoneCount(1);
+    {
+        ayt::resource::Bone root;
+        root.name = "Bone0"; root.parentIndex = -1;
+        root.localPosition = ayt::math::FVector3(0,0,0);
+        root.localRotation = ayt::math::FQuaternion::identity();
+        root.localScale    = ayt::math::FVector3(1,1,1);
+        root.inverseBindMatrix = ayt::math::Float4x4::identity();
+        skel->skeleton.setBone(0, root);
+    }
+    skel->jointCount = 1;
+    skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
+    skel->skinMatrices[0] = ayt::math::Float4x4::identity();
+    skel->loaded = true;
+    skel->player.setSkeleton(&skel->skeleton);
+
+    ayt::resource::Animation baseClip;
+    baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(1.0f);
+    baseClip.addTrack([]() {
+        ayt::resource::AnimTrack t;
+        t.nodeName = "Bone0"; t.property = "position";
+        t.valueType = ayt::resource::AnimTrackType::Vector3;
+        t.blendMode = ayt::resource::AnimBlendMode::Override;
+        t.times = { 0.0f, 30.0f };
+        t.values = { 0,0,0,  2,0,0 };
+        return t;
+    }());
+    ayt::resource::Animation addClip;
+    addClip.setName("Add"); addClip.setTicksPerSecond(30.0f); addClip.setDuration(1.0f);
+    addClip.addTrack([]() {
+        ayt::resource::AnimTrack t;
+        t.nodeName = "Bone0"; t.property = "position";
+        t.valueType = ayt::resource::AnimTrackType::Vector3;
+        t.blendMode = ayt::resource::AnimBlendMode::Additive;
+        t.times = { 0.0f, 30.0f };
+        t.values = { 0,0,0,  1,0,0 };
+        return t;
+    }());
+    skel->player.play(&baseClip);
+
+    // Manually mirror the bridge push.
+    skel->player.setAdditiveSource(&addClip, anim->additivePlayRate, true);
+    skel->player.setBlendWeight(anim->blendWeight);
+    skel->player.setAdditiveRefPoseCapture(anim->refPoseCapture);
+    CHECK(skel->player.isAdditiveRefPoseCapture());
+
+    // Evaluate twice — must remain stable, no NaN.
+    skel->player.setTime(0.5f);
+    skel->player.evaluate();
+    const ayt::math::Float4x4& m1 = skel->player.getBoneWorldMatrices()[0];
+    skel->player.evaluate();
+    const ayt::math::Float4x4& m2 = skel->player.getBoneWorldMatrices()[0];
+    CHECK(std::fabs(m1.row[0].w - m2.row[0].w) < 1e-6f);
+    CHECK(std::isfinite(m1.row[0].w));
+
+    world.destroyEntity(e);
+    world.shutdown();
+}
+
 TEST_SUITE_END

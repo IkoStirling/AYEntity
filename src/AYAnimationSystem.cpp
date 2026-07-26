@@ -178,6 +178,72 @@ void AnimationSystem::onUpdate(float dt)
             // Always forward the layer weight — host may have updated
             // blendWeight on the component since last frame.
             skel->player.setBlendWeight(anim->blendWeight);
+
+            // P1.4 — Cross-Fade full-ship bridge (syncToBase + refPoseCapture
+            // + keyframed weight curve). Each push uses a per-entity
+            // rebind-detection map so the player setter is invoked exactly
+            // once per actual field change (NOT every frame), mirroring the
+            // _entityBoundClip pattern above. blendCurveFrom / blendCurveTo
+            // changes intentionally do NOT trigger a fresh blendWeightOverTime
+            // call — the new values land on the next curve anchor naturally.
+            const bool wantSync = anim->syncToBase;
+            const bool lastSync = _lastAppliedSyncToBase.count(e)
+                                      ? _lastAppliedSyncToBase[e]
+                                      : false;
+            if (lastSync != wantSync) {
+                _lastAppliedSyncToBase[e] = wantSync;
+                skel->player.setAdditiveSyncToBase(wantSync);
+            }
+
+            const bool wantRef = anim->refPoseCapture;
+            const bool lastRef = _lastAppliedRefPoseCapture.count(e)
+                                      ? _lastAppliedRefPoseCapture[e]
+                                      : false;
+            if (lastRef != wantRef) {
+                _lastAppliedRefPoseCapture[e] = wantRef;
+                skel->player.setAdditiveRefPoseCapture(wantRef);
+            }
+
+            // Curve trigger: only call blendWeightOverTime when one of
+            // (duration, easing) changes, NOT every frame. A duration of
+            // 0 is the "curve OFF, use static blendWeight" path; the
+            // implementation on the player side already no-ops in that
+            // case so we skip the call entirely as a micro-optimisation
+            // (we also cache the lookup in the map so the next call sees
+            // the same zero and stays quiet).
+            const float wantDur = anim->blendCurveDuration;
+            const uint8_t wantEase = anim->blendCurveEasing;
+            const float lastDur = _lastAppliedBlendCurveDuration.count(e)
+                                      ? _lastAppliedBlendCurveDuration[e]
+                                      : -1.0f;
+            const uint8_t lastEase = _lastAppliedBlendCurveEasing.count(e)
+                                          ? _lastAppliedBlendCurveEasing[e]
+                                          : 0xFF;
+            if (wantDur > 0.0f
+                && (lastDur != wantDur || lastEase != wantEase)) {
+                _lastAppliedBlendCurveDuration[e] = wantDur;
+                _lastAppliedBlendCurveEasing[e]   = wantEase;
+                // BlendEasing lives in ayt::anim; the bridge casts
+                // the IComponent's uint8_t to it. Unknown values fall
+                // back to Linear so a forward-compat reader can't NaN
+                // out the layer.
+                const ayt::anim::BlendEasing easingEnum =
+                    (wantEase < 5)
+                        ? static_cast<ayt::anim::BlendEasing>(wantEase)
+                        : ayt::anim::BlendEasing::Linear;
+                skel->player.blendWeightOverTime(
+                    anim->blendCurveFrom,
+                    anim->blendCurveTo,
+                    wantDur,
+                    easingEnum);
+            } else if (wantDur == 0.0f && lastDur != 0.0f) {
+                // Curve turned OFF (duration flipped to 0). Cancel any
+                // in-flight curve so the static blendWeight takes over
+                // immediately instead of waiting for the natural
+                // auto-disarm at the end of the previous window.
+                _lastAppliedBlendCurveDuration[e] = 0.0f;
+                skel->player.cancelBlendCurve();
+            }
         } else {
             // additiveClipPath empty → layer OFF. Unbind if previously
             // bound (cheap path: setAdditiveSource(nullptr) on an
@@ -186,6 +252,26 @@ void AnimationSystem::onUpdate(float dt)
             if (!lastAdd.empty()) {
                 _lastAppliedAdditivePath[e] = std::string();
                 skel->player.setAdditiveSource(nullptr);
+            }
+            // P1.4 — when the additive layer turns off we also reset
+            // the four rebind caches so a future re-bind via
+            // setAdditiveSource() starts in clean P1.3-vanilla state.
+            // No need to invoke setAdditiveSyncToBase(false) /
+            // setAdditiveRefPoseCapture(false) / cancelBlendCurve on
+            // the player — setAdditiveSource(nullptr) above already
+            // cleared every P1.4 flag inline (see AYAnimation design
+            // §4.10 state-machine contract).
+            if (_lastAppliedSyncToBase.count(e)) {
+                _lastAppliedSyncToBase.erase(e);
+            }
+            if (_lastAppliedRefPoseCapture.count(e)) {
+                _lastAppliedRefPoseCapture.erase(e);
+            }
+            if (_lastAppliedBlendCurveDuration.count(e)) {
+                _lastAppliedBlendCurveDuration.erase(e);
+            }
+            if (_lastAppliedBlendCurveEasing.count(e)) {
+                _lastAppliedBlendCurveEasing.erase(e);
             }
         }
 

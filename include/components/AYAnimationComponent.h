@@ -49,6 +49,33 @@ struct AnimationComponent : public IComponent {
     AY_PROPERTY(std::string, additiveClipPath, kAttrSerialize)
     AY_PROPERTY(float,       additivePlayRate, kAttrSerialize)
     AY_PROPERTY(float,       blendWeight,      kAttrSerialize)
+    // P1.4 — Cross-Fade full ship. Six new fields layered on top of the
+    // P1.3 dual-source state machine. Each has its own bridge entry point
+    // on AnimationPlayer (see AYAnimationSystem.cpp for the per-frame push).
+    //
+    //   syncToBase (default false): additive axis lock-step to _time
+    //     (UE UAnimMontage::bForceRootLock style; replaces the P1.3
+    //     "independent axis" default).
+    //   refPoseCapture (default false): additive base = post-Phase-1a
+    //     captured pose rather than the skeleton's bind pose
+    //     (replaces the P1.2 "ref-pose-at-frame-0" authoring assumption
+    //     with a runtime capture).
+    //   blendCurveFrom / blendCurveTo / blendCurveDuration /
+    //     blendCurveEasing: the four knobs of blendWeightOverTime().
+    //     blendCurveDuration = 0 (default) ⇒ the curve path is OFF
+    //     and the static blendWeight above wins. blendCurveEasing is
+    //     a uint8_t rather than a typed enum to keep the IComponent
+    //     surface POCO (the runtime cast to ayt::anim::BlendEasing
+    //     happens at the bridge boundary inside AYAnimationSystem).
+    //
+    // All six are kAttrSerialize so they round-trip through the editor
+    // editor scene format introduced alongside Phase 1.5.
+    AY_PROPERTY(bool,        syncToBase,        kAttrSerialize)
+    AY_PROPERTY(bool,        refPoseCapture,    kAttrSerialize)
+    AY_PROPERTY(float,       blendCurveFrom,    kAttrSerialize)
+    AY_PROPERTY(float,       blendCurveTo,      kAttrSerialize)
+    AY_PROPERTY(float,       blendCurveDuration,kAttrSerialize)
+    AY_PROPERTY(uint8_t,     blendCurveEasing,  kAttrSerialize)
 
     AnimationComponent() {
         autoplay = true;
@@ -58,6 +85,12 @@ struct AnimationComponent : public IComponent {
         additiveClipPath = "";     // P1.3 — empty = no additive layer
         additivePlayRate = 1.0f;
         blendWeight = 1.0f;        // P1.3 — canonical new name
+        syncToBase = false;        // P1.4 — additive independent axis (P1.3 default)
+        refPoseCapture = false;    // P1.4 — additive base = rest pose (P1.3 default)
+        blendCurveFrom = 0.0f;     // P1.4 — curve start weight (default OFF because
+        blendCurveTo = 1.0f;       //           blendCurveDuration = 0 ⇒ static fallback)
+        blendCurveDuration = 0.0f; // P1.4 — 0 = curve OFF (mirrors player default)
+        blendCurveEasing = 0;      // P1.4 — 0 = ayt::anim::BlendEasing::Linear
     }
 
     bool isValid() const { return !clipPath.empty(); }

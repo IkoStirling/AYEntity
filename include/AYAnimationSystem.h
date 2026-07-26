@@ -62,6 +62,24 @@ private:
     std::unordered_map<std::string,
                        std::shared_ptr<ayt::resource::IAnimation>> _additiveClipCache;
     std::unordered_map<const Entity*, std::string> _lastAppliedAdditivePath;
+
+    // P1.4 — Cross-fade full-ship bridge. Four rebind-detection maps
+    // mirror the P1.3 _lastAppliedAdditivePath pattern so a setter is
+    // only invoked when the host-side component field actually changes,
+    // avoiding per-frame churn on the underlying player.
+    //
+    //   _lastAppliedSyncToBase / _lastAppliedRefPoseCapture are bools:
+    //     a flag toggle re-triggers the setter exactly once.
+    //   _lastAppliedBlendCurveDuration / _lastAppliedBlendCurveEasing
+    //     are the two curve knobs whose change actually requires a
+    //     blendWeightOverTime() call. blendCurveFrom / blendCurveTo
+    //     shifts do NOT trigger a call (they land on the next curve
+    //     anchor naturally; the current in-flight curve is allowed
+    //     to finish first).
+    std::unordered_map<const Entity*, bool>    _lastAppliedSyncToBase;
+    std::unordered_map<const Entity*, bool>    _lastAppliedRefPoseCapture;
+    std::unordered_map<const Entity*, float>   _lastAppliedBlendCurveDuration;
+    std::unordered_map<const Entity*, uint8_t> _lastAppliedBlendCurveEasing;
 };
 
 void registerAnimationSystem();
