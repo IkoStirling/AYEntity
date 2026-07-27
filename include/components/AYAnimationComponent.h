@@ -5,10 +5,67 @@
 
 #include <IAYEntity.h>
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 namespace ayt::entity
 {
+
+// P1.5 — per-additive-layer spec. Mirrors one slot in AnimationPlayer's
+// vector<AdditiveSlot>. The host populates additiveLayers[0..N-1] to bind
+// up to kMaxAdditiveSlots = 8 simultaneous layers (UE LayerObjects[] /
+// Unity AnimationLayerMixerPlayable.SetLayerCount cap). Each field is a
+// straight copy onto the matching AnimationPlayer setter per frame; see
+// AYAnimationSystem.cpp per-slot push loop.
+//
+// Slot ordering: additiveLayers[i].slotIndex in the IComponent spec
+// matches slot[i] in the player (sparse — you can populate slot 4
+// without slot 0..3, the bridge pads with empty slots). When the array
+// is empty the bridge falls back to the legacy single-slot fields
+// (additiveClipPath / blendWeight / etc.) for backward compat with
+// P1.3/P1.4 authored scenes.
+#define AY_CURRENT_CLASS AdditiveLayerSpec
+struct AdditiveLayerSpec {
+    // Slot index in AnimationPlayer._additiveSlots. Defaults to its
+    // position in additiveLayers[] if left at UINT32_MAX (the bridge
+    // auto-fills on first push).
+    AY_PROPERTY(uint32_t,    slotIndex,         kAttrSerialize)
+    // Empty (default) ⇒ this slot is OFF. Non-empty ⇒ bind / rebind.
+    AY_PROPERTY(std::string, additiveClipPath,  kAttrSerialize)
+    AY_PROPERTY(float,       additivePlayRate,  kAttrSerialize)
+    AY_PROPERTY(bool,        looping,           kAttrSerialize)
+    // Per-layer blend weight (P1.3 setBlendWeight per-slot generalisation).
+    AY_PROPERTY(float,       blendWeight,       kAttrSerialize)
+    // P1.4 per-slot cross-fade knobs (mirrors AnimationComponent's
+    // legacy single-slot fields).
+    AY_PROPERTY(bool,        syncToBase,        kAttrSerialize)
+    AY_PROPERTY(bool,        refPoseCapture,    kAttrSerialize)
+    AY_PROPERTY(float,       blendCurveFrom,    kAttrSerialize)
+    AY_PROPERTY(float,       blendCurveTo,      kAttrSerialize)
+    AY_PROPERTY(float,       blendCurveDuration,kAttrSerialize)
+    AY_PROPERTY(uint8_t,     blendCurveEasing,  kAttrSerialize)
+
+    AdditiveLayerSpec() {
+        slotIndex = UINT32_MAX;     // sentinel — bridge will set to position
+        additiveClipPath = "";      // empty = slot OFF
+        additivePlayRate = 1.0f;
+        looping = true;
+        blendWeight = 1.0f;
+        syncToBase = false;
+        refPoseCapture = false;
+        blendCurveFrom = 0.0f;
+        blendCurveTo = 1.0f;
+        blendCurveDuration = 0.0f;  // 0 = curve OFF
+        blendCurveEasing = 0;       // 0 = ayt::anim::BlendEasing::Linear
+    }
+};
+#undef AY_CURRENT_CLASS
+// Register AdditiveLayerSpec with AYReflect so it can be embedded in a
+// std::vector<> field (the IComponent registration for the field
+// requires the element type's TypeInfo to exist; see PropertyMacros.h
+// tryRegisterVector).
+AY_FINALIZE_REGISTRATION_METADATA(AdditiveLayerSpec)
 
 #define AY_CURRENT_CLASS AnimationComponent
 struct AnimationComponent : public IComponent {
@@ -44,8 +101,11 @@ struct AnimationComponent : public IComponent {
     //
     // UPGRADE-HOOK(P1.4): additivePlayRate + additiveLooping →
     //   syncToBase option (single bool on the player).
-    // UPGRADE-HOOK(P1.5): blendWeight + additiveWeight merge into one
-    //   per-source weight map.
+    // UPGRADE-HOOK(P1.5 → resolved): blendWeight + additiveWeight +
+    //   scalar additiveClipPath all collapse into the additiveLayers[]
+    //   vector field below. The legacy scalars are preserved for
+    //   serializer round-trip — when additiveLayers.empty() the bridge
+    //   reads the scalars and pushes slot[0].
     AY_PROPERTY(std::string, additiveClipPath, kAttrSerialize)
     AY_PROPERTY(float,       additivePlayRate, kAttrSerialize)
     AY_PROPERTY(float,       blendWeight,      kAttrSerialize)
@@ -77,6 +137,18 @@ struct AnimationComponent : public IComponent {
     AY_PROPERTY(float,       blendCurveDuration,kAttrSerialize)
     AY_PROPERTY(uint8_t,     blendCurveEasing,  kAttrSerialize)
 
+    // P1.5 — Multi-source stack. additiveLayers[i] binds to slot[i]
+    // on AnimationPlayer (per AdditiveLayerSpec::slotIndex — position
+    // in the vector if slotIndex is UINT32_MAX). When non-empty the
+    // bridge runs the per-slot push loop and ignores the scalar
+    // fields above; when empty the bridge falls back to the legacy
+    // single-slot scalar path (preserving P1.3/P1.4 authored scenes).
+    //
+    // Max 8 entries — hard cap matches AnimationPlayer's kMaxAdditiveSlots.
+    // The bridge silently drops entries beyond index 7 (defensive — never
+    // crash on a malformed component).
+    AY_PROPERTY(std::vector<AdditiveLayerSpec>, additiveLayers, kAttrSerialize)
+
     AnimationComponent() {
         autoplay = true;
         looping  = true;
@@ -91,6 +163,7 @@ struct AnimationComponent : public IComponent {
         blendCurveTo = 1.0f;       //           blendCurveDuration = 0 ⇒ static fallback)
         blendCurveDuration = 0.0f; // P1.4 — 0 = curve OFF (mirrors player default)
         blendCurveEasing = 0;      // P1.4 — 0 = ayt::anim::BlendEasing::Linear
+        // additiveLayers defaults to empty → bridge takes legacy single-slot path.
     }
 
     bool isValid() const { return !clipPath.empty(); }

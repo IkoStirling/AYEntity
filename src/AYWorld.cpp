@@ -91,7 +91,11 @@ Entity* World::createEntityInternal() {
 }
 
 void World::destroyEntity(Entity* e) {
-    if (!e || !e->isValid()) return;
+    // After shutdown(), entity storage is freed. Callers may still hold
+    // raw Entity* (EditorPlayRuntime clear* during ~dtor after tests call
+    // World::shutdown). Must not touch e when the world is down.
+    if (!_initialized || !e) return;
+    if (!e->isValid()) return;
     destroyEntityInternal(e);
 }
 

@@ -14,11 +14,22 @@
 // record as an AnimNotifyEvent into the engine EventBus (see AYEventSystem).
 // Cross-module game code (audio, VFX, UI, gameplay) subscribes to the
 // event type without depending on AYEntity or AYAnimation.
+//
+// Phase 1.5 Multi-Source Stack (2026-07-27): AnimationComponent gains
+// additiveLayers[] — each entry binds to one of AnimationPlayer's 8
+// AdditiveSlot instances. The bridge pushes per-slot state via the new
+// per-slot setters; rebind-detection maps upgrade to nested
+// unordered_map<const Entity*, unordered_map<uint32_t, T>> so each
+// slot gets its own change-detection cache. The legacy single-slot
+// scalar fields (additiveClipPath / blendWeight / syncToBase / ...) on
+// AnimationComponent are STILL honored as a fallback when
+// additiveLayers is empty — so P1.3/P1.4 authored scenes keep working.
 
 #include <IAYEntity.h>
 
 #include <assetsDefs/IAYAnimation.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -46,40 +57,45 @@ private:
     // Last clip path bound per entity; play() only runs when this changes.
     std::unordered_map<const Entity*, std::string> _entityBoundClip;
 
-    // Phase 1.3 (P1.3) — Additive Layer 2 (Cross-Fade) bridge:
-    //   additive clip cache mirrors _clipCache for the layer's source.
-    //   ResourceManager keeps the resource alive as long as a shared_ptr
-    //   holds. Independent from _clipCache because the additive source
-    //   has its own lazy-load + lifetime.
+    // Phase 1.3 / P1.5 (2026-07-27) — Additive clip cache. Shared across
+    // ALL additive slots (base + every layer). Path-keyed so multiple
+    // entities / slots referencing the same .ayanm share the parsed
+    // tracks. ResourceManager keeps the resource alive as long as a
+    // shared_ptr exists.
     //
-    //   _lastAppliedAdditivePath mirrors _entityBoundClip for additive
-    //   rebind detection. Per-entity, last path that was actually pushed
-    //   via setAdditiveSource (could be "" if no layer is active).
-    //
-    //   UPGRADE-HOOK(P1.5): when a stack of additive layers ships, this
-    //   becomes _additiveClipCaches[slotIndex] and _lastAppliedAdditivePaths
-    //   [slotIndex].
+    // UPGRADE-HOOK(P1.5 → resolved): the single P1.3 _additiveClipCache
+    // is unchanged at the storage level (path-keyed dedup is the same
+    // problem for any number of slots). Per-slot state lives in the
+    // nested rebind-detection maps below.
     std::unordered_map<std::string,
                        std::shared_ptr<ayt::resource::IAnimation>> _additiveClipCache;
-    std::unordered_map<const Entity*, std::string> _lastAppliedAdditivePath;
 
-    // P1.4 — Cross-fade full-ship bridge. Four rebind-detection maps
-    // mirror the P1.3 _lastAppliedAdditivePath pattern so a setter is
-    // only invoked when the host-side component field actually changes,
-    // avoiding per-frame churn on the underlying player.
+    // P1.5 — Nested rebind-detection maps. Each rebind map is keyed by
+    // (entity → slot index → last-pushed value). A setter is invoked
+    // only when the slot's component field actually changes since the
+    // last frame (mirroring the P1.3 _lastAppliedAdditivePath pattern).
     //
-    //   _lastAppliedSyncToBase / _lastAppliedRefPoseCapture are bools:
-    //     a flag toggle re-triggers the setter exactly once.
-    //   _lastAppliedBlendCurveDuration / _lastAppliedBlendCurveEasing
-    //     are the two curve knobs whose change actually requires a
-    //     blendWeightOverTime() call. blendCurveFrom / blendCurveTo
-    //     shifts do NOT trigger a call (they land on the next curve
-    //     anchor naturally; the current in-flight curve is allowed
-    //     to finish first).
-    std::unordered_map<const Entity*, bool>    _lastAppliedSyncToBase;
-    std::unordered_map<const Entity*, bool>    _lastAppliedRefPoseCapture;
-    std::unordered_map<const Entity*, float>   _lastAppliedBlendCurveDuration;
-    std::unordered_map<const Entity*, uint8_t> _lastAppliedBlendCurveEasing;
+    // The single-slot P1.3 _lastAppliedAdditivePath is replaced by a
+    // nested map keyed by slot index; the P1.4 rebind maps likewise.
+    // The bridge uses these to skip per-frame setter calls when a
+    // component field is unchanged.
+    //
+    // Inner-map type alias keeps the four nested map declarations
+    // readable (one per P1.4 flag pair + one for the path itself).
+    template <typename T>
+    using PerSlotMap = std::unordered_map<uint32_t, T>;
+
+    // Last additive clip path pushed per (entity, slot).
+    std::unordered_map<const Entity*, PerSlotMap<std::string>>
+        _lastAppliedAdditivePaths;
+
+    // P1.4 cross-fade rebind maps (per-slot generalisation). Each
+    // (entity, slot) pair carries its own last-applied value so two
+    // slots on the same entity can have different syncToBase flags.
+    std::unordered_map<const Entity*, PerSlotMap<bool>>    _lastAppliedSyncToBase;
+    std::unordered_map<const Entity*, PerSlotMap<bool>>    _lastAppliedRefPoseCapture;
+    std::unordered_map<const Entity*, PerSlotMap<float>>   _lastAppliedBlendCurveDuration;
+    std::unordered_map<const Entity*, PerSlotMap<uint8_t>> _lastAppliedBlendCurveEasing;
 };
 
 void registerAnimationSystem();
