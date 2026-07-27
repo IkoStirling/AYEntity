@@ -21,7 +21,6 @@
 // to nested (entity → slot index) keys. When empty, the legacy
 // single-slot scalar fields (additiveClipPath / blendWeight / ...) keep
 // working — P1.3/P1.4 authored scenes don't break. Merged notify dispatch
-// replaces the dual consumePendingNotifies + consumePendingNotifiesAdditive
 // path; AnimNotifyEvent.sourceTag carries the per-record source attribution.
 
 #include "AYAnimationSystem.h"
@@ -200,7 +199,12 @@ void AnimationSystem::onUpdate(float dt)
         // tracks flagged AnimBlendMode::Additive inside the BASE clip;
         // it does NOT touch per-slot additive weights (those go through
         // setAdditiveLayerWeight below).
-        skel->player.setAdditiveWeight(anim->additiveWeight);
+        // P1.6 cleanup: AnimationComponent::additiveWeight field name is
+        // preserved for serializer round-trip compat with P1.2/P1.3/P1.4
+        // authored scenes; the per-frame push now goes through the
+        // canonical P1.3 setBlendWeight setter (the inline-forward
+        // setAdditiveWeight wrapper was removed in P1.6).
+        skel->player.setBlendWeight(anim->additiveWeight);
 
         // Phase 1.5 (P1.5) — Multi-Source Stack bridge. Two paths:
         //
@@ -462,10 +466,8 @@ void AnimationSystem::onUpdate(float dt)
             }
 
             // Phase 1.5 (2026-07-27) — AnimNotify EventBus bridge via
-            // the merged queue. The P1.3 dual-consume path
-            // (consumePendingNotifies + consumePendingNotifiesAdditive)
-            // is replaced by a SINGLE consumePendingNotifiesMerged() call
-            // that carries AnimNotifySourceTag on each record. The
+            // the merged queue. A SINGLE consumePendingNotifiesMerged()
+            // call carries AnimNotifySourceTag on each record. The
             // AnimNotifyEvent struct carries sourceTag through to the
             // EventBus so subscribers can route per-source.
             //

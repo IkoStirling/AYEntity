@@ -82,11 +82,14 @@ struct AnimationComponent : public IComponent {
     AY_PROPERTY(bool,        looping,  kAttrSerialize)
     AY_PROPERTY(float,       playRate, kAttrSerialize)
     // Phase 1.2 (P1.2): Additive Layer 1 weight. Forwarded every frame to
-    // AnimationPlayer::setAdditiveWeight by AnimationSystem::onUpdate. The
+    // AnimationPlayer::setBlendWeight by AnimationSystem::onUpdate. The
     // setter saturates to [0, 1]; default 1.0f means "additive tracks (if
     // any) are fully on". Pre-P1.2 builds leave the field at the ctor
     // default (1.0f) — bit-identical behavior for clips with no Additive
-    // tracks.
+    // tracks. P1.6: field name retained for serializer round-trip compat
+    // with P1.2/P1.3/P1.4 authored scenes; bridge push uses the canonical
+    // setBlendWeight (the deprecated setAdditiveWeight inline-forward
+    // wrapper was removed in P1.6).
     AY_PROPERTY(float,       additiveWeight, kAttrSerialize)
     // Phase 1.3 (P1.3) — Additive Layer 2 (Cross-Fade) bridge fields.
     // additiveClipPath empty (default) ⇒ no additive layer is bound; the
@@ -94,10 +97,9 @@ struct AnimationComponent : public IComponent {
     // additiveWeight becomes blendWeight in the canonical P1.3 API
     // (see AnimationPlayer::setBlendWeight), but we keep the field name
     // for serializer round-trip compat — AnimationSystem forwards it
-    // through the deprecated setAdditiveWeight inline-forward wrapper
-    // OR through the new setBlendWeight setter directly. We use the new
-    // canonical name setBlendWeight here so the per-frame path is
-    // unambiguous about which contract it satisfies.
+    // through setBlendWeight directly (the canonical P1.3 API; the
+    // deprecated setAdditiveWeight inline-forward wrapper was removed
+    // in P1.6).
     //
     // UPGRADE-HOOK(P1.4): additivePlayRate + additiveLooping →
     //   syncToBase option (single bool on the player).

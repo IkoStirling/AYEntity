@@ -486,29 +486,33 @@ TEST_CASE(animation_component_additive_weight_propagates_to_player)
 
     // Sanity: before the push, the player's weight is the default 1.0f
     // since we haven't pushed the component field yet.
-    CHECK(skel->player.getAdditiveWeight() == 1.0f);
+    CHECK(skel->player.getBlendWeight() == 1.0f);
 
     // Manually perform the three push lines that AnimationSystem::onUpdate
-    // runs per entity each frame (setPlayRate / setLoop / setAdditiveWeight).
+    // runs per entity each frame (setPlayRate / setLoop / setBlendWeight).
     // This is the exact code path; the inline clip just lets us avoid
     // ResourceManager disk I/O. Mirrors the inline pattern of
     // animation_system_emits_animnotify_event_on_marker_cross above.
+    // P1.6: AnimationComponent::additiveWeight field name is preserved
+    // for serializer round-trip compat; the bridge push now uses the
+    // canonical P1.3 setBlendWeight (the deprecated setAdditiveWeight
+    // inline-forward wrapper was removed in P1.6).
     skel->player.setPlayRate(anim->playRate);
     skel->player.setLoop(anim->looping);
-    skel->player.setAdditiveWeight(anim->additiveWeight);
+    skel->player.setBlendWeight(anim->additiveWeight);
 
-    CHECK(skel->player.getAdditiveWeight() == 0.5f);
+    CHECK(skel->player.getBlendWeight() == 0.5f);
 
     // Spot-check the saturating setter contract on the engine side too:
     // anim->additiveWeight = -1.0f → setter clamps to 0.
     anim->additiveWeight = -1.0f;
-    skel->player.setAdditiveWeight(anim->additiveWeight);
-    CHECK(skel->player.getAdditiveWeight() == 0.0f);
+    skel->player.setBlendWeight(anim->additiveWeight);
+    CHECK(skel->player.getBlendWeight() == 0.0f);
 
     // And > 1.0 → clamps to 1.0.
     anim->additiveWeight = 2.0f;
-    skel->player.setAdditiveWeight(anim->additiveWeight);
-    CHECK(skel->player.getAdditiveWeight() == 1.0f);
+    skel->player.setBlendWeight(anim->additiveWeight);
+    CHECK(skel->player.getBlendWeight() == 1.0f);
 
     world.destroyEntity(e);
     world.shutdown();
@@ -960,7 +964,8 @@ TEST_CASE(animation_component_p1_4_sync_to_base_bridge_flag)
     skel->player.setTime(0.0f);
     skel->player.tick(0.5f);   // both axes 0 → 0.5
     // Marker at 0.4 is in [0, 0.5] for additive.
-    CHECK(skel->player.getPendingNotifyCountAdditive() == 1u);
+    // P1.6: base has no markers, so merged == slot[0] count.
+    CHECK(skel->player.getPendingNotifyCountMerged() == 1u);
 
     world.destroyEntity(e);
     world.shutdown();
