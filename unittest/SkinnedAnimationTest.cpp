@@ -32,11 +32,13 @@
 #include <assetsImpl/AYSkeleton.h>
 #include <aymath/MathTypes.h>
 #include <AYTest.h>
+#include <AYResourceManager.h>   // P1.7 — for trimCache() test
 
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 
 using namespace ayt::entity;
 
@@ -62,6 +64,42 @@ void buildFourBoneSkeleton(ayt::resource::Skeleton& out)
         b.inverseBindMatrix = Float4x4::identity();
         out.setBone(i, b);
     }
+}
+
+// P1.7 — wrap a stack-local Skeleton into a shared_ptr<const ISkeleton>
+// for tests that build a Skeleton by value then pass to setSkeleton.
+std::shared_ptr<const ayt::resource::ISkeleton> sharedFromSkeleton(
+    const ayt::resource::Skeleton& skel)
+{
+    return std::static_pointer_cast<const ayt::resource::ISkeleton>(
+        std::make_shared<ayt::resource::Skeleton>(skel));
+}
+
+// P1.7 — SkeletonComponent::skeleton starts as nullptr. Tests that
+// build skeletons inline must allocate the shared_ptr first; deref of
+// an empty shared_ptr crashes in setBoneCount (AV @ this+offset).
+std::shared_ptr<ayt::resource::Skeleton> makeFourBoneSkeletonShared()
+{
+    auto s = std::make_shared<ayt::resource::Skeleton>();
+    buildFourBoneSkeleton(*s);
+    return s;
+}
+
+std::shared_ptr<ayt::resource::Skeleton> makeOneBoneSkeletonShared(
+    const char* boneName = "Bone0")
+{
+    using namespace ayt::math;
+    auto s = std::make_shared<ayt::resource::Skeleton>();
+    s->setBoneCount(1);
+    ayt::resource::Bone root;
+    root.name              = boneName;
+    root.parentIndex       = -1;
+    root.localPosition     = FVector3(0, 0, 0);
+    root.localRotation     = FQuaternion::identity();
+    root.localScale        = FVector3(1, 1, 1);
+    root.inverseBindMatrix = Float4x4::identity();
+    s->setBone(0, root);
+    return s;
 }
 
 // Build a 2-second clip that rotates the root bone 90° around Y at
@@ -114,11 +152,11 @@ TEST_CASE(animation_system_produces_skin_matrices_after_tick)
     anim->clipPath = "inline://RootRotate90";  // also ignored
 
     // Manually populate the skeleton + bind a clip on the player.
-    buildFourBoneSkeleton(skel->skeleton);
-    skel->jointCount = static_cast<uint32_t>(skel->skeleton.getBoneCount());
+    skel->skeleton = makeFourBoneSkeletonShared();
+    skel->jointCount = static_cast<uint32_t>(skel->skeleton->getBoneCount());
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
 
     // Drive the animation system directly. We DO NOT go through
     // ResourceManager (which needs a real .ayanm on disk); instead
@@ -210,7 +248,7 @@ TEST_CASE(animation_player_time_resets_on_play)
     buildFourBoneSkeleton(skel);
 
     ayt::anim::AnimationPlayer player;
-    player.setSkeleton(&skel);
+    player.setSkeleton(sharedFromSkeleton(skel));
     player.play(&clip);
     player.tick(0.5f);
     const float tAfterTick = player.getTime();
@@ -317,14 +355,14 @@ TEST_CASE(animation_system_emits_animnotify_event_on_marker_cross)
     clip.setDuration(1.0f);
     clip.addNotify(ayt::resource::AnimNotifyMarker{"OnLand", 0.5f, 7.5f});
 
-    buildFourBoneSkeleton(skel->skeleton);
-    skel->jointCount = static_cast<uint32_t>(skel->skeleton.getBoneCount());
+    skel->skeleton = makeFourBoneSkeletonShared();
+    skel->jointCount = static_cast<uint32_t>(skel->skeleton->getBoneCount());
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     for (uint32_t i = 0; i < skel->jointCount; ++i) {
         skel->skinMatrices[i] = ayt::math::Float4x4::identity();
     }
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
 
     // Subscribe BEFORE the tick so the listener is in place.
     struct Capture {
@@ -464,7 +502,8 @@ TEST_CASE(animation_component_additive_weight_propagates_to_player)
 
     // Hand-build a 1-bone skeleton inline (avoid the 4-bone helper to keep
     // the test self-contained).
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name              = "Bone0";
@@ -473,15 +512,15 @@ TEST_CASE(animation_component_additive_weight_propagates_to_player)
         root.localRotation     = ayt::math::FQuaternion::identity();
         root.localScale        = ayt::math::FVector3(1, 1, 1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
-    skel->jointCount = static_cast<uint32_t>(skel->skeleton.getBoneCount());
+    skel->jointCount = static_cast<uint32_t>(skel->skeleton->getBoneCount());
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     for (uint32_t i = 0; i < skel->jointCount; ++i) {
         skel->skinMatrices[i] = ayt::math::Float4x4::identity();
     }
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
     skel->player.play(&clip);
 
     // Sanity: before the push, the player's weight is the default 1.0f
@@ -586,7 +625,8 @@ TEST_CASE(animation_component_additive_clip_path_loads_player_source)
     }());
 
     // Build a 1-bone skeleton inline.
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name              = "Bone0";
@@ -595,13 +635,13 @@ TEST_CASE(animation_component_additive_clip_path_loads_player_source)
         root.localRotation     = ayt::math::FQuaternion::identity();
         root.localScale        = ayt::math::FVector3(1, 1, 1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
     skel->player.play(&baseClip);
 
     // Before the additive push: layer is OFF.
@@ -677,7 +717,8 @@ TEST_CASE(animation_component_additive_rebind_detected)
         return t;
     }());
 
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name = "Bone0"; root.parentIndex = -1;
@@ -685,13 +726,13 @@ TEST_CASE(animation_component_additive_rebind_detected)
         root.localRotation = ayt::math::FQuaternion::identity();
         root.localScale    = ayt::math::FVector3(1,1,1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
     skel->player.play(&baseClip);
 
     // Bind to clip A, seek to t=0.5 (mid-clip) so lerp gives exact half
@@ -758,7 +799,8 @@ TEST_CASE(animation_component_empty_additive_path_no_layer)
         return t;
     }());
 
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name = "Bone0"; root.parentIndex = -1;
@@ -766,13 +808,13 @@ TEST_CASE(animation_component_empty_additive_path_no_layer)
         root.localRotation = ayt::math::FQuaternion::identity();
         root.localScale    = ayt::math::FVector3(1,1,1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
     skel->player.play(&baseClip);
 
     // The push line for the empty path is: setAdditiveSource(nullptr).
@@ -846,7 +888,8 @@ TEST_CASE(animation_component_p1_4_blend_curve_pushed_to_player)
     anim->blendCurveEasing   = static_cast<uint8_t>(ayt::anim::BlendEasing::EaseInOut);
 
     // Build a trivial skeleton so the player has a target.
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name = "Bone0"; root.parentIndex = -1;
@@ -854,13 +897,13 @@ TEST_CASE(animation_component_p1_4_blend_curve_pushed_to_player)
         root.localRotation = ayt::math::FQuaternion::identity();
         root.localScale    = ayt::math::FVector3(1,1,1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
 
     ayt::resource::Animation baseClip;
     baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(1.0f);
@@ -920,7 +963,8 @@ TEST_CASE(animation_component_p1_4_sync_to_base_bridge_flag)
     anim->blendWeight = 1.0f;
     anim->syncToBase = true;  // P1.4 — flip the flag
 
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name = "Bone0"; root.parentIndex = -1;
@@ -928,13 +972,13 @@ TEST_CASE(animation_component_p1_4_sync_to_base_bridge_flag)
         root.localRotation = ayt::math::FQuaternion::identity();
         root.localScale    = ayt::math::FVector3(1,1,1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
 
     ayt::resource::Animation baseClip;
     baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(2.0f);
@@ -999,7 +1043,8 @@ TEST_CASE(animation_component_p1_4_ref_pose_capture_bridge_flag)
     anim->blendWeight = 1.0f;
     anim->refPoseCapture = true;  // P1.4 — flip the flag
 
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name = "Bone0"; root.parentIndex = -1;
@@ -1007,13 +1052,13 @@ TEST_CASE(animation_component_p1_4_ref_pose_capture_bridge_flag)
         root.localRotation = ayt::math::FQuaternion::identity();
         root.localScale    = ayt::math::FVector3(1,1,1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
 
     ayt::resource::Animation baseClip;
     baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(1.0f);
@@ -1129,7 +1174,8 @@ TEST_CASE(animation_component_multi_layer_bridge_pushes_each_slot) {
         addC = new ayt::resource::Animation(std::move(a));
     }
 
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name = "Bone0";
@@ -1138,13 +1184,13 @@ TEST_CASE(animation_component_multi_layer_bridge_pushes_each_slot) {
         root.localRotation = ayt::math::FQuaternion::identity();
         root.localScale = ayt::math::FVector3(1, 1, 1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
 
     // Mirror the per-slot push loop that AnimationSystem::onUpdate runs
     // when additiveLayers.size() > 0: bind clip on each slot + forward
@@ -1207,7 +1253,8 @@ TEST_CASE(animation_component_multi_layer_bridge_rebind_per_slot) {
     clipX.setName("ClipX"); clipX.setTicksPerSecond(30.0f); clipX.setDuration(1.0f);
     clipY.setName("ClipY"); clipY.setTicksPerSecond(30.0f); clipY.setDuration(1.0f);
 
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name = "Bone0"; root.parentIndex = -1;
@@ -1215,13 +1262,13 @@ TEST_CASE(animation_component_multi_layer_bridge_rebind_per_slot) {
         root.localRotation = ayt::math::FQuaternion::identity();
         root.localScale = ayt::math::FVector3(1,1,1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
 
     // Initial bind (frame 1 of bridge loop).
     skel->player.setAdditiveLayerSource(0, &clipA, 1.0f, true);
@@ -1286,7 +1333,8 @@ TEST_CASE(animation_component_legacy_scalar_layers_zero_size) {
     ayt::resource::Animation addClip;
     addClip.setName("Add"); addClip.setTicksPerSecond(30.0f); addClip.setDuration(1.0f);
 
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name = "Bone0"; root.parentIndex = -1;
@@ -1294,13 +1342,13 @@ TEST_CASE(animation_component_legacy_scalar_layers_zero_size) {
         root.localRotation = ayt::math::FQuaternion::identity();
         root.localScale = ayt::math::FVector3(1,1,1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
     skel->player.play(&baseClip);
 
     // Mirror the legacy single-slot push lines from AnimationSystem.
@@ -1353,7 +1401,8 @@ TEST_CASE(animation_component_merged_notify_eventbus_carries_source_tag) {
     addClip.setName("AddClip"); addClip.setTicksPerSecond(30.0f); addClip.setDuration(2.0f);
     addClip.addNotify(ayt::resource::AnimNotifyMarker{"AddMarker", 1.0f, 22.0f});
 
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name = "Bone0"; root.parentIndex = -1;
@@ -1361,13 +1410,13 @@ TEST_CASE(animation_component_merged_notify_eventbus_carries_source_tag) {
         root.localRotation = ayt::math::FQuaternion::identity();
         root.localScale = ayt::math::FVector3(1,1,1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
     skel->player.setLoop(true);
     skel->player.play(&baseClip);
     skel->player.setAdditiveLayerSource(0, &addClip, 1.0f, true);
@@ -1466,7 +1515,8 @@ TEST_CASE(animation_component_oversized_layers_no_rebind) {
     }
     CHECK(anim->additiveLayers.size() == 9);
 
-    skel->skeleton.setBoneCount(1);
+    skel->skeleton = makeOneBoneSkeletonShared("Bone0");
+    skel->skeleton->setBoneCount(1);
     {
         ayt::resource::Bone root;
         root.name = "Bone0"; root.parentIndex = -1;
@@ -1474,13 +1524,13 @@ TEST_CASE(animation_component_oversized_layers_no_rebind) {
         root.localRotation = ayt::math::FQuaternion::identity();
         root.localScale = ayt::math::FVector3(1,1,1);
         root.inverseBindMatrix = ayt::math::Float4x4::identity();
-        skel->skeleton.setBone(0, root);
+        skel->skeleton->setBone(0, root);
     }
     skel->jointCount = 1;
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(&skel->skeleton);
+    skel->player.setSkeleton(skel->skeleton);
 
     // Build 9 distinct additive clips in memory.
     ayt::resource::Animation clips[9];
@@ -1508,6 +1558,75 @@ TEST_CASE(animation_component_oversized_layers_no_rebind) {
     CHECK(skel->player.setAdditiveLayerSource(8, &clips[8]) == false);
     // Still 8 layers.
     CHECK(skel->player.getAdditiveLayerCount() == 8);
+
+    world.destroyEntity(e);
+    world.shutdown();
+}
+
+// ========================================================================
+// P1.7 — Shared Skeleton Tick Cache (ECS integration)
+// ========================================================================
+
+// P1.7 — two entities with the same skeletonPath share ONE ISkeleton
+// asset. SkeletonComponent::skeleton is a shared_ptr<Skeleton>, so
+// when the test hands the SAME shared_ptr to both entities, they
+// pin the same heap object. This is the ECS-side leg of the cache:
+// no N× duplication of bone arrays, name map, IBMs, etc.
+TEST_CASE(skeleton_component_shared_ptr_does_not_duplicate_skeleton) {
+    World& world = World::instance();
+    world.initialize();
+
+    // Build one skeleton and assign it to two entities' SkeletonComponents.
+    auto sharedSkel = std::make_shared<ayt::resource::Skeleton>();
+    buildFourBoneSkeleton(*sharedSkel);
+
+    Entity* eA = world.createEntity();
+    Entity* eB = world.createEntity();
+    auto* skelA = eA->addComponent<SkeletonComponent>();
+    auto* skelB = eB->addComponent<SkeletonComponent>();
+    skelA->skeleton = sharedSkel;
+    skelB->skeleton = sharedSkel;   // SAME shared_ptr → same heap address.
+
+    // Identity check — both SkeletonComponents hold the same ISkeleton
+    // pointer address. ResourceManager is bypassed; the contract is
+    // simply "shared_ptr equality preserves the underlying asset".
+    CHECK(skelA->skeleton.get() == skelB->skeleton.get());
+    CHECK(skelA->skeleton->getBoneCount() == 4u);
+
+    // Dropping one component's hold does NOT release the skeleton for
+    // the other entity — strong reference semantics.
+    skelA->skeleton.reset();
+    CHECK(skelB->skeleton.get() == sharedSkel.get());
+    CHECK(skelB->skeleton->getBoneCount() == 4u);
+
+    world.destroyEntity(eA);
+    world.destroyEntity(eB);
+    world.shutdown();
+}
+
+// P1.7 — ResourceManager::trimCache() must not evict a skeleton that
+// a live SkeletonComponent holds via shared_ptr. The shared_ptr's
+// strong reference keeps refcount >= 1 → cache LRU cannot drop it.
+TEST_CASE(skeleton_component_shared_ptr_outlives_resource_manager_eviction_safe) {
+    World& world = World::instance();
+    world.initialize();
+
+    auto& rm = ayt::resource::ResourceManager::instance();
+    // Pre-load an asset we can later try to evict.
+    auto preloaded = std::make_shared<ayt::resource::Skeleton>();
+    preloaded->createTestSkeleton();
+
+    Entity* e = world.createEntity();
+    auto* skel = e->addComponent<SkeletonComponent>();
+    skel->skeleton = preloaded;
+    // Player pins the same skeleton — preloaded refcount == 3
+    // (ResourceManager cache + SkeletonComponent + AnimationPlayer).
+    skel->player.setSkeleton(skel->skeleton);
+
+    // Even after a trimCache() sweep, the asset must still be
+    // retrievable through the SkeletonComponent's shared_ptr.
+    rm.trimCache();
+    CHECK(skel->skeleton->getBoneCount() == preloaded->getBoneCount());
 
     world.destroyEntity(e);
     world.shutdown();

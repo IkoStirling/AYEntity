@@ -22,6 +22,16 @@
 // single-slot scalar fields (additiveClipPath / blendWeight / ...) keep
 // working — P1.3/P1.4 authored scenes don't break. Merged notify dispatch
 // path; AnimNotifyEvent.sourceTag carries the per-record source attribution.
+//
+// P1.7 (2026-07-27) — Shared Skeleton Tick Cache. SkeletonComponent
+// now holds std::shared_ptr<const ISkeleton> instead of by-value
+// Skeleton. The lazy-load block keeps a strong reference into
+// ResourceManager and binds the player with the same shared_ptr.
+// N entities with the same skeletonPath share one ISkeleton asset —
+// the by-value Skeleton copy loop (setBoneCount + setBone × N bones)
+// is gone. AssetBoneCache (see AYAnimation/AssetBoneCache.h) gives
+// every AnimationPlayer that binds the same ISkeleton* shared
+// bone-name → bone-index resolution.
 
 #include "AYAnimationSystem.h"
 
@@ -31,6 +41,7 @@
 #include <AYEntity.h>
 #include <AYWorld.h>
 #include <IAYSkeleton.h>
+#include <assetsImpl/AYSkeleton.h>   // P1.7 — for static_pointer_cast<Skeleton>
 #include <AYResourceManager.h>
 
 // Phase 1.5 — AnimNotify bridge: drain the player's per-frame fired
@@ -130,9 +141,12 @@ void AnimationSystem::onUpdate(float dt)
         AnimationComponent* anim = e->getComponent<AnimationComponent>();
         if (skel == nullptr || anim == nullptr) continue;
 
-        // First-time lazy-load. Skeletons are loaded once per entity;
-        // animations are cached by clipPath so multiple entities
-        // sharing a clip share the parsed track data.
+        // First-time lazy-load. Skeletons are loaded ONCE per
+        // unique skeletonPath (ResourceManager caches by path); the
+        // shared_ptr retained in SkeletonComponent pins the asset so
+        // LRU trim cannot evict it while the entity is alive. N
+        // entities sharing a skeletonPath all hold shared_ptrs to
+        // the SAME ISkeleton instance — zero per-entity duplication.
         if (!skel->loaded) {
             auto skelRes = ayt::resource::ResourceManager::instance()
                               .load<ayt::resource::ISkeleton>(skel->skeletonPath);
@@ -142,18 +156,19 @@ void AnimationSystem::onUpdate(float dt)
                              skel->skeletonPath.c_str());
                 continue;
             }
-            // Copy from the ISkeleton resource into the component's
-            // concrete Skeleton. setBoneCount resizes the parallel
-            // arrays; setBone fills each entry (and re-registers the
-            // name map + root indices).
-            const size_t n = skelRes->getBoneCount();
-            skel->skeleton.setBoneCount(n);
-            for (size_t i = 0; i < n; ++i) {
-                skel->skeleton.setBone(i, skelRes->getBones()[i]);
-            }
-            // Allocate skin matrices matching joint count.
+            // P1.7 — pin the asset via shared_ptr<Skeleton>. The
+            // ResourceManager::load<ISkeleton> returns
+            // shared_ptr<ISkeleton>; static_pointer_cast down to
+            // shared_ptr<Skeleton> (Skeleton derives from ISkeleton
+            // publicly so the cast is well-defined) so the component
+            // can still expose the concrete type for tests that build
+            // programmatically. AnimationPlayer::setSkeleton accepts
+            // shared_ptr<const ISkeleton> — shared_ptr<Skeleton>
+            // implicitly converts.
+            skel->skeleton = std::static_pointer_cast<ayt::resource::Skeleton>(
+                skelRes);
             skel->jointCount = static_cast<uint32_t>(
-                skel->skeleton.getBoneCount());
+                skel->skeleton->getBoneCount());
             if (skel->jointCount == 0) {
                 skel->loaded = true;  // mark loaded but unusable
                 continue;
@@ -164,7 +179,7 @@ void AnimationSystem::onUpdate(float dt)
                 skel->skinMatrices[i] = ayt::math::Float4x4::identity();
             }
 
-            skel->player.setSkeleton(&skel->skeleton);
+            skel->player.setSkeleton(skel->skeleton);
             skel->loaded = true;
         }
 
@@ -530,8 +545,8 @@ void AnimationSystem::onUpdate(float dt)
 
             static uint32_t s_poseLog = 0;
             if (s_poseLog < 8) {
-                const int spineIdx = skel->skeleton.findBone("spine");
-                const int rootIdx  = skel->skeleton.findBone("root");
+                const int spineIdx = skel->skeleton->findBone("spine");
+                const int rootIdx  = skel->skeleton->findBone("root");
                 std::fprintf(stderr,
                              "[AnimationSystem] pose log=%u t=%.3f dt=%.4f "
                              "spineIdx=%d rootIdx=%d",
