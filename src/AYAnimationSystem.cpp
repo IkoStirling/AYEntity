@@ -148,6 +148,16 @@ void AnimationSystem::onUpdate(float dt)
         // entities sharing a skeletonPath all hold shared_ptrs to
         // the SAME ISkeleton instance — zero per-entity duplication.
         if (!skel->loaded) {
+            if (skel->layoutMagic != SkeletonComponent::kLayoutMagic) {
+                std::fprintf(stderr,
+                             "[AnimationSystem] SkeletonComponent layout mismatch "
+                             "(magic=0x%08X expected=0x%08X). Full rebuild AYEntity "
+                             "+ demo — stale .obj still has embedded AnimationPlayer.\n",
+                             skel->layoutMagic,
+                             SkeletonComponent::kLayoutMagic);
+                std::fflush(stderr);
+                continue;
+            }
             auto skelRes = ayt::resource::ResourceManager::instance()
                               .load<ayt::resource::ISkeleton>(skel->skeletonPath);
             if (!skelRes || skelRes->getBoneCount() == 0) {
@@ -173,17 +183,56 @@ void AnimationSystem::onUpdate(float dt)
                 skel->loaded = true;  // mark loaded but unusable
                 continue;
             }
+
             delete[] skel->skinMatrices;
             skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
-            for (uint32_t i = 0; i < skel->jointCount; ++i) {
-                skel->skinMatrices[i] = ayt::math::Float4x4::identity();
+            {
+                const ayt::math::Float4x4 id = ayt::math::Float4x4::identity();
+                for (uint32_t i = 0; i < skel->jointCount; ++i) {
+                    std::memcpy(&skel->skinMatrices[i], &id, sizeof(id));
+                }
             }
 
-            skel->player.setSkeleton(skel->skeleton);
+            // Bind-pose / mesh-only (empty clipPath): identity skin
+            // matrices are enough — do NOT call setSkeleton (avoids
+            // allocating 543-bone TRS buffers when no clip will play).
+            // AnimationPlayer is bound lazily when a clipPath appears.
+            if (!anim->clipPath.empty()) {
+                skel->player = ayt::anim::AnimationPlayer::create();
+                if (!skel->player) {
+                    std::fprintf(stderr,
+                                 "[AnimationSystem] AnimationPlayer::create failed\n");
+                    continue;
+                }
+                std::fprintf(stderr,
+                             "[AnimationSystem] setSkeleton this=%p player=%p bones=%u\n",
+                             (void*)skel, (void*)skel->player.get(), skel->jointCount);
+                std::fflush(stderr);
+                skel->player->setSkeleton(skel->skeleton);
+            } else {
+                std::fprintf(stderr,
+                             "[AnimationSystem] bind-pose skip setSkeleton joints=%u\n",
+                             skel->jointCount);
+                std::fflush(stderr);
+            }
+
             skel->loaded = true;
         }
 
         if (!skel->loaded || skel->jointCount == 0) continue;
+
+        // Bind-pose / mesh-only preview: empty clipPath keeps identity
+        // skin matrices. Do not ResourceManager::load("") every frame.
+        if (anim->clipPath.empty()) {
+            continue;
+        }
+
+        // Clip path was empty at load but set later (inspector) — bind now.
+        if (!skel->player) {
+            skel->player = ayt::anim::AnimationPlayer::create();
+            if (!skel->player) continue;
+            skel->player->setSkeleton(skel->skeleton);
+        }
 
         // Lazy-load the base clip if not cached.
         if (_clipCache.find(anim->clipPath) == _clipCache.end()) {
@@ -204,8 +253,8 @@ void AnimationSystem::onUpdate(float dt)
             std::fflush(stderr);
         }
 
-        skel->player.setPlayRate(anim->playRate);
-        skel->player.setLoop(anim->looping);
+        skel->player->setPlayRate(anim->playRate);
+        skel->player->setLoop(anim->looping);
         // Phase 1.2 (P1.2) — Additive Layer 1 weight passthrough. The
         // AnimationPlayer's setter saturates to [0, 1] so a typo on the
         // engine side cannot NaN a quaternion. Default 1.0f on both sides
@@ -219,7 +268,7 @@ void AnimationSystem::onUpdate(float dt)
         // authored scenes; the per-frame push now goes through the
         // canonical P1.3 setBlendWeight setter (the inline-forward
         // setAdditiveWeight wrapper was removed in P1.6).
-        skel->player.setBlendWeight(anim->additiveWeight);
+        skel->player->setBlendWeight(anim->additiveWeight);
 
         // Phase 1.5 (P1.5) — Multi-Source Stack bridge. Two paths:
         //
@@ -271,7 +320,7 @@ void AnimationSystem::onUpdate(float dt)
                         if (clip != nullptr) {
                             _lastAppliedAdditivePaths[e][slotIdx] =
                                 spec.additiveClipPath;
-                            skel->player.setAdditiveLayerSource(
+                            skel->player->setAdditiveLayerSource(
                                 slotIdx, clip,
                                 spec.additivePlayRate,
                                 spec.looping);
@@ -285,13 +334,13 @@ void AnimationSystem::onUpdate(float dt)
                                     lastPath);
                     if (lastPath != nullptr && !lastPath->empty()) {
                         eraseLastApplied(_lastAppliedAdditivePaths, e, slotIdx);
-                        skel->player.clearAdditiveLayerSource(slotIdx);
+                        skel->player->clearAdditiveLayerSource(slotIdx);
                     }
                 }
 
                 // 2. Per-slot weight (always forwarded; saturating
                 // setter on the player side).
-                skel->player.setAdditiveLayerWeight(slotIdx,
+                skel->player->setAdditiveLayerWeight(slotIdx,
                                                     spec.blendWeight);
 
                 // 3. syncToBase rebind detection.
@@ -302,7 +351,7 @@ void AnimationSystem::onUpdate(float dt)
                 if (!hasLastSync || *lastSync != wantSync) {
                     writeLastApplied(_lastAppliedSyncToBase, e, slotIdx,
                                      wantSync);
-                    skel->player.setAdditiveLayerSyncToBase(slotIdx,
+                    skel->player->setAdditiveLayerSyncToBase(slotIdx,
                                                              wantSync);
                 }
 
@@ -314,7 +363,7 @@ void AnimationSystem::onUpdate(float dt)
                 if (!hasLastRef || *lastRef != wantRef) {
                     writeLastApplied(_lastAppliedRefPoseCapture, e, slotIdx,
                                      wantRef);
-                    skel->player.setAdditiveLayerRefPoseCapture(slotIdx,
+                    skel->player->setAdditiveLayerRefPoseCapture(slotIdx,
                                                                 wantRef);
                 }
 
@@ -342,7 +391,7 @@ void AnimationSystem::onUpdate(float dt)
                         (wantEase < 5)
                             ? static_cast<ayt::anim::BlendEasing>(wantEase)
                             : ayt::anim::BlendEasing::Linear;
-                    skel->player.blendLayerWeightOverTime(
+                    skel->player->blendLayerWeightOverTime(
                         slotIdx,
                         spec.blendCurveFrom,
                         spec.blendCurveTo,
@@ -352,7 +401,7 @@ void AnimationSystem::onUpdate(float dt)
                            && hasLastDur && lastDur != 0.0f) {
                     writeLastApplied(_lastAppliedBlendCurveDuration, e,
                                      slotIdx, 0.0f);
-                    skel->player.cancelLayerBlendCurve(slotIdx);
+                    skel->player->cancelLayerBlendCurve(slotIdx);
                 }
             }
         } else if (!anim->additiveClipPath.empty()) {
@@ -369,11 +418,11 @@ void AnimationSystem::onUpdate(float dt)
                               : std::string();
                 if (lastAdd != anim->additiveClipPath) {
                     _lastAppliedAdditivePaths[e][0u] = anim->additiveClipPath;
-                    skel->player.setAdditiveSource(
+                    skel->player->setAdditiveSource(
                         clip, anim->additivePlayRate, /*loop=*/true);
                 }
                 // Always forward the layer weight.
-                skel->player.setBlendWeight(anim->blendWeight);
+                skel->player->setBlendWeight(anim->blendWeight);
 
                 // P1.4 syncToBase / refPoseCapture / curve knobs.
                 const bool wantSync = anim->syncToBase;
@@ -383,7 +432,7 @@ void AnimationSystem::onUpdate(float dt)
                 if (!hasLastSync || *lastSyncPtr != wantSync) {
                     writeLastApplied(_lastAppliedSyncToBase, e, 0u,
                                      wantSync);
-                    skel->player.setAdditiveSyncToBase(wantSync);
+                    skel->player->setAdditiveSyncToBase(wantSync);
                 }
 
                 const bool wantRef = anim->refPoseCapture;
@@ -393,7 +442,7 @@ void AnimationSystem::onUpdate(float dt)
                 if (!hasLastRef || *lastRefPtr != wantRef) {
                     writeLastApplied(_lastAppliedRefPoseCapture, e, 0u,
                                      wantRef);
-                    skel->player.setAdditiveRefPoseCapture(wantRef);
+                    skel->player->setAdditiveRefPoseCapture(wantRef);
                 }
 
                 const float wantDur = anim->blendCurveDuration;
@@ -417,7 +466,7 @@ void AnimationSystem::onUpdate(float dt)
                         (wantEase < 5)
                             ? static_cast<ayt::anim::BlendEasing>(wantEase)
                             : ayt::anim::BlendEasing::Linear;
-                    skel->player.blendWeightOverTime(
+                    skel->player->blendWeightOverTime(
                         anim->blendCurveFrom,
                         anim->blendCurveTo,
                         wantDur,
@@ -426,7 +475,7 @@ void AnimationSystem::onUpdate(float dt)
                            && hasLastDur && lastDur != 0.0f) {
                     writeLastApplied(_lastAppliedBlendCurveDuration, e,
                                      0u, 0.0f);
-                    skel->player.cancelBlendCurve();
+                    skel->player->cancelBlendCurve();
                 }
             }
         } else {
@@ -443,7 +492,7 @@ void AnimationSystem::onUpdate(float dt)
                 for (const auto& kv : pathIt->second) {
                     const uint32_t slotIdx = kv.first;
                     if (slotIdx < 8) {
-                        skel->player.clearAdditiveLayerSource(slotIdx);
+                        skel->player->clearAdditiveLayerSource(slotIdx);
                     }
                 }
                 _lastAppliedAdditivePaths.erase(pathIt);
@@ -465,18 +514,28 @@ void AnimationSystem::onUpdate(float dt)
         const std::string& boundClip = _entityBoundClip[e];
         if (boundClip != anim->clipPath) {
             _entityBoundClip[e] = anim->clipPath;
-            skel->player.play(_clipCache[anim->clipPath].get());
+            skel->player->play(_clipCache[anim->clipPath].get());
         }
 
         if (anim->autoplay) {
-            skel->player.tick(dt);
+            skel->player->tick(dt);
         }
 
-        if (skel->player.isValid()) {
-            skel->player.evaluate();
-            const ayt::math::Float4x4* src = skel->player.getBoneSkinMatrices();
-            if (src != nullptr) {
-                std::memcpy(skel->skinMatrices, src,
+        if (skel->player->isValid()) {
+            skel->player->evaluate();
+            // P2.1 — pick-non-null base source. The BlendSpaceSystem
+            // (priority 430, runs before us) writes
+            // `skinMatricesBlendSpace` when the entity carries a
+            // BlendSpaceComponent. We treat that as the authoritative
+            // base; the additive layers below still layer on top via
+            // the unchanged phase 1b path. Entities WITHOUT a
+            // BlendSpaceSystem write fall through to the legacy
+            // AnimationPlayer::getBoneSkinMatrices() output.
+            const ayt::math::Float4x4* srcBS = skel->skinMatricesBlendSpace;
+            const ayt::math::Float4x4* srcAP = skel->player->getBoneSkinMatrices();
+            const ayt::math::Float4x4* srcUse = (srcBS != nullptr) ? srcBS : srcAP;
+            if (srcUse != nullptr) {
+                std::memcpy(skel->skinMatrices, srcUse,
                             skel->jointCount * sizeof(ayt::math::Float4x4));
             }
 
@@ -507,7 +566,7 @@ void AnimationSystem::onUpdate(float dt)
             const char* baseClipNameStable =
                 baseClipRes ? baseClipRes->getName() : "unknown";
 
-            const auto& records = skel->player.consumePendingNotifiesMerged();
+            const auto& records = skel->player->consumePendingNotifiesMerged();
             for (const auto& rec : records) {
                 const char* clipNameStable = baseClipNameStable;
                 if (rec.sourceTag != ayt::anim::AnimNotifySourceTag::Base) {
@@ -551,7 +610,7 @@ void AnimationSystem::onUpdate(float dt)
                              "[AnimationSystem] pose log=%u t=%.3f dt=%.4f "
                              "spineIdx=%d rootIdx=%d",
                              s_poseLog,
-                             skel->player.getTime(),
+                             skel->player->getTime(),
                              dt,
                              spineIdx,
                              rootIdx);

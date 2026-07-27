@@ -61,11 +61,9 @@ struct AdditiveLayerSpec {
     }
 };
 #undef AY_CURRENT_CLASS
-// Register AdditiveLayerSpec with AYReflect so it can be embedded in a
-// std::vector<> field (the IComponent registration for the field
-// requires the element type's TypeInfo to exist; see PropertyMacros.h
-// tryRegisterVector).
-AY_FINALIZE_REGISTRATION_METADATA(AdditiveLayerSpec)
+// AdditiveLayerSpec TypeInfo is finalized in AYEntityReflection.cpp
+// (must not live in this header — duplicate static finalizers across
+// TUs corrupt the CRT debug heap; see AYEntityReflection.cpp banner).
 
 #define AY_CURRENT_CLASS AnimationComponent
 struct AnimationComponent : public IComponent {

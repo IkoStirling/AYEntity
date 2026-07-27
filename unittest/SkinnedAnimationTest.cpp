@@ -156,16 +156,16 @@ TEST_CASE(animation_system_produces_skin_matrices_after_tick)
     skel->jointCount = static_cast<uint32_t>(skel->skeleton->getBoneCount());
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
+    skel->player->setSkeleton(skel->skeleton);
 
     // Drive the animation system directly. We DO NOT go through
     // ResourceManager (which needs a real .ayanm on disk); instead
     // we hand-inject a clip via the player.
     ayt::resource::Animation clip;
     buildRotationClip(clip);
-    skel->player.setLoop(true);
-    skel->player.setPlayRate(1.0f);
-    skel->player.play(&clip);
+    skel->player->setLoop(true);
+    skel->player->setPlayRate(1.0f);
+    skel->player->play(&clip);
 
     // Bind the AnimationSystem to this World. We can't go through
     // World::registerSystem<AnimationSystem> because that triggers
@@ -193,9 +193,9 @@ TEST_CASE(animation_system_produces_skin_matrices_after_tick)
     // player's t=1.5s of a 0..2s clip; rotation is between identity
     // (t=0) and 90°-Y (t=2) at 75%. The skin matrix for Root should
     // reflect a non-identity rotation around Y.
-    skel->player.setTime(1.5f);
-    skel->player.evaluate();
-    std::memcpy(skel->skinMatrices, skel->player.getBoneSkinMatrices(),
+    skel->player->setTime(1.5f);
+    skel->player->evaluate();
+    std::memcpy(skel->skinMatrices, skel->player->getBoneSkinMatrices(),
                 skel->jointCount * sizeof(ayt::math::Float4x4));
     // Rot(90°*0.75) = 67.5° around Y. Matrix[0][0] = cos(67.5°) ≈ 0.3827.
     // A rough check that we got a real rotation (not just the rest pose).
@@ -362,7 +362,7 @@ TEST_CASE(animation_system_emits_animnotify_event_on_marker_cross)
         skel->skinMatrices[i] = ayt::math::Float4x4::identity();
     }
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
+    skel->player->setSkeleton(skel->skeleton);
 
     // Subscribe BEFORE the tick so the listener is in place.
     struct Capture {
@@ -385,15 +385,15 @@ TEST_CASE(animation_system_emits_animnotify_event_on_marker_cross)
 
     // Drive the player directly with the in-memory clip; then drive
     // AnimationSystem::onUpdate so it consumes and emits.
-    skel->player.setLoop(true);
-    skel->player.setPlayRate(1.0f);
-    skel->player.play(&clip);
-    skel->player.tick(0.25f);
-    skel->player.evaluate();
+    skel->player->setLoop(true);
+    skel->player->setPlayRate(1.0f);
+    skel->player->play(&clip);
+    skel->player->tick(0.25f);
+    skel->player->evaluate();
     // Manually copy skin matrices to mirror what AnimationSystem does
     // for the renderer (required for the segment that follows).
     {
-        const ayt::math::Float4x4* src = skel->player.getBoneSkinMatrices();
+        const ayt::math::Float4x4* src = skel->player->getBoneSkinMatrices();
         if (src != nullptr) {
             std::memcpy(skel->skinMatrices, src,
                         skel->jointCount * sizeof(ayt::math::Float4x4));
@@ -403,7 +403,7 @@ TEST_CASE(animation_system_emits_animnotify_event_on_marker_cross)
     // Drain + emit exactly as AnimationSystem::onUpdate does. Inline
     // here to validate the contract without a full entity subscription
     // round-trip (which would require ResourceManager to cache the clip).
-    const auto& records = skel->player.consumePendingNotifies();
+    const auto& records = skel->player->consumePendingNotifies();
     for (const auto& rec : records) {
         ayt::event::EventBus::instance().emit<ayt::anim::AnimNotifyEvent>(
             ayt::anim::AnimNotifyEvent{
@@ -416,8 +416,8 @@ TEST_CASE(animation_system_emits_animnotify_event_on_marker_cross)
     }
     // Second tick: dt=0.30s → next=0.85s, also crosses M0.5? No: M0.5=0.5
     // is already past at this point (we crossed in the first tick).
-    skel->player.tick(0.30f);
-    const auto& records2 = skel->player.consumePendingNotifies();
+    skel->player->tick(0.30f);
+    const auto& records2 = skel->player->consumePendingNotifies();
     for (const auto& rec : records2) {
         ayt::event::EventBus::instance().emit<ayt::anim::AnimNotifyEvent>(
             ayt::anim::AnimNotifyEvent{
@@ -520,12 +520,12 @@ TEST_CASE(animation_component_additive_weight_propagates_to_player)
         skel->skinMatrices[i] = ayt::math::Float4x4::identity();
     }
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
-    skel->player.play(&clip);
+    skel->player->setSkeleton(skel->skeleton);
+    skel->player->play(&clip);
 
     // Sanity: before the push, the player's weight is the default 1.0f
     // since we haven't pushed the component field yet.
-    CHECK(skel->player.getBlendWeight() == 1.0f);
+    CHECK(skel->player->getBlendWeight() == 1.0f);
 
     // Manually perform the three push lines that AnimationSystem::onUpdate
     // runs per entity each frame (setPlayRate / setLoop / setBlendWeight).
@@ -536,22 +536,22 @@ TEST_CASE(animation_component_additive_weight_propagates_to_player)
     // for serializer round-trip compat; the bridge push now uses the
     // canonical P1.3 setBlendWeight (the deprecated setAdditiveWeight
     // inline-forward wrapper was removed in P1.6).
-    skel->player.setPlayRate(anim->playRate);
-    skel->player.setLoop(anim->looping);
-    skel->player.setBlendWeight(anim->additiveWeight);
+    skel->player->setPlayRate(anim->playRate);
+    skel->player->setLoop(anim->looping);
+    skel->player->setBlendWeight(anim->additiveWeight);
 
-    CHECK(skel->player.getBlendWeight() == 0.5f);
+    CHECK(skel->player->getBlendWeight() == 0.5f);
 
     // Spot-check the saturating setter contract on the engine side too:
     // anim->additiveWeight = -1.0f → setter clamps to 0.
     anim->additiveWeight = -1.0f;
-    skel->player.setBlendWeight(anim->additiveWeight);
-    CHECK(skel->player.getBlendWeight() == 0.0f);
+    skel->player->setBlendWeight(anim->additiveWeight);
+    CHECK(skel->player->getBlendWeight() == 0.0f);
 
     // And > 1.0 → clamps to 1.0.
     anim->additiveWeight = 2.0f;
-    skel->player.setBlendWeight(anim->additiveWeight);
-    CHECK(skel->player.getBlendWeight() == 1.0f);
+    skel->player->setBlendWeight(anim->additiveWeight);
+    CHECK(skel->player->getBlendWeight() == 1.0f);
 
     world.destroyEntity(e);
     world.shutdown();
@@ -641,21 +641,21 @@ TEST_CASE(animation_component_additive_clip_path_loads_player_source)
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
-    skel->player.play(&baseClip);
+    skel->player->setSkeleton(skel->skeleton);
+    skel->player->play(&baseClip);
 
     // Before the additive push: layer is OFF.
-    CHECK_FALSE(skel->player.isAdditiveLayerActive());
+    CHECK_FALSE(skel->player->isAdditiveLayerActive());
 
     // Mirror the three lines AnimationSystem::onUpdate pushes for the
     // additive layer (setAdditiveSource + setBlendWeight +
     // setAdditivePlayRate collapsed into the entry-point defaults).
-    skel->player.setAdditiveSource(&addClip, anim->additivePlayRate, true);
-    skel->player.setBlendWeight(anim->blendWeight);
+    skel->player->setAdditiveSource(&addClip, anim->additivePlayRate, true);
+    skel->player->setBlendWeight(anim->blendWeight);
 
     // Layer is now ON.
-    CHECK(skel->player.isAdditiveLayerActive());
-    CHECK_FLOAT_EQ(skel->player.getBlendWeight(), 0.6f, 1e-6f);
+    CHECK(skel->player->isAdditiveLayerActive());
+    CHECK_FLOAT_EQ(skel->player->getBlendWeight(), 0.6f, 1e-6f);
 
     world.destroyEntity(e);
     world.shutdown();
@@ -732,27 +732,27 @@ TEST_CASE(animation_component_additive_rebind_detected)
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
-    skel->player.play(&baseClip);
+    skel->player->setSkeleton(skel->skeleton);
+    skel->player->play(&baseClip);
 
     // Bind to clip A, seek to t=0.5 (mid-clip) so lerp gives exact half
     // of the keyframe delta. Avoids the setTime(==duration) wrap-to-0
     // bug and gives clean integer math.
-    skel->player.setAdditiveSource(&addClipA, 1.0f, true);
-    skel->player.setBlendWeight(1.0f);
-    skel->player.setTime(0.5f);
-    skel->player.evaluate();
-    const float posWithA = skel->player.getBoneWorldMatrices()[0].row[0].w;
+    skel->player->setAdditiveSource(&addClipA, 1.0f, true);
+    skel->player->setBlendWeight(1.0f);
+    skel->player->setTime(0.5f);
+    skel->player->evaluate();
+    const float posWithA = skel->player->getBoneWorldMatrices()[0].row[0].w;
     // At t=0.5 lerp(0, 2) = 1.0 → additive pos delta 1.0.
     CHECK(std::fabs(posWithA - 1.0f) < 1e-4f);
 
     // Rebind to clip B (different additiveClipPath).
     anim->additiveClipPath = "additive_b://clip";
-    skel->player.setAdditiveSource(&addClipB, 1.0f, true);
-    skel->player.setBlendWeight(1.0f);
-    skel->player.setTime(0.5f);
-    skel->player.evaluate();
-    const float posWithB = skel->player.getBoneWorldMatrices()[0].row[0].w;
+    skel->player->setAdditiveSource(&addClipB, 1.0f, true);
+    skel->player->setBlendWeight(1.0f);
+    skel->player->setTime(0.5f);
+    skel->player->evaluate();
+    const float posWithB = skel->player->getBoneWorldMatrices()[0].row[0].w;
     // At t=0.5 lerp(0, 10) = 5.0 → additive pos delta 5.0.
     CHECK(std::fabs(posWithB - 5.0f) < 1e-4f);
 
@@ -814,21 +814,21 @@ TEST_CASE(animation_component_empty_additive_path_no_layer)
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
-    skel->player.play(&baseClip);
+    skel->player->setSkeleton(skel->skeleton);
+    skel->player->play(&baseClip);
 
     // The push line for the empty path is: setAdditiveSource(nullptr).
     // blendWeight is irrelevant when no source is bound (INV-1).
-    skel->player.setAdditiveSource(nullptr, 1.0f, true);
-    skel->player.setBlendWeight(anim->blendWeight);
+    skel->player->setAdditiveSource(nullptr, 1.0f, true);
+    skel->player->setBlendWeight(anim->blendWeight);
 
-    CHECK_FALSE(skel->player.isAdditiveLayerActive());
+    CHECK_FALSE(skel->player->isAdditiveLayerActive());
 
     // Tick + eval — base-only output. Bone0 should be at (~2, 0, 0).
     // Use t=0.99 to avoid setTime(==duration) wrapping to 0.
-    skel->player.setTime(0.99f);
-    skel->player.evaluate();
-    const ayt::math::Float4x4& m = skel->player.getBoneWorldMatrices()[0];
+    skel->player->setTime(0.99f);
+    skel->player->evaluate();
+    const ayt::math::Float4x4& m = skel->player->getBoneWorldMatrices()[0];
     // At t=0.99 with two keyframes (0, 30 ticks = 0, 1.0s), the lerp gives
     // sample ≈ (0.5 * 0.99, 0, 0). Base Override writes (sample.x, 0, 0)
     // to _localPos, so world.x ≈ 0.99 * 2 = 1.98 (within tolerance).
@@ -903,26 +903,26 @@ TEST_CASE(animation_component_p1_4_blend_curve_pushed_to_player)
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
+    skel->player->setSkeleton(skel->skeleton);
 
     ayt::resource::Animation baseClip;
     baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(1.0f);
     ayt::resource::Animation addClip;
     addClip.setName("Add"); addClip.setTicksPerSecond(30.0f); addClip.setDuration(1.0f);
-    skel->player.play(&baseClip);
+    skel->player->play(&baseClip);
 
     // The same per-frame push sequence AnimationSystem::onUpdate runs.
-    skel->player.setAdditiveSource(&addClip, anim->additivePlayRate, true);
-    skel->player.setBlendWeight(anim->blendWeight);
+    skel->player->setAdditiveSource(&addClip, anim->additivePlayRate, true);
+    skel->player->setBlendWeight(anim->blendWeight);
 
     // P1.4 cross-fade bridge: duration > 0 ⇒ blendWeightOverTime fires.
     CHECK(anim->blendCurveDuration > 0.0f);
-    skel->player.blendWeightOverTime(
+    skel->player->blendWeightOverTime(
         anim->blendCurveFrom,
         anim->blendCurveTo,
         anim->blendCurveDuration,
         static_cast<ayt::anim::BlendEasing>(anim->blendCurveEasing));
-    CHECK(skel->player.isBlendCurveActive());
+    CHECK(skel->player->isBlendCurveActive());
 
     // E1's bridge test scope is now bounded: verify that the bridge
     // reach (component → AnimationPlayer::blendWeightOverTime) lands
@@ -978,21 +978,21 @@ TEST_CASE(animation_component_p1_4_sync_to_base_bridge_flag)
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
+    skel->player->setSkeleton(skel->skeleton);
 
     ayt::resource::Animation baseClip;
     baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(2.0f);
     ayt::resource::Animation addClip;
     addClip.setName("Add"); addClip.setTicksPerSecond(30.0f); addClip.setDuration(0.5f);
-    skel->player.play(&baseClip);
+    skel->player->play(&baseClip);
 
     // Manually mirror the bridge's push sequence (the test bypasses
     // AnimationSystem to avoid cross-module entanglements).
-    skel->player.setAdditiveSource(&addClip, anim->additivePlayRate, true);
-    skel->player.setBlendWeight(anim->blendWeight);
+    skel->player->setAdditiveSource(&addClip, anim->additivePlayRate, true);
+    skel->player->setBlendWeight(anim->blendWeight);
     // Bridge line:
-    skel->player.setAdditiveSyncToBase(anim->syncToBase);
-    CHECK(skel->player.isAdditiveSyncToBase());
+    skel->player->setAdditiveSyncToBase(anim->syncToBase);
+    CHECK(skel->player->isAdditiveSyncToBase());
 
     // INV-6 — post-tick the two playheads are locked. We exercise by
     // setting a notify at additive t=0.4 (= base t=0.4 under sync; in
@@ -1003,13 +1003,13 @@ TEST_CASE(animation_component_p1_4_sync_to_base_bridge_flag)
     // 0.4 and 0.4 (after wrap) both fire. Both modes produce the same
     // count here; what we verify is the player's lock-step bit is on.
     addClip.addNotify(ayt::resource::AnimNotifyMarker{"AddMid", 0.4f, 0.0f});
-    skel->player.setAdditiveSource(&addClip);  // rebind with marker
-    skel->player.setAdditiveSyncToBase(true);
-    skel->player.setTime(0.0f);
-    skel->player.tick(0.5f);   // both axes 0 → 0.5
+    skel->player->setAdditiveSource(&addClip);  // rebind with marker
+    skel->player->setAdditiveSyncToBase(true);
+    skel->player->setTime(0.0f);
+    skel->player->tick(0.5f);   // both axes 0 → 0.5
     // Marker at 0.4 is in [0, 0.5] for additive.
     // P1.6: base has no markers, so merged == slot[0] count.
-    CHECK(skel->player.getPendingNotifyCountMerged() == 1u);
+    CHECK(skel->player->getPendingNotifyCountMerged() == 1u);
 
     world.destroyEntity(e);
     world.shutdown();
@@ -1058,7 +1058,7 @@ TEST_CASE(animation_component_p1_4_ref_pose_capture_bridge_flag)
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
+    skel->player->setSkeleton(skel->skeleton);
 
     ayt::resource::Animation baseClip;
     baseClip.setName("Base"); baseClip.setTicksPerSecond(30.0f); baseClip.setDuration(1.0f);
@@ -1082,20 +1082,20 @@ TEST_CASE(animation_component_p1_4_ref_pose_capture_bridge_flag)
         t.values = { 0,0,0,  1,0,0 };
         return t;
     }());
-    skel->player.play(&baseClip);
+    skel->player->play(&baseClip);
 
     // Manually mirror the bridge push.
-    skel->player.setAdditiveSource(&addClip, anim->additivePlayRate, true);
-    skel->player.setBlendWeight(anim->blendWeight);
-    skel->player.setAdditiveRefPoseCapture(anim->refPoseCapture);
-    CHECK(skel->player.isAdditiveRefPoseCapture());
+    skel->player->setAdditiveSource(&addClip, anim->additivePlayRate, true);
+    skel->player->setBlendWeight(anim->blendWeight);
+    skel->player->setAdditiveRefPoseCapture(anim->refPoseCapture);
+    CHECK(skel->player->isAdditiveRefPoseCapture());
 
     // Evaluate twice — must remain stable, no NaN.
-    skel->player.setTime(0.5f);
-    skel->player.evaluate();
-    const ayt::math::Float4x4& m1 = skel->player.getBoneWorldMatrices()[0];
-    skel->player.evaluate();
-    const ayt::math::Float4x4& m2 = skel->player.getBoneWorldMatrices()[0];
+    skel->player->setTime(0.5f);
+    skel->player->evaluate();
+    const ayt::math::Float4x4& m1 = skel->player->getBoneWorldMatrices()[0];
+    skel->player->evaluate();
+    const ayt::math::Float4x4& m2 = skel->player->getBoneWorldMatrices()[0];
     CHECK(std::fabs(m1.row[0].w - m2.row[0].w) < 1e-6f);
     CHECK(std::isfinite(m1.row[0].w));
 
@@ -1190,26 +1190,26 @@ TEST_CASE(animation_component_multi_layer_bridge_pushes_each_slot) {
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
+    skel->player->setSkeleton(skel->skeleton);
 
     // Mirror the per-slot push loop that AnimationSystem::onUpdate runs
     // when additiveLayers.size() > 0: bind clip on each slot + forward
     // weight. We invoke setAdditiveLayerSource(slot, clip, rate, loop)
     // and setAdditiveLayerWeight(slot, w) — exactly as the bridge does.
-    skel->player.setAdditiveLayerSource(0, addA, 1.0f, true);
-    skel->player.setAdditiveLayerSource(1, addB, 1.0f, true);
-    skel->player.setAdditiveLayerSource(2, addC, 1.0f, true);
-    skel->player.setAdditiveLayerWeight(0, anim->additiveLayers[0].blendWeight);
-    skel->player.setAdditiveLayerWeight(1, anim->additiveLayers[1].blendWeight);
-    skel->player.setAdditiveLayerWeight(2, anim->additiveLayers[2].blendWeight);
+    skel->player->setAdditiveLayerSource(0, addA, 1.0f, true);
+    skel->player->setAdditiveLayerSource(1, addB, 1.0f, true);
+    skel->player->setAdditiveLayerSource(2, addC, 1.0f, true);
+    skel->player->setAdditiveLayerWeight(0, anim->additiveLayers[0].blendWeight);
+    skel->player->setAdditiveLayerWeight(1, anim->additiveLayers[1].blendWeight);
+    skel->player->setAdditiveLayerWeight(2, anim->additiveLayers[2].blendWeight);
 
     // All three slots bound.
-    CHECK(skel->player.getAdditiveLayerCount() == 3);
+    CHECK(skel->player->getAdditiveLayerCount() == 3);
 
     // Weights match what each AdditiveLayerSpec asks for.
-    CHECK_FLOAT_EQ(skel->player.getAdditiveLayerWeight(0), 0.5f, 1e-6f);
-    CHECK_FLOAT_EQ(skel->player.getAdditiveLayerWeight(1), 0.7f, 1e-6f);
-    CHECK_FLOAT_EQ(skel->player.getAdditiveLayerWeight(2), 1.0f, 1e-6f);
+    CHECK_FLOAT_EQ(skel->player->getAdditiveLayerWeight(0), 0.5f, 1e-6f);
+    CHECK_FLOAT_EQ(skel->player->getAdditiveLayerWeight(1), 0.7f, 1e-6f);
+    CHECK_FLOAT_EQ(skel->player->getAdditiveLayerWeight(2), 1.0f, 1e-6f);
 
     delete addA;
     delete addB;
@@ -1268,14 +1268,14 @@ TEST_CASE(animation_component_multi_layer_bridge_rebind_per_slot) {
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
+    skel->player->setSkeleton(skel->skeleton);
 
     // Initial bind (frame 1 of bridge loop).
-    skel->player.setAdditiveLayerSource(0, &clipA, 1.0f, true);
-    skel->player.setAdditiveLayerSource(1, &clipX, 1.0f, true);
-    skel->player.setAdditiveLayerWeight(0, anim->additiveLayers[0].blendWeight);
-    skel->player.setAdditiveLayerWeight(1, anim->additiveLayers[1].blendWeight);
-    CHECK(skel->player.getAdditiveLayerCount() == 2);
+    skel->player->setAdditiveLayerSource(0, &clipA, 1.0f, true);
+    skel->player->setAdditiveLayerSource(1, &clipX, 1.0f, true);
+    skel->player->setAdditiveLayerWeight(0, anim->additiveLayers[0].blendWeight);
+    skel->player->setAdditiveLayerWeight(1, anim->additiveLayers[1].blendWeight);
+    CHECK(skel->player->getAdditiveLayerCount() == 2);
 
     // Frame 2: only slot 1's path changed. Bridge compares
     // _lastAppliedAdditivePaths[e][1] vs anim->additiveLayers[1].path —
@@ -1286,17 +1286,17 @@ TEST_CASE(animation_component_multi_layer_bridge_rebind_per_slot) {
     // Slot 0 — same path, NO setAdditiveLayerSource call. Verify by
     // keeping a fresh clip pointer unused and confirming the player
     // still reports 2 layers bound.
-    CHECK(skel->player.getAdditiveLayerCount() == 2);
+    CHECK(skel->player->getAdditiveLayerCount() == 2);
 
     // Slot 1 — bind new clip.
-    skel->player.setAdditiveLayerSource(1, &clipY, 1.0f, true);
-    skel->player.setAdditiveLayerWeight(1, anim->additiveLayers[1].blendWeight);
+    skel->player->setAdditiveLayerSource(1, &clipY, 1.0f, true);
+    skel->player->setAdditiveLayerWeight(1, anim->additiveLayers[1].blendWeight);
 
     // Still 2 layers, but slot 1's clip name (proxy for "clip pointer
     // identity") changed. We can verify by tick + evaluating and
     // checking trackCounts on the slot — simpler: just confirm no
     // crash and the player still has 2 layers after rebind.
-    CHECK(skel->player.getAdditiveLayerCount() == 2);
+    CHECK(skel->player->getAdditiveLayerCount() == 2);
 
     world.destroyEntity(e);
     world.shutdown();
@@ -1348,19 +1348,19 @@ TEST_CASE(animation_component_legacy_scalar_layers_zero_size) {
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
-    skel->player.play(&baseClip);
+    skel->player->setSkeleton(skel->skeleton);
+    skel->player->play(&baseClip);
 
     // Mirror the legacy single-slot push lines from AnimationSystem.
-    skel->player.setAdditiveSource(&addClip, anim->additivePlayRate, true);
-    skel->player.setBlendWeight(anim->blendWeight);
+    skel->player->setAdditiveSource(&addClip, anim->additivePlayRate, true);
+    skel->player->setBlendWeight(anim->blendWeight);
 
     // Slot 0 active with the legacy scalar blendWeight.
-    CHECK(skel->player.isAdditiveLayerActive());
-    CHECK_FLOAT_EQ(skel->player.getBlendWeight(), 0.42f, 1e-6f);
-    CHECK(skel->player.getAdditiveLayerCount() == 1);
+    CHECK(skel->player->isAdditiveLayerActive());
+    CHECK_FLOAT_EQ(skel->player->getBlendWeight(), 0.42f, 1e-6f);
+    CHECK(skel->player->getAdditiveLayerCount() == 1);
     // Slot 1..7 NOT bound (additiveLayers was empty).
-    CHECK(skel->player.getAdditiveLayerWeight(1) == 0.0f);
+    CHECK(skel->player->getAdditiveLayerWeight(1) == 0.0f);
 
     world.destroyEntity(e);
     world.shutdown();
@@ -1416,11 +1416,11 @@ TEST_CASE(animation_component_merged_notify_eventbus_carries_source_tag) {
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
-    skel->player.setLoop(true);
-    skel->player.play(&baseClip);
-    skel->player.setAdditiveLayerSource(0, &addClip, 1.0f, true);
-    skel->player.setAdditiveLayerWeight(0, 1.0f);
+    skel->player->setSkeleton(skel->skeleton);
+    skel->player->setLoop(true);
+    skel->player->play(&baseClip);
+    skel->player->setAdditiveLayerSource(0, &addClip, 1.0f, true);
+    skel->player->setAdditiveLayerWeight(0, 1.0f);
 
     struct Capture {
         int totalCount = 0;
@@ -1451,10 +1451,10 @@ TEST_CASE(animation_component_merged_notify_eventbus_carries_source_tag) {
         });
 
     // Tick the player: dt=1.2 from t=0 → crosses both base@1.0 and add@1.0.
-    skel->player.tick(1.2f);
+    skel->player->tick(1.2f);
 
     // Drain merged + emit (mirror what onUpdate does in the merged path).
-    const auto& merged = skel->player.consumePendingNotifiesMerged();
+    const auto& merged = skel->player->consumePendingNotifiesMerged();
     for (const auto& rec : merged) {
         const char* clipName = (rec.sourceTag == ayt::anim::AnimNotifySourceTag::Base)
                                 ? "BaseClip"
@@ -1530,7 +1530,7 @@ TEST_CASE(animation_component_oversized_layers_no_rebind) {
     skel->skinMatrices = new ayt::math::Float4x4[skel->jointCount];
     skel->skinMatrices[0] = ayt::math::Float4x4::identity();
     skel->loaded = true;
-    skel->player.setSkeleton(skel->skeleton);
+    skel->player->setSkeleton(skel->skeleton);
 
     // Build 9 distinct additive clips in memory.
     ayt::resource::Animation clips[9];
@@ -1546,18 +1546,18 @@ TEST_CASE(animation_component_oversized_layers_no_rebind) {
     const size_t n = std::min(anim->additiveLayers.size(),
                               static_cast<size_t>(kMaxSlots));
     for (size_t i = 0; i < n; ++i) {
-        skel->player.setAdditiveLayerSource(static_cast<uint32_t>(i),
+        skel->player->setAdditiveLayerSource(static_cast<uint32_t>(i),
                                             &clips[i], 1.0f, true);
-        skel->player.setAdditiveLayerWeight(static_cast<uint32_t>(i),
+        skel->player->setAdditiveLayerWeight(static_cast<uint32_t>(i),
                                             anim->additiveLayers[i].blendWeight);
     }
 
     // Exactly 8 layers bound, NOT 9. The 9th spec was silently dropped.
-    CHECK(skel->player.getAdditiveLayerCount() == 8);
+    CHECK(skel->player->getAdditiveLayerCount() == 8);
     // Attempting to bind slot 8 explicitly returns false (kMaxAdditiveSlots).
-    CHECK(skel->player.setAdditiveLayerSource(8, &clips[8]) == false);
+    CHECK(skel->player->setAdditiveLayerSource(8, &clips[8]) == false);
     // Still 8 layers.
-    CHECK(skel->player.getAdditiveLayerCount() == 8);
+    CHECK(skel->player->getAdditiveLayerCount() == 8);
 
     world.destroyEntity(e);
     world.shutdown();
@@ -1621,7 +1621,7 @@ TEST_CASE(skeleton_component_shared_ptr_outlives_resource_manager_eviction_safe)
     skel->skeleton = preloaded;
     // Player pins the same skeleton — preloaded refcount == 3
     // (ResourceManager cache + SkeletonComponent + AnimationPlayer).
-    skel->player.setSkeleton(skel->skeleton);
+    skel->player->setSkeleton(skel->skeleton);
 
     // Even after a trimCache() sweep, the asset must still be
     // retrievable through the SkeletonComponent's shared_ptr.

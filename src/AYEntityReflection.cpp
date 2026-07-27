@@ -20,6 +20,7 @@ namespace ayt::entity
 {
 
 // Reflect metadata (one static initializer per type, this TU only).
+AY_FINALIZE_REGISTRATION_METADATA(AdditiveLayerSpec)
 AY_FINALIZE_REGISTRATION_METADATA(Transform)
 AY_FINALIZE_REGISTRATION_METADATA(HealthComponent)
 AY_FINALIZE_REGISTRATION_METADATA(MeshComponent)

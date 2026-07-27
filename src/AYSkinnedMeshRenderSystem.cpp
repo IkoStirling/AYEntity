@@ -1,13 +1,12 @@
 // AYSkinnedMeshRenderSystem.cpp — Phase 1 E-04 implementation.
 //
-// Submits draws for entities with `MeshComponent::skinned == true`
-// AND a SkeletonComponent. The renderer's existing RenderSystem skips
-// those entities (see AYRenderSystem.cpp early-out); this system owns
-// their scene-builder slot.
+// Submits draws for entities with MeshComponent::skinned == true
+// AND a SkeletonComponent. Coexists with RenderSystem via
+// RendererSubSystem::setSceneBuilder's append-to-chain behavior.
 //
-// Phase 1 demo assumption: skinned entities all share one SkinnedLit
-// material compiled from an inline Phoskia source string. Phase 2
-// will resolve a `.aymat` path the same way RenderSystem does.
+// Deferred GBufferFill has no bone palette. Until a skinned GBuffer
+// path exists, every skinned entity is submitted as rigid bind-pose
+// (raw mesh verts, no boneMatrices) so characters stay visible.
 
 #include "AYSkinnedMeshRenderSystem.h"
 
@@ -24,61 +23,11 @@
 #include <aymath/MathUtils.h>
 
 #include <cstdio>
-#include <cstring>
 
 namespace ayt::entity
 {
 
-namespace
-{
-
-// Phase 1 demo: compile SkinnedLit from hand-authored bgfx .sc sources
-// (golden skinned_lit.sc shape, bones[4] for the 4-bone test rig).
-// Phoskia → shaderc is exercised elsewhere; this path keeps the demo
-// stable while the skinned Phoskia backend matures.
-const char* kSkinnedLitVaryingDef = R"(
-vec3 v_normal    : NORMAL    = vec3(0.0, 0.0, 1.0);
-vec2 v_texcoord0 : TEXCOORD0 = vec2(0.0, 0.0);
-vec3 a_position  : POSITION;
-vec3 a_normal    : NORMAL;
-vec2 a_texcoord0 : TEXCOORD0;
-vec4 a_indices   : BLENDINDICES;
-vec4 a_weight    : BLENDWEIGHT;
-)";
-
-const char* kSkinnedLitVertexSc = R"(
-$input a_position, a_normal, a_texcoord0, a_indices, a_weight
-$output v_normal, v_texcoord0
-
-#include <bgfx_shader.sh>
-
-uniform mat4 bones[4];
-
-void main()
-{
-    v_texcoord0 = a_texcoord0;
-
-    // BLENDINDICES are normalized uint8 in bgfx (index / 255).
-    ivec4 bi = ivec4(a_indices * 255.0 + 0.5);
-
-    vec4 pos = vec4(a_position, 1.0);
-    vec4 skinnedPos =
-          a_weight.x * mul(bones[bi.x], pos)
-        + a_weight.y * mul(bones[bi.y], pos)
-        + a_weight.z * mul(bones[bi.z], pos)
-        + a_weight.w * mul(bones[bi.w], pos);
-
-    vec3 nrm = a_normal;
-    vec3 skinnedNrm =
-          a_weight.x * mul(bones[bi.x], vec4(nrm, 0.0)).xyz
-        + a_weight.y * mul(bones[bi.y], vec4(nrm, 0.0)).xyz
-        + a_weight.z * mul(bones[bi.z], vec4(nrm, 0.0)).xyz
-        + a_weight.w * mul(bones[bi.w], vec4(nrm, 0.0)).xyz;
-
-    v_normal = mul(u_model[0], vec4(skinnedNrm, 0.0)).xyz;
-    gl_Position = mul(u_modelViewProj, skinnedPos);
-}
-)";
+namespace {
 
 const char* kSkinnedLitFragmentSc = R"(
 $input v_normal, v_texcoord0
@@ -97,6 +46,26 @@ void main()
 }
 )";
 
+const char* kRigidLitVaryingDef = R"(
+vec3 v_normal    : NORMAL    = vec3(0.0, 0.0, 1.0);
+vec2 v_texcoord0 : TEXCOORD0 = vec2(0.0, 0.0);
+vec3 a_position  : POSITION;
+vec3 a_normal    : NORMAL;
+vec2 a_texcoord0 : TEXCOORD0;
+)";
+
+const char* kRigidLitVertexSc = R"(
+$input a_position, a_normal, a_texcoord0
+$output v_normal, v_texcoord0
+#include <bgfx_shader.sh>
+void main()
+{
+    v_texcoord0 = a_texcoord0;
+    v_normal = mul(u_model[0], vec4(a_normal, 0.0)).xyz;
+    gl_Position = mul(u_modelViewProj, vec4(a_position, 1.0));
+}
+)";
+
 } // namespace
 
 void SkinnedMeshRenderSystem::onStart()
@@ -110,10 +79,6 @@ void SkinnedMeshRenderSystem::onStart()
         return;
     }
 
-    // Phase 1 SC-01: append our scene-builder to the chain so we
-    // coexist with RenderSystem (priority 500 each; chain order is
-    // registration order = RenderSystem was registered first via
-    // registerRenderSystem() in AYEntityModule.cpp).
     rss->setSceneBuilder([this](ayt::render::RenderScene& scene) {
         buildSkinnedScene(scene);
     });
@@ -125,8 +90,6 @@ void SkinnedMeshRenderSystem::onStart()
 
 void SkinnedMeshRenderSystem::onUpdate(float /*dt*/)
 {
-    // Animation is owned by AnimationSystem. We only consume the
-    // skin matrices it produced. No per-frame work here.
 }
 
 void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
@@ -138,96 +101,90 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
     if (rss == nullptr) return;
     ayt::render::Renderer& renderer = rss->renderer();
 
+    constexpr const char* kRigidKey = "AYEntity_RigidLit_bgfx_v2";
+    const MaterialKey rigidKey{ kRigidKey };
+    auto rigidIt = _materialCache.find(rigidKey);
+    if (rigidIt == _materialCache.end()) {
+        const ayt::render::MaterialHandle h =
+            renderer.createMaterialFromBgfxSc(kRigidLitVertexSc,
+                                              kSkinnedLitFragmentSc,
+                                              kRigidLitVaryingDef,
+                                              kRigidKey);
+        if (!h.isValid()) {
+            std::fprintf(stderr,
+                         "[SkinnedMeshRenderSystem] RigidLit compile failed\n");
+            std::fflush(stderr);
+            return;
+        }
+        rigidIt = _materialCache.emplace(rigidKey, h).first;
+        std::fprintf(stderr,
+                     "[SkinnedMeshRenderSystem] RigidLit ready (bind-pose / Deferred)\n");
+        std::fflush(stderr);
+    }
+
     World& world = World::instance();
     uint32_t submitted = 0;
+    uint32_t skippedNoMesh = 0;
     for (Entity* e : world.query<Transform, MeshComponent, SkeletonComponent>()) {
         if (e == nullptr) continue;
-        Transform*       transform = e->getComponent<Transform>();
-        MeshComponent*   meshComp  = e->getComponent<MeshComponent>();
-        SkeletonComponent* skel    = e->getComponent<SkeletonComponent>();
+        Transform*         transform = e->getComponent<Transform>();
+        MeshComponent*     meshComp  = e->getComponent<MeshComponent>();
+        SkeletonComponent* skel      = e->getComponent<SkeletonComponent>();
         if (transform == nullptr || meshComp == nullptr || skel == nullptr) continue;
-
-        // Route rule: only skinned entities pass through here. The
-        // non-skinned query (Transform + MeshComponent) is handled by
-        // RenderSystem.
         if (!meshComp->skinned) continue;
-        if (!skel->isValid()) {
-            static uint32_t s_invalidSkelLog = 0;
-            if (s_invalidSkelLog < 3) {
-                std::fprintf(stderr,
-                             "[SkinnedMeshRenderSystem] skip: skeleton not loaded "
-                             "(loaded=%d jointCount=%u)\n",
-                             skel->loaded ? 1 : 0, skel->jointCount);
-                std::fflush(stderr);
-                ++s_invalidSkelLog;
-            }
-            continue;
-        }
+        if (!meshComp->visible || meshComp->meshPath.empty()) continue;
 
-        // Resolve mesh (cached; second call returns the same handle).
         const ayt::render::MeshHandle meshHandle =
             renderer.loadMesh(meshComp->meshPath);
         if (!meshHandle.isValid()) {
-            std::fprintf(stderr,
-                         "[SkinnedMeshRenderSystem] loadMesh('%s') failed\n",
-                         meshComp->meshPath.c_str());
+            ++skippedNoMesh;
+            static uint32_t s_meshFailLog = 0;
+            if (s_meshFailLog < 3) {
+                std::fprintf(stderr,
+                             "[SkinnedMeshRenderSystem] loadMesh('%s') failed\n",
+                             meshComp->meshPath.c_str());
+                std::fflush(stderr);
+                ++s_meshFailLog;
+            }
             continue;
         }
 
-        // Resolve or create the SkinnedLit material. We use one
-        // fixed Phoskia source string + a stable cache key so the
-        // shader pool only compiles it once.
-        constexpr const char* kSkinnedLitCacheKey = "AYEntity_SkinnedLit_bgfx_v11";
-        const MaterialKey matKey{ kSkinnedLitCacheKey };
-        auto matIt = _materialCache.find(matKey);
-        if (matIt == _materialCache.end()) {
-            std::fprintf(stderr,
-                         "[SkinnedMeshRenderSystem] compiling SkinnedLit (bgfx .sc)...\n");
-            std::fflush(stderr);
-            const ayt::render::MaterialHandle h =
-                renderer.createMaterialFromBgfxSc(kSkinnedLitVertexSc,
-                                                  kSkinnedLitFragmentSc,
-                                                  kSkinnedLitVaryingDef,
-                                                  kSkinnedLitCacheKey);
-            if (!h.isValid()) {
-                std::fprintf(stderr,
-                             "[SkinnedMeshRenderSystem] createMaterialFromBgfxSc"
-                             " failed; check shaderc + bgfx include dirs\n");
-                std::fflush(stderr);
-                continue;
-            }
-            matIt = _materialCache.emplace(matKey, h).first;
-        }
-
-        // Static tilt so multiple faces are visible; animation comes from
-        // GPU skin matrices (spine bone track), not entity bob.
-        const ayt::math::Float4x4 tilt =
-            ayt::math::rotate(ayt::math::FVector3(1.0f, 0.0f, 0.0f), 0.45f);
-        const ayt::math::Float4x4 local =
+        const ayt::math::Float4x4 worldM =
             ayt::math::Transform::getMatrix(transform->position,
                                             transform->rotation,
                                             transform->scale);
-        const ayt::math::Float4x4 world = tilt * local;
-
-        scene.add(meshHandle, matIt->second, world,
-                  skel->skinMatrices, skel->jointCount);
+        scene.add(meshHandle, rigidIt->second, worldM);
         ++submitted;
+
+        static bool s_once = false;
+        if (!s_once) {
+            std::fprintf(stderr,
+                         "[SkinnedMeshRenderSystem] bind-pose submit "
+                         "(loaded=%d joints=%u scale=%.4f pos=(%.2f,%.2f,%.2f))\n"
+                         "  mesh=%s\n",
+                         skel->loaded ? 1 : 0, skel->jointCount,
+                         transform->scale.x,
+                         transform->position.x, transform->position.y,
+                         transform->position.z,
+                         meshComp->meshPath.c_str());
+            std::fflush(stderr);
+            s_once = true;
+        }
     }
 
     static uint32_t s_diagFrame = 0;
-    if (s_diagFrame < 5) {
+    if (s_diagFrame < 8) {
         std::fprintf(stderr,
-                     "[SkinnedMeshRenderSystem] frame=%u submitted=%u sceneItems=%zu\n",
-                     s_diagFrame, submitted, scene.items().size());
+                     "[SkinnedMeshRenderSystem] frame=%u submitted=%u "
+                     "meshFail=%u sceneItems=%zu\n",
+                     s_diagFrame, submitted, skippedNoMesh,
+                     scene.items().size());
         ++s_diagFrame;
     }
 }
 
 void registerSkinnedMeshRenderSystem()
 {
-    // GL-01: idempotent across World::shutdown — see the matching
-    // comment in AYAnimationSystem.cpp. The bootstrapModule() guard
-    // is the only one we need.
     World::instance().registerSystem<SkinnedMeshRenderSystem>(
         SkinnedMeshRenderSystem::kPriority);
 }

@@ -12,6 +12,9 @@ set(SOURCES
     SystemTest.cpp
     SkinnedAnimationTest.cpp
     CharacterEntityTest.cpp
+    # P2.1 (2026-07-27) — BlendSpaceSystem ECS integration tests
+    # (priority wiring + skinMatricesBlendSpace handoff to renderer).
+    AYTest_BlendSpaceSystem.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})

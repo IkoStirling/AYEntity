@@ -35,6 +35,14 @@ namespace ayt::entity
 struct SkeletonComponent : public IComponent {
     const char* getName() const override { return "SkeletonComponent"; }
 
+    // Bumped when the in-memory layout of this component changes
+    // (e.g. AnimationPlayer went from embedded-by-value to unique_ptr).
+    // AnimationSystem refuses to touch a component whose magic doesn't
+    // match — catches stale .obj ABI mismatches that otherwise AV inside
+    // AnimationPlayer::setSkeleton with a near-null this (write @ 0x20).
+    static constexpr uint32_t kLayoutMagic = 0x534B4333; // 'SKC3'
+    uint32_t layoutMagic = kLayoutMagic;
+
     // Asset reference. Declared via AY_PROPERTY (which expands to
     // `Type name;` + serializer metadata). Don't redeclare.
     AY_PROPERTY(std::string, skeletonPath, kAttrSerialize)
@@ -53,12 +61,9 @@ struct SkeletonComponent : public IComponent {
     // ISkeleton> is implicit when handing to AnimationPlayer.
     std::shared_ptr<ayt::resource::Skeleton> skeleton;
 
-    // The AnimationPlayer instance that does the per-frame sampling
-    // and emits bone-skin matrices. Lives in the component so the
-    // renderer can pin its skin-matrices pointer without going
-    // through World / System state. Reused across frames — never
-    // re-instantiated.
-    ayt::anim::AnimationPlayer player;
+    // Heap-allocated via AnimationPlayer::create() + AnimationPlayerDeleter
+    // (deletion stays in AYAnimation.cpp — avoids LNK2005 on ~AnimationPlayer).
+    std::unique_ptr<ayt::anim::AnimationPlayer, ayt::anim::AnimationPlayerDeleter> player;
 
     // Heap-allocated skin matrices (world * inverseBind), one entry per
     // bone. The renderer reads this array via `getBoneSkinMatrices()`
@@ -67,29 +72,26 @@ struct SkeletonComponent : public IComponent {
     // shared skeleton's bone count) so the renderer contract is
     // unchanged.
     ayt::math::Float4x4* skinMatrices = nullptr;
+    // P2.1 — BlendSpace-base skin matrices. Written by BlendSpaceSystem
+    // (priority 430) when the entity has a BlendSpaceComponent; read by
+    // AnimationSystem (priority 450) as the authoritative base when
+    // non-null. Orthogonal-fields model: both systems can drive the
+    // entity without overwriting each other, and additive layers
+    // (AnimationComponent.additiveLayers[]) ride on top of the
+    // BlendSpace base via the unchanged AnimationSystem phase 1b.
+    // Lifecycle mirrors skinMatrices (allocated by the relevant system
+    // on first tick; freed in this dtor).
+    ayt::math::Float4x4* skinMatricesBlendSpace = nullptr;
     uint32_t             jointCount   = 0;
     bool                 loaded       = false;
 
     bool isValid() const { return loaded && jointCount > 0; }
 
-    SkeletonComponent() {
-        // AY_PROPERTY emits `Type name;` with no default; ctor
-        // assignment is required to leave it in a defined state.
-        skeletonPath.clear();
-        skeleton.reset();
-    }
-
-    // Cleanup hook called by EntitySubSystem when the component is
-    // detached. Releases heap-allocated skin matrices. The shared_ptr
-    // `skeleton` releases automatically; if no other entity references
-    // the ISkeleton asset, ResourceManager's LRU is free to evict it
-    // on the next trimCache() call.
-    ~SkeletonComponent() {
-        delete[] skinMatrices;
-        skinMatrices = nullptr;
-        jointCount = 0;
-        skeleton.reset();
-    }
+    // Out-of-line: unique_ptr<AnimationPlayer> create/destroy must not
+    // be instantiated in every TU that includes this header (MSVC
+    // LNK2005 on AnimationPlayer ctor/dtor COMDATs).
+    SkeletonComponent();
+    ~SkeletonComponent();
 };
 #undef AY_CURRENT_CLASS
 

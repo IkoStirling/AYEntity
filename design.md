@@ -1008,6 +1008,7 @@ AYEntity/
 | 模块引导 | `bootstrapModule()` 替代 link-anchor |
 | 序列化 | 组件仅用 `AY_FINALIZE_REGISTRATION_METADATA` |
 | RenderSystem | 诊断日志（matched / skip / submitted / sceneItems） |
+| **P2.1 (2026-07-27)** | **BlendSpace 1D/2D Blend Tree:** `BlendSpaceComponent` + `BlendSpaceSystem@430` + `SkeletonComponent::skinMatricesBlendSpace` + AnimationSystem memcpy pick-non-null；见 §15.7 |
 
 ### 15.6 GL-01 系统 tick 顺序契约
 
@@ -1017,17 +1018,66 @@ AYEntity/
 | 优先级 | 系统 | 责任 |
 |--------|------|------|
 | 0–399 | （未占用） | 留给调试 / 测试 CounterSystem 等 |
-| 450 | `AnimationSystem` | tick AnimationPlayer,刷新 `SkeletonComponent::skinMatrices` |
+| 430 | `BlendSpaceSystem` (P2.1) | 驱动 BlendSpace1D/2D,写 `SkeletonComponent::skinMatricesBlendSpace` |
+| 450 | `AnimationSystem` | tick AnimationPlayer,刷新 `SkeletonComponent::skinMatrices`(BlendSpace 非空时 memcpy pick 非空) |
 | 500 | `SkinnedMeshRenderSystem` | 注册 scene-builder,把 skinned 实体写进 RenderScene |
 | 500 | `RenderSystem` | 注册 scene-builder,把非 skinned 实体写进 RenderScene |
 | 600+ | （未占用） | 留给 Physics / Audio / Script / 工具系统 |
 
 **契约**：`AnimationSystem` 必须早于所有 render 系统（priority 450 < 500），
 否则渲染端会读到上一帧的 bone matrices,快方向切换时会出现 1 帧延迟。
+同样地，`BlendSpaceSystem` 必须早于 `AnimationSystem`（priority 430 < 450）,
+否则 AnimationSystem 的 memcpy pick 看不到本帧的 BlendSpace-base skin matrices,
+回退到 AnimationComponent 的单 clip 路径,BlendSpace 的工作就丢了。
 
 **验证**：`unittest/SkinnedAnimationTest.cpp::animation_system_priority_before_render_systems`
 在每次构建时跑 `bootstrapModule()` → 枚举 `World::systemCount()` → 断言
-三个 priority 值与上表一致。改 priority 是破坏性变更,必须同时更新本表 + 单测。
+三个 priority 值与上表一致。`unittest/AYTest_BlendSpaceSystem.cpp::blend_space_system_priority_before_animation_system`
+额外断言 BlendSpaceSystem 430 < AnimationSystem 450。改 priority 是破坏性变更,必须同时更新本表 + 单测。
+
+### 15.7 P2.1 — BlendSpace 1D / 2D Blend Tree（2026-07-27）
+
+`BlendSpace1D` / `BlendSpace2D` 是 AYAnimation 提供的线性单纯形 BlendTree（UE BlendSpace / Unity AnimationBlendTree 1D/2D 等价物）。
+本节只记 ECS 集成层；纯算法细节（2D 单纯形算法、tangent-space quaternion blend、bounding-rect heuristic）见
+[BlendSpace.h](../AYAnimation/include/ayanimation/BlendSpace.h) 的文件头注释。
+
+**组件**（`include/components/AYBlendSpaceComponent.h`）：
+
+- `BlendSpaceEntry`：单个 sample point 的 spec — `samplePosition`（1D 取 x、2D 取 xy）、`clipPath`、`playRate`、`looping`、`blendSpaceIndex`。
+- `BlendSpaceComponent`：`is2D` 切 1D/2D、`entries[]`（≥1 才 `isValid()`）、`sampleInput`、`playRate`、`looping`。
+
+**系统**（`include/AYBlendSpaceSystem.h`，priority 430）：
+
+- `onUpdate(dt)` 遍历 `World::query<SkeletonComponent, BlendSpaceComponent>()`；
+  对每个有效实体：懒加载每个 entry 的 `clipPath`（`_clipCache` 路径缓存，N 个实体共享 clip 只 parse 一次）→
+  调 `BlendSpace1D::setSkeleton / setParameter / tick / evaluate`（或 2D 版本）→
+  把 per-bone parent-local TRS 提升为 world × inverseBind 矩阵 → memcpy 到
+  `SkeletonComponent::skinMatricesBlendSpace`。
+- 复用 `AssetBoneCache`（P1.7 引入）做 `(ISkeleton*, boneName) → boneIdx` 的跨 player 缓存。
+
+**SkeletonComponent 扩展**：
+
+- 新增 `Float4x4* skinMatricesBlendSpace = nullptr;` 字段（与既有 `skinMatrices` 平级，独立生命周期）。
+- `BlendSpaceSystem` 在懒加载后第一次 tick 时分配；同一 entity 销毁时 dtor 释放。
+- AnimationSystem 在 priority 450 memcpy pick：**`skinMatricesBlendSpace != nullptr` 时用它替换既有 `skinMatrices`**，
+  作为渲染端读到的"权威 base pose"。这意味着同一 entity 可以同时挂 `BlendSpaceComponent`（base）+ `AnimationComponent.additiveLayers[]`（additive on top），
+  AnimationSystem 的 Phase 1b additive 逻辑不变，自动在 BlendSpace base 上累加。
+
+**正交-fields 模型（设计原则）**：
+
+- BlendSpaceSystem 写 `skinMatricesBlendSpace`，AnimationSystem 写 `skinMatrices`，两者不互相覆盖。
+- 加法层只走 AnimationSystem 的 Phase 1b，BlendSpaceSystem 不触碰。
+- 同一 entity 移除 `BlendSpaceComponent` → `skinMatricesBlendSpace == nullptr` → AnimationSystem 自动回退
+  AnimationComponent 单 clip 路径，无需切换 component。
+
+**测试覆盖**：
+
+- 单元：`AYRuntime/AYAnimation/unittest/AYTest_BlendSpace.cpp` — 12 个 case（1D boundary clamp / 2D heuristic / 编辑器 triangulation / nearest-vertex / library-mode / shared skeleton lifecycle）。
+- ECS 集成：`AYRuntime/AYEntity/unittest/AYTest_BlendSpaceSystem.cpp` — 6 个 case（priority 契约 / empty-entries skip / skeleton-not-loaded defer / 1D 路径写入 skinMatrices / 2D 路径 / 无变更不重 bind）。
+- AYAnimation_UnitTests 471/471 PASS（459 旧 + 12 新）；AYEntityTest_BlendSpaceSystem 57/57 PASS（用 `runSuite("BlendSpaceSystemTests")` 隔离 AYEntityTest 已存在的 ComponentTest::network_component AV flake）。
+
+**Bootstrap 现状**：P2.1 阶段 `bootstrapModule()` **未自动注册** `BlendSpaceSystem` —— 引擎集成侧还在对齐 `registerBlendSpaceSystem()` 的入口时机。
+单测里显式调 `registerBlendSpaceSystem()`，未来 §15.2 的 `bootstrapModule()` 改成"无条件注册 BlendSpaceSystem" 时直接补一行即可。
 
 ---
 

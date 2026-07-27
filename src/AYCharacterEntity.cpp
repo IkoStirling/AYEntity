@@ -14,8 +14,8 @@
 //
 // Destroy path uses `World::destroyEntity` which recycles the EntityHandle
 // back into the pool and destructs components. The SkeletonComponent
-// destructor (`include/components/AYSkeletonComponent.h:48-52`) `delete[]`s
-// its `skinMatrices`; we don't need to do anything special here.
+// destructor (`include/components/AYSkeletonComponent.h`) `delete[]`s
+// its `skinMatrices`; `player` is a unique_ptr + AnimationPlayerDeleter.
 
 #include "AYCharacterEntity.h"
 
@@ -29,18 +29,63 @@
 #include "include/components/AYSkeletonComponent.h"
 #include "include/components/AYTransformComponent.h"
 
+#include <cstdio>
+
 namespace ayt::entity
 {
+
+namespace {
+
+bool fileExists(const std::string& path)
+{
+    if (path.empty()) {
+        return false;
+    }
+    FILE* f = nullptr;
+#if defined(_MSC_VER)
+    if (fopen_s(&f, path.c_str(), "rb") != 0 || f == nullptr) {
+        return false;
+    }
+#else
+    f = std::fopen(path.c_str(), "rb");
+    if (f == nullptr) {
+        return false;
+    }
+#endif
+    std::fclose(f);
+    return true;
+}
+
+} // namespace
 
 Entity* spawnCharacterFromPaths(const std::string& meshPath,
                                 const std::string& materialPath,
                                 const std::string& skeletonPath,
                                 const std::string& animationPath)
 {
-    // Matches `Entity::create` / `Entity::destroy` convention used by
-    // existing unit tests (`unittest/EntityTest.cpp`) and by the
-    // editor + tools callers. Internally Entity::create delegates to
-    // World::instance().createEntity().
+    if (meshPath.empty() || skeletonPath.empty()) {
+        std::fprintf(stderr,
+                     "[spawnCharacter] refused: empty mesh('%s') or "
+                     "skeleton('%s')\n",
+                     meshPath.c_str(), skeletonPath.c_str());
+        std::fflush(stderr);
+        return nullptr;
+    }
+    if (!fileExists(meshPath)) {
+        std::fprintf(stderr,
+                     "[spawnCharacter] mesh file missing: %s\n",
+                     meshPath.c_str());
+        std::fflush(stderr);
+        return nullptr;
+    }
+    if (!fileExists(skeletonPath)) {
+        std::fprintf(stderr,
+                     "[spawnCharacter] skeleton file missing: %s\n",
+                     skeletonPath.c_str());
+        std::fflush(stderr);
+        return nullptr;
+    }
+
     Entity* entity = Entity::create();
     if (entity == nullptr) {
         return nullptr;
@@ -49,19 +94,45 @@ Entity* spawnCharacterFromPaths(const std::string& meshPath,
     entity->addComponent<Transform>();
 
     auto* mesh = entity->addComponent<MeshComponent>();
+    if (mesh == nullptr) {
+        Entity::destroy(entity);
+        return nullptr;
+    }
     mesh->meshPath     = meshPath;
     mesh->materialPath = materialPath;
+    // Always route through SkinnedMeshRenderSystem. Bind-pose with an
+    // empty materialPath used to flip skinned=false → RenderSystem, which
+    // then skipped the draw (no .aymat) and the character vanished while
+    // Transparent glass still drew. SkinnedMesh owns its own lit material;
+    // jointCount > bones[128] falls back to rigid bind-pose there.
     mesh->skinned      = true;
 
     auto* skel = entity->addComponent<SkeletonComponent>();
+    // Stale .obj with an older SkeletonComponent layout (embedded
+    // AnimationPlayer / wrong unique_ptr) allocates the wrong size;
+    // the out-of-line ctor then writes layoutMagic at the new offset
+    // and subsequent string assigns AV (write @ 0). Refuse early.
+    if (skel == nullptr
+        || skel->layoutMagic != SkeletonComponent::kLayoutMagic) {
+        std::fprintf(stderr,
+                     "[spawnCharacter] SkeletonComponent layout mismatch "
+                     "(magic=0x%08X expected=0x%08X sizeof=%zu) — "
+                     "Clean+rebuild AYEntity\n",
+                     skel ? skel->layoutMagic : 0u,
+                     SkeletonComponent::kLayoutMagic,
+                     sizeof(SkeletonComponent));
+        std::fflush(stderr);
+        Entity::destroy(entity);
+        return nullptr;
+    }
     skel->skeletonPath = skeletonPath;
 
     auto* anim = entity->addComponent<AnimationComponent>();
+    if (anim == nullptr) {
+        Entity::destroy(entity);
+        return nullptr;
+    }
     anim->clipPath = animationPath;
-    // AnimationComponent ctor already sets autoplay=true, looping=true,
-    // playRate=1.0f (see components/AYAnimationComponent.h:28-32). We
-    // assign again here so future component-default tweaks don't leak
-    // into this codepath silently.
     anim->autoplay = true;
     anim->looping  = true;
     anim->playRate = 1.0f;
