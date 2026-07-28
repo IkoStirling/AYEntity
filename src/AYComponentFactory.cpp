@@ -15,10 +15,7 @@
 
 #include <cstring>
 
-using ayt::serializer::NameTable;
-using ayt::serializer::PendingRef;
-using ayt::serializer::detail::deserializeReflectFields;
-using ayt::serializer::detail::serializeReflectField;
+using ayt::serializer::SerializerForReflect;
 
 namespace ayt::entity
 {
@@ -53,43 +50,15 @@ bool hasTyped(const Entity& entity) {
 }
 
 // Scene envelope already opened a component object and wrote "$type".
-// Write Serialize fields inline — do not wrap with SerializerForReflect::apply's
-// beginObject/endObject or the root envelope is replaced (see P4-B).
+// Write Serialize fields inline via SerializerForReflect::applyFields (P4-E).
 template<typename T>
 void serializeTyped(ayt::serializer::ISerializer& s, IComponent& component) {
-    auto* type = ayt::reflect::TypeRegistryImpl::instance().findType<T>();
-    if (type == nullptr) {
-        return;
-    }
-    T& obj = static_cast<T&>(component);
-    const NameTable& nameTable = s.getNameTable();
-    for (uint32_t i = 0; i < type->getFieldCount(); ++i) {
-        auto* field = type->getField(i);
-        if (!field->hasAttribute(ayt::reflect::FieldAttribute::Serialize)) {
-            continue;
-        }
-        serializeReflectField(s, field, &obj, &nameTable);
-    }
+    SerializerForReflect<T>::applyFields(s, static_cast<T&>(component));
 }
 
 template<typename T>
 void deserializeTyped(ayt::serializer::ISerializer& s, IComponent& component) {
-    auto* type = ayt::reflect::TypeRegistryImpl::instance().findType<T>();
-    if (type == nullptr) {
-        return;
-    }
-    T& obj = static_cast<T&>(component);
-    std::vector<PendingRef>& pending = s.pendingRefs();
-    deserializeReflectFields(s, type, &obj, &pending);
-    if (!pending.empty()) {
-        const auto& lookup = s.getNameLookup();
-        const auto& owners = s.getNameLookupOwners();
-        if (!lookup.empty()) {
-            ayt::serializer::resolveReferences(
-                s, pending, lookup, owners.empty() ? nullptr : &owners);
-        }
-        pending.clear();
-    }
+    SerializerForReflect<T>::applyReadFields(s, static_cast<T&>(component));
 }
 
 const ComponentWireEntry* findEntry(const char* typeName) {
