@@ -14,6 +14,8 @@ set(SOURCES
     src/AYAnimationSystem.cpp
     src/AYSkinnedMeshRenderSystem.cpp
     src/AYCharacterEntity.cpp
+    src/AYComponentFactory.cpp
+    src/AYSceneSerializer.cpp
     src/AYSkeletonComponent.cpp
     # P2.1 (2026-07-27) — BlendSpace 1D/2D BlendTree driver. Priority
     # 430 (before AnimationSystem@450). Writes

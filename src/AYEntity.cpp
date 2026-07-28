@@ -1,6 +1,7 @@
 // AYEntity.cpp - Entity non-template implementation
 
 #include <AYEntity.h>
+#include <AYComponentFactory.h>
 #include <cstdio>
 
 namespace ayt::entity
@@ -65,18 +66,15 @@ void Entity::onStart() {
 }
 
 IComponent* Entity::addComponentByName(const char* typeName) {
-    (void)typeName;
-    return nullptr;
+    return ComponentFactory::addComponent(*this, typeName);
 }
 
 IComponent* Entity::getComponentByName(const char* typeName) {
-    (void)typeName;
-    return nullptr;
+    return ComponentFactory::getComponent(*this, typeName);
 }
 
 bool Entity::hasComponentByName(const char* typeName) const {
-    (void)typeName;
-    return false;
+    return ComponentFactory::hasComponent(*this, typeName);
 }
 
 void Entity::removeComponentByName(const char* typeName) {
