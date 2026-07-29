@@ -22,6 +22,7 @@ set(SOURCES
     # SkeletonComponent::skinMatricesBlendSpace; AnimationSystem
     # memcpy picks it as the authoritative base when non-null.
     src/AYBlendSpaceSystem.cpp
+    src/AYNetworkComponent.cpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
