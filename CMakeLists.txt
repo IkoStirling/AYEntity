@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(AYEntity)
+project(AYEntity
+    VERSION 0.1.0
+    DESCRIPTION "AYEntity — ECS + Network binding + World scene save/load"
+)
 
 option(AY_ENTITY_PRECOMPILE_COMPONENTS "Precompile common components" ON)
 
@@ -55,3 +58,5 @@ endif()
 
 enable_testing()
 add_subdirectory(unittest)
+
+message(STATUS "AYEntity v0.1.0 (P2.1 BlendSpace + NetworkComponent + P4-B .ayscene save) — see ${CMAKE_CURRENT_SOURCE_DIR}/design.md")

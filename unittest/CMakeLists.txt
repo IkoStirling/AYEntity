@@ -13,7 +13,7 @@ set(SOURCES
     SkinnedAnimationTest.cpp
     CharacterEntityTest.cpp
     AYTest_SceneSerializer.cpp
-    # P2.1 (2026-07-27) â€” BlendSpaceSystem ECS integration tests
+    # P2.1 (2026-07-27) â€?BlendSpaceSystem ECS integration tests
     # (priority wiring + skinMatricesBlendSpace handoff to renderer).
     AYTest_BlendSpaceSystem.cpp
 )
@@ -44,3 +44,5 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:MSVC>: /W4 /wd4200>
     $<$<CXX_COMPILER_ID:GNU,Clang>: -Wall -Wextra -Wpedantic>
 )
+
+ay_configure_test_tmpdir(${PROJECT_NAME})

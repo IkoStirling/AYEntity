@@ -198,7 +198,9 @@ void AnimationSystem::onUpdate(float dt)
             // allocating 543-bone TRS buffers when no clip will play).
             // AnimationPlayer is bound lazily when a clipPath appears.
             if (!anim->clipPath.empty()) {
-                skel->player = ayt::anim::AnimationPlayer::create();
+                if (!skel->player) {
+                    skel->player = ayt::anim::AnimationPlayer::create();
+                }
                 if (!skel->player) {
                     std::fprintf(stderr,
                                  "[AnimationSystem] AnimationPlayer::create failed\n");

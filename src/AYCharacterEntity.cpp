@@ -34,58 +34,11 @@
 namespace ayt::entity
 {
 
-namespace {
-
-bool fileExists(const std::string& path)
-{
-    if (path.empty()) {
-        return false;
-    }
-    FILE* f = nullptr;
-#if defined(_MSC_VER)
-    if (fopen_s(&f, path.c_str(), "rb") != 0 || f == nullptr) {
-        return false;
-    }
-#else
-    f = std::fopen(path.c_str(), "rb");
-    if (f == nullptr) {
-        return false;
-    }
-#endif
-    std::fclose(f);
-    return true;
-}
-
-} // namespace
-
 Entity* spawnCharacterFromPaths(const std::string& meshPath,
                                 const std::string& materialPath,
                                 const std::string& skeletonPath,
                                 const std::string& animationPath)
 {
-    if (meshPath.empty() || skeletonPath.empty()) {
-        std::fprintf(stderr,
-                     "[spawnCharacter] refused: empty mesh('%s') or "
-                     "skeleton('%s')\n",
-                     meshPath.c_str(), skeletonPath.c_str());
-        std::fflush(stderr);
-        return nullptr;
-    }
-    if (!fileExists(meshPath)) {
-        std::fprintf(stderr,
-                     "[spawnCharacter] mesh file missing: %s\n",
-                     meshPath.c_str());
-        std::fflush(stderr);
-        return nullptr;
-    }
-    if (!fileExists(skeletonPath)) {
-        std::fprintf(stderr,
-                     "[spawnCharacter] skeleton file missing: %s\n",
-                     skeletonPath.c_str());
-        std::fflush(stderr);
-        return nullptr;
-    }
-
     Entity* entity = Entity::create();
     if (entity == nullptr) {
         return nullptr;
