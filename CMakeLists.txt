@@ -26,6 +26,17 @@ set(SOURCES
     # memcpy picks it as the authoritative base when non-null.
     src/AYBlendSpaceSystem.cpp
     src/AYNetworkComponent.cpp
+    # Cross-module precompile barrel — explicit template instantiation
+    # declarations for Entity::addComponent<T>/getComponent<T>/hasComponent<T>
+    # over the AY_ENTITY_PRECOMPILE_COMPONENTS set. Without this TU,
+    # any downstream consumer that statically links AYEntity.lib without
+    # itself referencing those members directly hits LNK2019. See
+    # `src/detail/AYEntityPrecompile.cpp` for the full rationale.
+    #
+    # Note: this TU exists to close the AYScene PR-1 follow-up landmine
+    # (Test_EntityLinkGlue.cpp can be removed after this lands + AYScene
+    # submodule consumes the new AYEntity precompile barrel).
+    src/detail/AYEntityPrecompile.cpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
