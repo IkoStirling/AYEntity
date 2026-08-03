@@ -12,6 +12,14 @@
 #include <functional>
 #include <algorithm>
 
+namespace ayt::scene
+{
+// AYScene PR-1: SceneAccessor is a thin friend accessor declared in
+// AYScene. Forward-declared here so World can grant it friendship
+// without dragging in AYScene.h (which transitively pulls in AYWorld).
+struct SceneAccessor;
+} // namespace ayt::scene
+
 namespace ayt::entity
 {
 
@@ -102,6 +110,13 @@ private:
     }
 
     friend class Entity;
+    // AYScene PR-1: Scene::Impl owns independent World instances to avoid
+    // sharing the singleton across Edit/Play scenes (LM-1).
+    // Friend declaration so Scene can access the private ctor/dtor;
+    // World lifecycle ownership remains inside Scene::Impl (RAII via pimpl).
+    // The forward declaration of ayt::scene::SceneAccessor lives at file
+    // scope above (not inside this class body — that was a compile error).
+    friend struct ayt::scene::SceneAccessor;
 };
 
 // =============================================================================

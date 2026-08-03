@@ -14,6 +14,14 @@ Entity::~Entity() {
 }
 
 void Entity::removeAllComponents() {
+    // CRITICAL (F7): World::destroyEntityInternal and World::shutdown
+    // both invoke this function — they MUST call it BEFORE
+    // onDetachFromWorld(), otherwise _world is null and the per-type
+    // storages would retain dangling T* in their _dense arrays. The
+    // next world.query<T>() would walk into freed memory.
+    //
+    // Storage cleanup happens here while _world is still live so
+    // each SparseSet sees the entity's id and drops the entry.
     World* world = getWorld();
     if (world) {
         for (size_t typeHash : _componentTypeHashes) {
@@ -33,6 +41,12 @@ void Entity::removeAllComponents() {
 }
 
 void Entity::setName(const char* name) {
+    // Rename: erase the old name from the map first so setName("A")
+    // then setName("B") doesn't leave a stale ("A" -> id) entry that
+    // would make findEntity("A") return an entity whose _name is "B".
+    if (_world && !_name.empty() && _name != name) {
+        _world->_entityNameMap.erase(_name);
+    }
     _name = name;
     if (_world && !_name.empty()) {
         _world->_entityNameMap[_name] = _id;

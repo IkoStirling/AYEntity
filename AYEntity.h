@@ -141,21 +141,26 @@ void Entity::removeComponent() {
     IComponentStorage* storage = world->getStorageBase<T>();
     if (!storage) return;
 
+    // _componentTypeHashes and _components are pushed in lockstep by
+    // addComponent<T> (same index = same type). Reuse the hash we
+    // already cached in _componentTypeHashes instead of recomputing
+    // typeid(*_components[i]).hash_code() per element — both vectors
+    // stay in sync, the hash lookup is O(N) either way.
+    size_t matchIndex = static_cast<size_t>(-1);
     for (size_t i = 0; i < _componentTypeHashes.size(); ++i) {
         if (_componentTypeHashes[i] == typeHash) {
-            _componentTypeHashes.erase(_componentTypeHashes.begin() + static_cast<long>(i));
+            matchIndex = i;
             break;
         }
     }
+    if (matchIndex == static_cast<size_t>(-1)) return;
 
-    for (size_t i = 0; i < _components.size(); ++i) {
-        if (typeid(*_components[i]).hash_code() == typeHash) {
-            _components[i]->onDetach();
-            delete _components[i];
-            _components.erase(_components.begin() + static_cast<long>(i));
-            break;
-        }
-    }
+    _componentTypeHashes.erase(_componentTypeHashes.begin() + static_cast<long>(matchIndex));
+
+    IComponent* component = _components[matchIndex];
+    component->onDetach();
+    delete component;
+    _components.erase(_components.begin() + static_cast<long>(matchIndex));
 
     storage->remove(_id);
 }

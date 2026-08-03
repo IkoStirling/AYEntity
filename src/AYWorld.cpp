@@ -29,8 +29,13 @@ bool World::initialize() {
 void World::shutdown() {
     if (!_initialized) return;
 
+    // F7 — call removeAllComponents BEFORE onDetachFromWorld so each
+    // entity's per-type storages can drop the (id → T*) entry. After
+    // detach _world is null and SparseSet._dense would keep a
+    // dangling pointer that the next query<T>() dereferences.
     for (auto& entity : _entities) {
         if (entity) {
+            entity->removeAllComponents();
             entity->onDetachFromWorld();
         }
     }
@@ -101,6 +106,11 @@ void World::destroyEntity(Entity* e) {
 
 void World::destroyEntityInternal(Entity* e) {
     uint32_t id = e->getId();
+
+    // F7 — drop the entity's component storage entries BEFORE
+    // onDetachFromWorld nulls _world. Without this the storages
+    // would keep dangling T* pointers in their _dense arrays.
+    e->removeAllComponents();
     e->onDetachFromWorld();
 
     if (id < _entityPool.size()) {
