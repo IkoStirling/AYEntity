@@ -48,7 +48,7 @@
 // markers and emit each as AnimNotifyEvent on the engine EventBus.
 #include <ayanimation/AnimNotifyEvent.h>
 #include <ayanimation/AnimationPlayer.h>
-#include <ayanimation/ISkeletonMask.h>    // P2.2 — typed mask load
+#include <assetsDefs/IAYSkeletonMask.h>   // P3.x刀1 — formal interface in AYResource
 #include <ayevent/EventBus.h>
 
 #include <algorithm>
@@ -241,7 +241,7 @@ void AnimationSystem::onUpdate(float dt)
                 _lastAppliedMaskPath[e] = "";
             } else {
                 auto maskRes = ayt::resource::ResourceManager::instance()
-                                  .load<ayt::anim::ISkeletonMask>(
+                                  .load<ayt::resource::ISkeletonMask>(
                                       anim->maskPath);
                 if (!maskRes) {
                     // Fail-soft. Latch the failed path so we do not

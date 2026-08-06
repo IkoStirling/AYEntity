@@ -32,23 +32,22 @@
 #include <components/AYTransformComponent.h>
 
 #include <ayanimation/AnimationPlayer.h>
-#include <ayanimation/ISkeletonMask.h>
+#include <assetsDefs/IAYSkeletonMask.h>   // P3.x刀1 — formal interface in AYResource
 
 #include <assetsImpl/AYSkeleton.h>
+#include <assetsImpl/AYSkeletonMask.h>   // P3.x刀1 — concrete moved to AYResource
 #include <aymath/MathTypes.h>
 
 #include <AYTest.h>
 #include <AYResourceManager.h>
-
-#include "../../AYAnimation/src/SkeletonMask.h"   // P2.2 fixture
 
 #include <cstdio>
 #include <memory>
 #include <string>
 
 using namespace ayt::entity;
-using ayt::anim::ISkeletonMask;
-using ayt::anim::SkeletonMask;
+using ayt::resource::ISkeletonMask;
+using ayt::resource::SkeletonMask;
 
 namespace
 {
