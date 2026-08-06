@@ -40,6 +40,10 @@ struct AnimationStateMachineComponent : public IComponent {
     AY_PROPERTY(std::string, currentState,   kAttrSerialize)
     AY_PROPERTY(std::string, previousState,  kAttrSerialize)
     AY_PROPERTY(bool,        isTransitioning, kAttrSerialize)
+    // P3.2 NEW — deepest leaf state name across the active sub-machine
+    // hierarchy. Equals currentState when the parent's current state is
+    // not a sub-machine entry. StateMachineSystem writes it each tick.
+    AY_PROPERTY(std::string, activeSubState,  kAttrSerialize)
 
     AnimationStateMachineComponent() {
         resourcePath      = "";        // P3.1 — defer .ayasm loader
@@ -50,6 +54,7 @@ struct AnimationStateMachineComponent : public IComponent {
         currentState      = "";
         previousState     = "";
         isTransitioning   = false;
+        activeSubState    = "";        // P3.2 NEW
         // pendingTriggers defaults to empty.
     }
 

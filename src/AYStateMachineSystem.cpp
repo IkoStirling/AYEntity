@@ -1,4 +1,16 @@
-// AYStateMachineSystem.cpp — P3.1 (2026-08-06)
+// AYStateMachineSystem.cpp — P3.1 (2026-08-06) + P3.2 (2026-08-06) L3
+// 子状态机 ECS bridge.
+//
+// P3.2 changes:
+//   * dt plumbing — `sm.update(0.0f)` (P3.1 stub) → `sm.update(dt)` so
+//     cross-fade clocks advance properly. P3.1 §4.14.5 deferred this
+//     to P3.2.
+//   * Sub-machine entry semantics — when a transition fires into a
+//     state with `isSubMachine=true`, the ECS bridge MUST NOT call
+//     `player.play()`; the child sub-machine drives its own clip via
+//     its own transitions (INV-27).
+//   * activeSubState read-back — written each frame from
+//     `sm.getActiveLeafStateName()` for inspector / debug.
 
 #include "AYStateMachineSystem.h"
 #include "components/AYAnimationStateMachineComponent.h"
@@ -50,7 +62,7 @@ void StateMachineSystem::buildStateMachine(
     out.clear();
 }
 
-void StateMachineSystem::onUpdate(float /*dt*/) {
+void StateMachineSystem::onUpdate(float dt) {
     auto& world = World::instance();
 
     // Walk every entity with AnimationStateMachineComponent + SkeletonComponent.
@@ -83,38 +95,41 @@ void StateMachineSystem::onUpdate(float /*dt*/) {
         }
         c->pendingTriggers.clear();
 
-        // (3) Tick the state machine.
+        // (3) Tick the state machine — P3.2: pass real dt (P3.1 stubbed 0.0f).
         const std::string prevState = sm.getCurrentStateName();
-        sm.update(0.0f);   // P3.1: state machine is event-driven; dt
-                           // plumbing happens at the host level. The
-                           // bridge still calls update() so cross-fade
-                           // transitions can advance their clock when
-                           // the host supplies dt — but L1 ships without
-                           // that hook (see §5.5 design note).
+        sm.update(dt);
 
-        // (4) Push current state to AnimationPlayer if state changed.
+        // (4) Push current state to AnimationPlayer if state changed AND
+        //     the new state is NOT a sub-machine entry (INV-27: sub-
+        //     machine entries are owned by the child SM; the ECS bridge
+        //     MUST NOT call player.play() for them — child SM drives).
         if (sm.didTransitionThisFrame() || prevState != sm.getCurrentStateName()) {
             const auto& states = sm.getStates();
             const std::string& newStateName = sm.getCurrentStateName();
             auto it = std::find_if(states.begin(), states.end(),
                 [&](const State& s) { return s.name == newStateName; });
-            if (it != states.end() && !it->clipPath.empty()) {
-                auto clip = ayt::resource::ResourceManager::instance()
-                                .load<ayt::resource::IAnimation>(it->clipPath);
-                if (clip) {
-                    skel->player->play(clip.get());
-                    skel->player->setLoop(it->loop);
-                    skel->player->setPlayRate(it->playRate);
+            if (it != states.end()) {
+                if (it->isSubMachine) {
+                    // P3.2 NEW — child SM owns clip selection; skip player.play.
+                } else if (!it->clipPath.empty()) {
+                    auto clip = ayt::resource::ResourceManager::instance()
+                                    .load<ayt::resource::IAnimation>(it->clipPath);
+                    if (clip) {
+                        skel->player->play(clip.get());
+                        skel->player->setLoop(it->loop);
+                        skel->player->setPlayRate(it->playRate);
+                    }
                 }
             }
             ayt::event::EventBus::instance().emit<ayt::anim::AnimStateChangedEvent>(
                 ayt::anim::AnimStateChangedEvent{e, prevState, newStateName});
         }
 
-        // (5) Update read-back fields.
+        // (5) Update read-back fields — P3.2 NEW: include activeSubState.
         c->currentState    = sm.getCurrentStateName();
         c->previousState   = sm.getPreviousStateName();
         c->isTransitioning = sm.isTransitioning();
+        c->activeSubState  = sm.getActiveLeafStateName();
     }
 }
 
