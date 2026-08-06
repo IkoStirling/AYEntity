@@ -22,4 +22,9 @@ void registerEntityComponents();
 void registerAnimationSystem();
 void registerSkinnedMeshRenderSystem();
 
+// P3.1 (2026-08-06): state machine driver. Priority 460, runs AFTER
+// AnimationSystem (450) so a transition this frame becomes a play()
+// call on AnimationPlayer next frame.
+void registerStateMachineSystem();
+
 } // namespace ayt::entity

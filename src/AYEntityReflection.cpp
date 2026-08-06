@@ -8,6 +8,7 @@
 #include "AYWorld.h"
 
 #include "components/AYAnimationComponent.h"
+#include "components/AYAnimationStateMachineComponent.h"
 #include "components/AYHealthComponent.h"
 #include "components/AYMeshComponent.h"
 #include "components/AYNetworkComponent.h"
@@ -26,6 +27,8 @@ AY_FINALIZE_REGISTRATION_METADATA(HealthComponent)
 AY_FINALIZE_REGISTRATION_METADATA(MeshComponent)
 AY_FINALIZE_REGISTRATION_METADATA(SkeletonComponent)
 AY_FINALIZE_REGISTRATION_METADATA(AnimationComponent)
+// P3.1 (2026-08-06) — L1 state machine component.
+AY_FINALIZE_REGISTRATION_METADATA(AnimationStateMachineComponent)
 
 void registerEntityComponents()
 {
@@ -44,6 +47,9 @@ void registerEntityComponents()
     World::registerComponentType<ScriptComponent>("ScriptComponent");
     World::registerComponentType<NetworkComponent>("NetworkComponent");
     World::registerComponentType<RigidBodyComponent>("RigidBodyComponent");
+    // P3.1 (2026-08-06) — register new component type for the World query.
+    World::registerComponentType<AnimationStateMachineComponent>(
+        "AnimationStateMachineComponent");
 }
 
 } // namespace ayt::entity

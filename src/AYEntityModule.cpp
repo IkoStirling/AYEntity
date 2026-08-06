@@ -1,6 +1,7 @@
 #include "AYEntityModule.h"
 #include "AYAnimationSystem.h"
 #include "AYSkinnedMeshRenderSystem.h"
+#include "AYStateMachineSystem.h"
 #include "AYWorld.h"
 
 #include <cstdio>
@@ -57,6 +58,11 @@ void bootstrapModule()
     // different entities — but logging the order helps debugging).
     if (!hasSystemNamed(world, "AnimationSystem")) {
         registerAnimationSystem();
+    }
+    // P3.1 (2026-08-06) — StateMachineSystem (priority 460) ticks AFTER
+    // AnimationSystem (450); transitions decide which clip plays next frame.
+    if (!hasSystemNamed(world, "StateMachineSystem")) {
+        registerStateMachineSystem();
     }
     if (!hasSystemNamed(world, "SkinnedMeshRenderSystem")) {
         registerSkinnedMeshRenderSystem();

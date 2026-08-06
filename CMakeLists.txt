@@ -25,6 +25,10 @@ set(SOURCES
     # SkeletonComponent::skinMatricesBlendSpace; AnimationSystem
     # memcpy picks it as the authoritative base when non-null.
     src/AYBlendSpaceSystem.cpp
+    # P3.1 (2026-08-06) — L1 state machine driver system. Priority 460
+    # (after AnimationSystem@450); transitions decide which clip plays
+    # next frame; AnimStateChangedEvent emitted on transition.
+    src/AYStateMachineSystem.cpp
     src/AYNetworkComponent.cpp
     # Cross-module precompile barrel — explicit template instantiation
     # declarations for Entity::addComponent<T>/getComponent<T>/hasComponent<T>

@@ -13,13 +13,16 @@ set(SOURCES
     SkinnedAnimationTest.cpp
     CharacterEntityTest.cpp
     AYTest_SceneSerializer.cpp
-    # P2.1 (2026-07-27) �?BlendSpaceSystem ECS integration tests
+    # P2.1 (2026-07-27) — BlendSpaceSystem ECS integration tests
     # (priority wiring + skinMatricesBlendSpace handoff to renderer).
     AYTest_BlendSpaceSystem.cpp
     # P2.2 (2026-08-03) — Skeleton Mask bridge tests (maskPath
     # component field + AnimationSystem rebind cache + fail-soft
     # ResourceManager::load<ISkeletonMask> path). 6 cases.
     AYTest_SkeletonMaskBridge.cpp
+    # P3.1 (2026-08-06) — StateMachineSystem ECS integration tests
+    # (priority wiring + AnimationPlayer clip push + AnimStateChangedEvent).
+    AYTest_StateMachineSystem.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
