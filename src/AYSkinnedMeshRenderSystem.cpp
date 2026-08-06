@@ -149,11 +149,38 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
             continue;
         }
 
+        // Prefer the cooked .aymat (textures → GBuffer albedoMap via alias).
+        // Fall back to RigidLit with an explicit tint so Deferred never
+        // fills solid white when the shader file is missing.
+        ayt::render::MaterialHandle drawMat = rigidIt->second;
+        if (!meshComp->materialPath.empty()) {
+            const ayt::render::MaterialHandle cooked =
+                renderer.loadMaterial(meshComp->materialPath);
+            if (cooked.isValid()) {
+                drawMat = cooked;
+            } else {
+                static uint32_t s_matFailLog = 0;
+                if (s_matFailLog < 3) {
+                    std::fprintf(stderr,
+                                 "[SkinnedMeshRenderSystem] loadMaterial('%s') "
+                                 "failed — RigidLit fallback\n",
+                                 meshComp->materialPath.c_str());
+                    std::fflush(stderr);
+                    ++s_matFailLog;
+                }
+                renderer.setMaterialColor(rigidIt->second, "baseColor",
+                                          0.92f, 0.78f, 0.55f, 1.0f);
+            }
+        } else {
+            renderer.setMaterialColor(rigidIt->second, "baseColor",
+                                      0.92f, 0.78f, 0.55f, 1.0f);
+        }
+
         const ayt::math::Float4x4 worldM =
             ayt::math::Transform::getMatrix(transform->position,
                                             transform->rotation,
                                             transform->scale);
-        scene.add(meshHandle, rigidIt->second, worldM);
+        scene.add(meshHandle, drawMat, worldM);
         ++submitted;
 
         static bool s_once = false;
