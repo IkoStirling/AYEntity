@@ -48,6 +48,7 @@
 // markers and emit each as AnimNotifyEvent on the engine EventBus.
 #include <ayanimation/AnimNotifyEvent.h>
 #include <ayanimation/AnimationPlayer.h>
+#include <ayanimation/ISkeletonMask.h>    // P2.2 — typed mask load
 #include <ayevent/EventBus.h>
 
 #include <algorithm>
@@ -223,8 +224,54 @@ void AnimationSystem::onUpdate(float dt)
 
         if (!skel->loaded || skel->jointCount == 0) continue;
 
+        // P2.2 (2026-08-03) — Skeleton Mask rebind. Runs BEFORE the
+        // clipPath-empty early-return below so a bind-pose entity
+        // (clipPath="") can still have its mask cleared / latched.
+        // When the player is null (no clipPath yet, no direct API
+        // bind), the rebind only updates _lastAppliedMaskPath so
+        // subsequent ticks don't re-attempt the load.
+        const std::string& lastMask = _lastAppliedMaskPath.count(e)
+            ? _lastAppliedMaskPath[e] : std::string();
+        if (lastMask != anim->maskPath) {
+            if (anim->maskPath.empty()) {
+                // User cleared the mask → drop the player's reference.
+                if (skel->player) {
+                    skel->player->clearSkeletonMask();
+                }
+                _lastAppliedMaskPath[e] = "";
+            } else {
+                auto maskRes = ayt::resource::ResourceManager::instance()
+                                  .load<ayt::anim::ISkeletonMask>(
+                                      anim->maskPath);
+                if (!maskRes) {
+                    // Fail-soft. Latch the failed path so we do not
+                    // retry ResourceManager::load every frame.
+                    _lastAppliedMaskPath[e] = anim->maskPath;
+                    std::fprintf(stderr,
+                                 "[AnimationSystem] loadSkeletonMask('%s') "
+                                 "failed (.aymask loader deferred per §4.2.1)\n",
+                                 anim->maskPath.c_str());
+                    std::fflush(stderr);
+                } else if (skel->player) {
+                    // shared_ptr copies into the player; the
+                    // ResourceManager-side cache holds the strong
+                    // reference until LRU trim.
+                    skel->player->setSkeletonMask(maskRes);
+                    _lastAppliedMaskPath[e] = anim->maskPath;
+                }
+                // else: mask loaded but no player exists yet (rare
+                // ordering — user set maskPath before clipPath). We
+                // drop the loaded resource; the next lazy-load of
+                // the player will pick up maskPath again on the
+                // tick the clipPath becomes non-empty.
+            }
+        }
+
         // Bind-pose / mesh-only preview: empty clipPath keeps identity
-        // skin matrices. Do not ResourceManager::load("") every frame.
+        // skin matrices. Skip the per-frame lazy-load block (do NOT
+        // call ResourceManager::load("") every frame). The P2.2 mask
+        // rebind happened ABOVE this check; see
+        // SkeletonMaskBridgeTests #6 for the bind-pose-clear path.
         if (anim->clipPath.empty()) {
             continue;
         }

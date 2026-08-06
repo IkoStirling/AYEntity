@@ -149,6 +149,22 @@ struct AnimationComponent : public IComponent {
     // crash on a malformed component).
     AY_PROPERTY(std::vector<AdditiveLayerSpec>, additiveLayers, kAttrSerialize)
 
+    // P2.2 (2026-08-03) — Skeleton Mask resource path. Non-empty ⇒ the
+    // bridge loads an ISkeletonMask via ResourceManager and binds it to
+    // the AnimationPlayer each tick (rebind detection on path). Empty ⇒
+    // no mask — legacy behavior bit-identical to P2.1.
+    //
+    // Per-bone mask is orthogonal to P1.5 trackWeights (per-slot
+    // per-track): a clip authored against the skeleton ("upper body
+    // only") can be applied uniformly across any additive layer without
+    // the host having to know the clip's track layout.
+    //
+    // The .aymask loader is deferred per §4.2.1 — until that ships,
+    // ResourceManager::load<ISkeletonMask>(path) returns nullptr and
+    // the bridge degrades fail-soft to "no mask" (one warn per path, no
+    // retry storm — see _lastAppliedMaskPath latch in AYAnimationSystem).
+    AY_PROPERTY(std::string, maskPath, kAttrSerialize)
+
     AnimationComponent() {
         autoplay = true;
         looping  = true;
@@ -164,6 +180,7 @@ struct AnimationComponent : public IComponent {
         blendCurveDuration = 0.0f; // P1.4 — 0 = curve OFF (mirrors player default)
         blendCurveEasing = 0;      // P1.4 — 0 = ayt::anim::BlendEasing::Linear
         // additiveLayers defaults to empty → bridge takes legacy single-slot path.
+        maskPath = "";              // P2.2 — empty = no mask
     }
 
     bool isValid() const { return !clipPath.empty(); }

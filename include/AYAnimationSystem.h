@@ -96,6 +96,14 @@ private:
     std::unordered_map<const Entity*, PerSlotMap<bool>>    _lastAppliedRefPoseCapture;
     std::unordered_map<const Entity*, PerSlotMap<float>>   _lastAppliedBlendCurveDuration;
     std::unordered_map<const Entity*, PerSlotMap<uint8_t>> _lastAppliedBlendCurveEasing;
+
+    // P2.2 (2026-08-03) — Skeleton Mask rebind-detection map. Keyed by
+    // entity only (mask is a single resource per entity, not per-slot).
+    // The bridge rebinds the player's mask when this value differs from
+    // AnimationComponent::maskPath. On load failure the failed path is
+    // latched here so subsequent ticks are no-ops (no per-frame
+    // ResourceManager::load retries, no log spam).
+    std::unordered_map<const Entity*, std::string> _lastAppliedMaskPath;
 };
 
 void registerAnimationSystem();
