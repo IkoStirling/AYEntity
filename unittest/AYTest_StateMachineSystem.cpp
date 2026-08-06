@@ -540,4 +540,123 @@ TEST_SUITE(StateMachineSystemTests)
         teardown(world, e);
     }
 
+    // ─── #13 (P3.x L2) — conditionExpr DSL fires through ECS bridge. ───
+    // Set conditionExpr on the SM's Idle→Run transition. Setting
+    // speed=7.0 via the component must satisfy the expression and fire.
+    TEST_CASE(sm_system_L2_condition_expr_fires) {
+        World& world = World::instance();
+        Entity* e = makeStateMachineEntity(world);
+        CHECK(e != nullptr);
+
+        StateMachineSystem sm_system;
+        auto* smc = e->getComponent<AnimationStateMachineComponent>();
+        auto* smPtr = sm_system.getOrCreateMachine(e);
+        populateIdleRunGraph(*smPtr);
+
+        // Patch the first transition (Idle→Run) with a DSL condition.
+        // Note: the ECS bridge writes param "Speed" (capitalized) via
+        // setParam("Speed", c->speed); the expression must match.
+        auto& transitions = const_cast<std::vector<ayt::anim::Transition>&>(
+            smPtr->getTransitions());
+        transitions[0].setConditionExpr("Speed > 5.0");
+
+        smc->speed = 7.0f;
+        smc->setTrigger("Run");
+        sm_system.onUpdate(0.016f);
+
+        CHECK(smc->currentState == "Run");
+        CHECK(smc->previousState == "Idle");
+
+        teardown(world, e);
+    }
+
+    // ─── #14 (P3.x L2) — DSL condition fails when param too low. ──────
+    TEST_CASE(sm_system_L2_condition_expr_does_not_fire) {
+        World& world = World::instance();
+        Entity* e = makeStateMachineEntity(world);
+        CHECK(e != nullptr);
+
+        StateMachineSystem sm_system;
+        auto* smc = e->getComponent<AnimationStateMachineComponent>();
+        auto* smPtr = sm_system.getOrCreateMachine(e);
+        populateIdleRunGraph(*smPtr);
+
+        auto& transitions = const_cast<std::vector<ayt::anim::Transition>&>(
+            smPtr->getTransitions());
+        transitions[0].setConditionExpr("Speed > 5.0");
+
+        smc->speed = 3.0f;
+        smc->setTrigger("Run");
+        sm_system.onUpdate(0.016f);
+
+        // Transition did NOT fire — expression evaluated false.
+        CHECK(smc->currentState == "Idle");
+
+        teardown(world, e);
+    }
+
+    // ─── #15 (P3.x L2) — cache stays warm across ECS ticks. ──────────
+    // Re-run the same ECS update 5 times with the same conditionExpr.
+    // Internal conditionDirty should end at false and cachedAst stays
+    // populated. We verify by behavior: a transition that would be
+    // re-armed fires every time (caller re-sets trigger).
+    TEST_CASE(sm_system_L2_cache_warm_across_ticks) {
+        World& world = World::instance();
+        Entity* e = makeStateMachineEntity(world);
+        CHECK(e != nullptr);
+
+        StateMachineSystem sm_system;
+        auto* smc = e->getComponent<AnimationStateMachineComponent>();
+        auto* smPtr = sm_system.getOrCreateMachine(e);
+        populateIdleRunGraph(*smPtr);
+
+        auto& transitions = const_cast<std::vector<ayt::anim::Transition>&>(
+            smPtr->getTransitions());
+        transitions[0].setConditionExpr("Speed > 5.0");
+
+        smc->speed = 7.0f;
+        for (int i = 0; i < 5; ++i) {
+            smc->setTrigger("Run");
+            sm_system.onUpdate(0.016f);
+            // After each update, currentState toggles between Run and Idle
+            // because each tick fires the transition (trigger auto-consumed).
+            // The transition itself re-fires on the next tick because the
+            // trigger is re-armed; the cache should remain warm.
+            CHECK(transitions[0].cachedAst != nullptr);
+        }
+        // Last dirty flag should be false (the last evaluate completed).
+        CHECK(transitions[0].conditionDirty == false);
+
+        teardown(world, e);
+    }
+
+    // ─── #16 (P3.x L2) — parse failure in ECS bridge doesn't crash. ──
+    TEST_CASE(sm_system_L2_parse_failure_safe) {
+        World& world = World::instance();
+        Entity* e = makeStateMachineEntity(world);
+        CHECK(e != nullptr);
+
+        StateMachineSystem sm_system;
+        auto* smc = e->getComponent<AnimationStateMachineComponent>();
+        auto* smPtr = sm_system.getOrCreateMachine(e);
+        populateIdleRunGraph(*smPtr);
+
+        auto& transitions = const_cast<std::vector<ayt::anim::Transition>&>(
+            smPtr->getTransitions());
+        transitions[0].setConditionExpr("speed >");   // syntax error
+
+        smc->speed = 7.0f;
+        smc->setTrigger("Run");
+        for (int i = 0; i < 5; ++i) {
+            sm_system.onUpdate(0.016f);
+        }
+        // Parse failure ⇒ cachedAst=null + parseError non-empty; SM still
+        // ticks without crashing. Transition does not fire (INV-33).
+        CHECK(transitions[0].cachedAst == nullptr);
+        CHECK(!transitions[0].conditionParseError.empty());
+        CHECK(smc->currentState == "Idle");
+
+        teardown(world, e);
+    }
+
 TEST_SUITE_END
