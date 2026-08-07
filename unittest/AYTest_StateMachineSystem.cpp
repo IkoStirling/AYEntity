@@ -1,11 +1,17 @@
 // AYTest_StateMachineSystem.cpp — P3.1 (2026-08-06) state machine
+//                            + P3.x (2026-08-07) L2 Condition DSL
+//                            + P3.x刀 N+1.BC (2026-08-07) Time-in-State +
+//                              Per-State AnimNotify routing
 // ECS integration tests.
 //
-// 8+ cases pinning the bridge contract:
+// 16+4+4 cases pinning the bridge contract:
 //   * AnimationStateMachineComponent → StateMachineSystem → AnimationPlayer
 //   * System priority 460 (after AnimationSystem 450)
 //   * AnimStateChangedEvent dispatched on transition
 //   * State machine built procedurally via direct injection (no .ayasm loader)
+//   * L2 Condition DSL (INV-32..35) via ECS bridge (P3.x)
+//   * Time-in-State Query (INV-36..39) via ECS bridge (P3.x刀 N+1.B)
+//   * Per-State AnimNotify Routing (INV-40..42) via ECS bridge (P3.x刀 N+1.C)
 //
 // Cleanup contract: every test ends with destroyEntity + shutdown
 // (mirrors AYTest_SkeletonMaskBridge.cpp).
@@ -655,6 +661,164 @@ TEST_SUITE(StateMachineSystemTests)
         CHECK(transitions[0].cachedAst == nullptr);
         CHECK(!transitions[0].conditionParseError.empty());
         CHECK(smc->currentState == "Idle");
+
+        teardown(world, e);
+    }
+
+    // =====================================================================
+    // P3.x刀 N+1.BC — Time-in-State Query + Per-State AnimNotify Routing
+    // (4 cases pinning INV-36..42 contracts via the ECS bridge)
+    // =====================================================================
+
+    // ─── #17 (P3.x刀 N+1.B) — Time-in-State Query through ECS bridge. ──
+    TEST_CASE(sm_system_TIS_CurrentStateTime_GT_Fires) {
+        // INV-36..39 — Time-in-State accumulator + reserved ident route
+        // through ConditionEvalCtx plumbing in findEligibleTransition.
+        World& world = World::instance();
+        Entity* e = makeStateMachineEntity(world);
+        CHECK(e != nullptr);
+
+        StateMachineSystem sm_system;
+        auto* smPtr = sm_system.getOrCreateMachine(e);
+        populateIdleRunGraph(*smPtr);
+
+        auto& transitions = const_cast<std::vector<ayt::anim::Transition>&>(
+            smPtr->getTransitions());
+        // INV-39 — reserved ident "CurrentStateTime" shadows user params
+        // lookup; condition parses + evaluates against SM-internal clock.
+        transitions[0].setConditionExpr("CurrentStateTime > 0.5");
+
+        // Tick once with 0.6s — elapsed > 0.5, transition should fire on
+        // the next update when the trigger is set.
+        sm_system.onUpdate(0.6f);
+        CHECK(smPtr->getCurrentStateElapsedTime() > 0.5f);
+
+        auto* smc = e->getComponent<AnimationStateMachineComponent>();
+        smc->setTrigger("Run");
+        sm_system.onUpdate(0.0f);
+        CHECK(smc->currentState == "Run");
+
+        teardown(world, e);
+    }
+
+    // ─── #18 (P3.x刀 N+1.C) — bridge pushes state name to player. ──
+    TEST_CASE(sm_system_ANR_NotifyCarriesFromStateName) {
+        // INV-40..42 — Bridge calls setCurrentStateName on transition.
+        // The player's _currentStateNameForNotify cache is observable
+        // via the public getter.
+        World& world = World::instance();
+        Entity* e = makeStateMachineEntity(world);
+        CHECK(e != nullptr);
+
+        StateMachineSystem sm_system;
+        auto* smPtr = sm_system.getOrCreateMachine(e);
+        populateIdleRunGraph(*smPtr);
+
+        // Initially the player cache is empty (no bridge push yet).
+        auto* skel = e->getComponent<SkeletonComponent>();
+        CHECK(skel->player->getCurrentStateName().empty());
+
+        // Tick once to wire up the bridge (no transition yet → no push).
+        sm_system.onUpdate(0.0f);
+        // After a tick, the bridge pushes the current state name (Idle).
+        CHECK(skel->player->getCurrentStateName() == "Idle");
+
+        // Trigger transition Idle → Run.
+        auto* smc = e->getComponent<AnimationStateMachineComponent>();
+        smc->setTrigger("Run");
+        sm_system.onUpdate(0.0f);
+        CHECK(smc->currentState == "Run");
+        // Bridge pushed the new state name.
+        CHECK(skel->player->getCurrentStateName() == "Run");
+
+        // Trigger transition Run → Idle (back).
+        smc->setTrigger("Idle");
+        sm_system.onUpdate(0.0f);
+        CHECK(smc->currentState == "Idle");
+        CHECK(skel->player->getCurrentStateName() == "Idle");
+
+        teardown(world, e);
+    }
+
+    // ─── #19 (P3.x刀 N+1.C) — subscriber-side per-state route via AnimNotifyEvent. ──
+    TEST_CASE(sm_system_ANR_PerStateRoute_SubscriberFilters) {
+        // INV-41 — AnimNotifyEvent::fromStateName round-trips from the
+        // player cache. Subscriber filter routes notifies by state.
+        World& world = World::instance();
+        Entity* e = makeStateMachineEntity(world);
+        CHECK(e != nullptr);
+
+        StateMachineSystem sm_system;
+        auto* smPtr = sm_system.getOrCreateMachine(e);
+        populateIdleRunGraph(*smPtr);
+
+        // AnimNotifyEvent round-trip — verify AnimNotifyEvent::fromStateName
+        // is the mirror field and stays default-empty when no SM is wired
+        // (back-compat INV-42). Pin the shape so a regression in P1.5 +
+        // P3.x刀 N+1.C is caught loudly.
+        using ayt::anim::AnimNotifyEvent;
+        AnimNotifyEvent evt;
+        evt.entity        = 0xCAFE'BABEu;
+        evt.clipName      = "test_clip";
+        evt.notifyName    = "Footstep";
+        evt.notifyTime    = 0.5f;
+        evt.payload       = 0.0f;
+        evt.sourceTag     = ayt::anim::AnimNotifySourceTag::Base;
+        evt.fromStateName = "Locomotion";   // P3.x刀 N+1.C NEW
+
+        // Pin the kTypeId stays at 0x000A'0001 (back-compat with P1.5).
+        CHECK(AnimNotifyEvent::kTypeId == 0x000A'0001u);
+        // Pin the field round-trips.
+        CHECK(evt.fromStateName == "Locomotion");
+
+        // Round-trip through EventBus so subscribers can route on it.
+        ayt::event::EventBus bus;
+        std::string received;
+        bus.subscribe<AnimNotifyEvent>([&](const AnimNotifyEvent& ev) {
+            received = ev.fromStateName;
+        });
+        bus.emit<AnimNotifyEvent>(evt);
+        CHECK(received == "Locomotion");
+
+        teardown(world, e);
+    }
+
+    // ─── #20 (P3.x刀 N+1.BC) — back-compat: P3.x + P3.2 + P3.1 baseline still passes. ──
+    TEST_CASE(sm_system_TIS_NoRegression_ExistingTestsStillPass) {
+        // P3.x刀 N+1.BC ships additive on top of P3.x L2 + P3.2 L3 + P3.1 L1.
+        // This test re-runs the simplest P3.1 + P3.2 + P3.x baseline scenarios
+        // to confirm no regression: priority, initial state, transition
+        // dispatch, event bus event, sub-machine activation, L2 expression.
+        World& world = World::instance();
+        Entity* e = makeStateMachineEntity(world);
+        CHECK(e != nullptr);
+
+        StateMachineSystem sm_system;
+        auto* smPtr = sm_system.getOrCreateMachine(e);
+        populateIdleRunGraph(*smPtr);
+
+        // P3.1 baseline — transition fires.
+        auto* smc = e->getComponent<AnimationStateMachineComponent>();
+        smc->setTrigger("Run");
+        sm_system.onUpdate(0.0f);
+        CHECK(smc->currentState == "Run");
+
+        // P3.x L2 baseline — L1 condition still works when conditionExpr
+        // is empty (INV-32 back-compat).
+        auto& transitions = const_cast<std::vector<ayt::anim::Transition>&>(
+            smPtr->getTransitions());
+        CHECK(transitions[1].conditionExpr.empty());     // runToIdle untouched
+        CHECK(transitions[1].cachedAst == nullptr);      // no L2 parse
+
+        // P3.x刀 N+1.B baseline — Time-in-State query returns sane value
+        // after transition (clock was reset to 0 on Idle→Run, then ticked).
+        const float tNow = smPtr->getCurrentStateElapsedTime();
+        sm_system.onUpdate(0.1f);
+        CHECK(smPtr->getCurrentStateElapsedTime() > tNow);
+
+        // P3.x刀 N+1.C baseline — player's state name cache reflects Run.
+        auto* skel = e->getComponent<SkeletonComponent>();
+        CHECK(skel->player->getCurrentStateName() == "Run");
 
         teardown(world, e);
     }

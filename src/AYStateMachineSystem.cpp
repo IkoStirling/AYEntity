@@ -11,6 +11,14 @@
 //     its own transitions (INV-27).
 //   * activeSubState read-back — written each frame from
 //     `sm.getActiveLeafStateName()` for inspector / debug.
+//
+// P3.x刀 N+1.BC (2026-08-07) — Time-in-State Query + Per-State AnimNotify Routing:
+//   * Per-state notify routing — bridge pushes the current SM state name
+//     to the AnimationPlayer via `setCurrentStateName()` whenever a
+//     transition fires (or the state changes). The player caches this
+//     in `_currentStateNameForNotify` and writes it into every
+//     AnimNotifyRecord::fromStateName when the next tick fires a
+//     notify. INV-40..42 contracts honored.
 
 #include "AYStateMachineSystem.h"
 #include "components/AYAnimationStateMachineComponent.h"
@@ -103,6 +111,15 @@ void StateMachineSystem::onUpdate(float dt) {
         //     the new state is NOT a sub-machine entry (INV-27: sub-
         //     machine entries are owned by the child SM; the ECS bridge
         //     MUST NOT call player.play() for them — child SM drives).
+        // P3.x刀 N+1.C NEW — Per-state AnimNotify routing. Push the
+        // active state name to the player EVERY tick (cheap std::string
+        // move) so the player's cache is observable after wire-up even
+        // before the first transition. The player writes this into every
+        // AnimNotifyRecord::fromStateName on the next tick that fires a
+        // notify. The bridge push keeps SM and Player decoupled (P3.x刀
+        // N+1 lesson: composition pattern, no direct SM→Player dep).
+        skel->player->setCurrentStateName(sm.getCurrentStateName());
+
         if (sm.didTransitionThisFrame() || prevState != sm.getCurrentStateName()) {
             const auto& states = sm.getStates();
             const std::string& newStateName = sm.getCurrentStateName();
