@@ -22,8 +22,11 @@
 
 #include <components/AYHealthComponent.h>
 #include <components/AYMeshComponent.h>
+#include <components/AYOrthoCameraComponent.h>
 #include <components/AYSkeletonComponent.h>
 #include <components/AYAnimationComponent.h>
+#include <components/AYSpriteComponent.h>
+#include <components/AYTilemapComponent.h>
 #include <components/AYTransformComponent.h>
 
 namespace ayt::entity
@@ -65,5 +68,20 @@ template bool Entity::hasComponent<AnimationComponent>() const;
 template Transform* Entity::addComponent<Transform>();
 template Transform* Entity::getComponent<Transform>();
 template bool Entity::hasComponent<Transform>() const;
+
+// --- TilemapComponent (CM-3, 2026-08-11) ------------------------------------
+template TilemapComponent* Entity::addComponent<TilemapComponent>();
+template TilemapComponent* Entity::getComponent<TilemapComponent>();
+template bool Entity::hasComponent<TilemapComponent>() const;
+
+// --- SpriteComponent (CM-3, 2026-08-11) --------------------------------------
+template SpriteComponent* Entity::addComponent<SpriteComponent>();
+template SpriteComponent* Entity::getComponent<SpriteComponent>();
+template bool Entity::hasComponent<SpriteComponent>() const;
+
+// --- OrthoCameraComponent (CM-3, 2026-08-11) ---------------------------------
+template OrthoCameraComponent* Entity::addComponent<OrthoCameraComponent>();
+template OrthoCameraComponent* Entity::getComponent<OrthoCameraComponent>();
+template bool Entity::hasComponent<OrthoCameraComponent>() const;
 
 } // namespace ayt::entity

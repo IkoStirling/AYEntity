@@ -29,6 +29,14 @@ set(SOURCES
     # (after AnimationSystem@450); transitions decide which clip plays
     # next frame; AnimStateChangedEvent emitted on transition.
     src/AYStateMachineSystem.cpp
+    # CM-3 (2026-08-11) — 2D lane: ortho camera driver (405), streaming
+    # shell (430), animation-tick shell (460), tilemap render (510),
+    # sprite render (510). All five registered by bootstrapModule().
+    src/AYOrthoCameraUpdateSystem.cpp
+    src/AYTilemapStreamingSystem.cpp
+    src/AYTilemapAnimationTickSystem.cpp
+    src/AYTilemapRenderSystem.cpp
+    src/AYSpriteRenderSystem.cpp
     src/AYNetworkComponent.cpp
     # Cross-module precompile barrel — explicit template instantiation
     # declarations for Entity::addComponent<T>/getComponent<T>/hasComponent<T>

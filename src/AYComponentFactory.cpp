@@ -6,7 +6,10 @@
 #include <components/AYAnimationComponent.h>
 #include <components/AYHealthComponent.h>
 #include <components/AYMeshComponent.h>
+#include <components/AYOrthoCameraComponent.h>
 #include <components/AYSkeletonComponent.h>
+#include <components/AYSpriteComponent.h>
+#include <components/AYTilemapComponent.h>
 #include <components/AYTransformComponent.h>
 
 #include <AYSerializer.h>
@@ -82,6 +85,16 @@ const ComponentWireEntry* findEntry(const char* typeName) {
         {"HealthComponent",
          addTyped<HealthComponent>, getTyped<HealthComponent>, hasTyped<HealthComponent>,
          serializeTyped<HealthComponent>, deserializeTyped<HealthComponent>},
+        // CM-3 (2026-08-11) — 2D lane components (.ayscene wire types).
+        {"TilemapComponent",
+         addTyped<TilemapComponent>, getTyped<TilemapComponent>, hasTyped<TilemapComponent>,
+         serializeTyped<TilemapComponent>, deserializeTyped<TilemapComponent>},
+        {"SpriteComponent",
+         addTyped<SpriteComponent>, getTyped<SpriteComponent>, hasTyped<SpriteComponent>,
+         serializeTyped<SpriteComponent>, deserializeTyped<SpriteComponent>},
+        {"OrthoCameraComponent",
+         addTyped<OrthoCameraComponent>, getTyped<OrthoCameraComponent>, hasTyped<OrthoCameraComponent>,
+         serializeTyped<OrthoCameraComponent>, deserializeTyped<OrthoCameraComponent>},
     };
 
     for (const ComponentWireEntry& entry : kEntries) {

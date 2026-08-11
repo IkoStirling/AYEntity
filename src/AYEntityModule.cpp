@@ -1,7 +1,12 @@
 #include "AYEntityModule.h"
 #include "AYAnimationSystem.h"
+#include "AYOrthoCameraUpdateSystem.h"
 #include "AYSkinnedMeshRenderSystem.h"
+#include "AYSpriteRenderSystem.h"
 #include "AYStateMachineSystem.h"
+#include "AYTilemapAnimationTickSystem.h"
+#include "AYTilemapRenderSystem.h"
+#include "AYTilemapStreamingSystem.h"
 #include "AYWorld.h"
 
 #include <cstdio>
@@ -70,12 +75,41 @@ void bootstrapModule()
     if (!hasSystemNamed(world, "RenderSystem")) {
         registerRenderSystem();
     }
+    // CM-3 (2026-08-11): 2D lane. Registration order here IS the
+    // scene-builder chain order (setSceneBuilder appends): the camera
+    // builder (405) must run before the render builders (510) so the
+    // ortho view/proj is set when the 2D systems submit. The 430/460
+    // shells keep the §3.3 priority table authoritative.
+    register2DSystems();
     bootstrapEntityCore();
 
     static bool loggedOnce = false;
     if (!loggedOnce) {
         std::fprintf(stderr, "[AYEntity] module bootstrap complete\n");
         loggedOnce = true;
+    }
+}
+
+void register2DSystems()
+{
+    World& world = World::instance();
+    // GL-01: same idempotent guard style as bootstrapModule() — each
+    // register* is also individually idempotent (no internal guards,
+    // the caller decides).
+    if (!hasSystemNamed(world, "OrthoCameraUpdateSystem")) {
+        registerOrthoCameraUpdateSystem();
+    }
+    if (!hasSystemNamed(world, "TilemapStreamingSystem")) {
+        registerTilemapStreamingSystem();
+    }
+    if (!hasSystemNamed(world, "TilemapAnimationTickSystem")) {
+        registerTilemapAnimationTickSystem();
+    }
+    if (!hasSystemNamed(world, "TilemapRenderSystem")) {
+        registerTilemapRenderSystem();
+    }
+    if (!hasSystemNamed(world, "SpriteRenderSystem")) {
+        registerSpriteRenderSystem();
     }
 }
 

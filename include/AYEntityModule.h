@@ -27,4 +27,16 @@ void registerSkinnedMeshRenderSystem();
 // call on AnimationPlayer next frame.
 void registerStateMachineSystem();
 
+// CM-3 (2026-08-11): 2D lane — ortho camera driver (405), streaming
+// shell (430), animation-tick shell (460), tilemap render (510),
+// sprite render (510). register2DSystems() registers all five (the
+// bootstrapModule() path); individual registers exist for hosts that
+// need explicit control over registration order.
+void registerOrthoCameraUpdateSystem();
+void registerTilemapStreamingSystem();
+void registerTilemapAnimationTickSystem();
+void registerTilemapRenderSystem();
+void registerSpriteRenderSystem();
+void register2DSystems();
+
 } // namespace ayt::entity
