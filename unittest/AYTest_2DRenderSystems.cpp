@@ -27,6 +27,7 @@
 #include <AYOrthoCameraUpdateSystem.h>
 #include <AYRendererSubSystem.h>
 #include <AYSpriteRenderSystem.h>
+#include <AYSubSystemRegistry.h>
 #include <AYTilemapAnimationTickSystem.h>
 #include <AYTilemapRenderSystem.h>
 #include <AYTilemapStreamingSystem.h>
@@ -111,6 +112,33 @@ bool shadercAvailable()
     }
     struct stat st;
     return ::stat(AY_SHADER_SHADERC_HINT, &st) == 0;
+}
+
+// The render systems resolve the renderer through the process-global
+// SubSystemRegistry (the production seam — demos/editor register a
+// RendererSubSystem there; a stack instance is invisible to them and
+// the systems early-return with zero items). The closed-loop cases
+// must therefore register one for real: the registry owns it, and
+// unregistering deletes it. initialize() failure unregisters so the
+// registry never holds a half-built subsystem.
+ayt::render::RendererSubSystem* registerTestRenderer()
+{
+    ayt::render::RendererSubSystem::setWindowProvider({});
+    ayt::render::RendererSubSystem::setBootstrapBackend(ayt::render::Backend::Noop);
+    ayt::render::RendererSubSystem::setBootstrapWindow(&g_sentinelWindowHandle,
+                                                       800, 600);
+    auto* rss = new ayt::render::RendererSubSystem();
+    ayt::game::SubSystemRegistry::instance().registerSubSystem(rss);
+    if (!rss->initialize()) {
+        ayt::game::SubSystemRegistry::instance().unregisterSubSystem("Renderer");
+        return nullptr;
+    }
+    return rss;
+}
+
+void unregisterTestRenderer()
+{
+    ayt::game::SubSystemRegistry::instance().unregisterSubSystem("Renderer");
 }
 
 // Write a real .aytex atlas (8x8 checkerboard) + a real .aytilemap
@@ -231,12 +259,11 @@ TEST_CASE(cm3_tilemap_render_closed_loop)
     std::string texPath, mapPath;
     CHECK(bakeAssets(texPath, mapPath));
 
-    ayt::render::RendererSubSystem::setWindowProvider({});
-    ayt::render::RendererSubSystem::setBootstrapBackend(ayt::render::Backend::Noop);
-    ayt::render::RendererSubSystem::setBootstrapWindow(&g_sentinelWindowHandle,
-                                                       800, 600);
-    ayt::render::RendererSubSystem rss;
-    CHECK(rss.initialize());
+    auto* rss = registerTestRenderer();
+    CHECK_NOT_NULL(rss);
+    if (rss == nullptr) {
+        return;
+    }
 
     World::instance().initialize();
     Entity* entity = World::instance().createEntity();
@@ -277,12 +304,13 @@ TEST_CASE(cm3_tilemap_render_closed_loop)
 
     // Full pipeline: beginFrame/render/endFrame must submit exactly
     // the 6 2D items (no double-submit — Opaque blend lane only).
-    rss.renderer().beginFrame({});
-    rss.renderer().render(scene);
-    rss.renderer().endFrame();
-    CHECK(rss.renderer().getFrameStats().drawCalls == 6u);
+    rss->renderer().beginFrame({});
+    rss->renderer().render(scene);
+    rss->renderer().endFrame();
+    CHECK(rss->renderer().getFrameStats().drawCalls == 6u);
 
-    rss.shutdown();
+    rss->shutdown();
+    unregisterTestRenderer();
     World::instance().shutdown();
     removeFile(texPath);
     removeFile(mapPath);
@@ -299,12 +327,11 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     std::string texPath, mapPath;
     CHECK(bakeAssets(texPath, mapPath));
 
-    ayt::render::RendererSubSystem::setWindowProvider({});
-    ayt::render::RendererSubSystem::setBootstrapBackend(ayt::render::Backend::Noop);
-    ayt::render::RendererSubSystem::setBootstrapWindow(&g_sentinelWindowHandle,
-                                                       800, 600);
-    ayt::render::RendererSubSystem rss;
-    CHECK(rss.initialize());
+    auto* rss = registerTestRenderer();
+    CHECK_NOT_NULL(rss);
+    if (rss == nullptr) {
+        return;
+    }
 
     World::instance().initialize();
 
@@ -361,7 +388,8 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
         CHECK_NOT_NULL(item.payload);
     }
 
-    rss.shutdown();
+    rss->shutdown();
+    unregisterTestRenderer();
     World::instance().shutdown();
     removeFile(texPath);
     removeFile(mapPath);
@@ -373,12 +401,11 @@ TEST_CASE(cm3_tilemap_lazy_load_failure_skips)
     std::string texPath, mapPath;
     CHECK(bakeAssets(texPath, mapPath));
 
-    ayt::render::RendererSubSystem::setWindowProvider({});
-    ayt::render::RendererSubSystem::setBootstrapBackend(ayt::render::Backend::Noop);
-    ayt::render::RendererSubSystem::setBootstrapWindow(&g_sentinelWindowHandle,
-                                                       800, 600);
-    ayt::render::RendererSubSystem rss;
-    CHECK(rss.initialize());
+    auto* rss = registerTestRenderer();
+    CHECK_NOT_NULL(rss);
+    if (rss == nullptr) {
+        return;
+    }
 
     World::instance().initialize();
     Entity* entity = World::instance().createEntity();
@@ -398,7 +425,8 @@ TEST_CASE(cm3_tilemap_lazy_load_failure_skips)
     // Load fails => marker skip => no items, no crash.
     CHECK_INT_EQ(static_cast<int>(scene.items().size()), 0);
 
-    rss.shutdown();
+    rss->shutdown();
+    unregisterTestRenderer();
     World::instance().shutdown();
     removeFile(texPath);
     removeFile(mapPath);
@@ -410,12 +438,11 @@ TEST_CASE(cm3_sprite_texture_load_failure_skips)
     std::string texPath, mapPath;
     CHECK(bakeAssets(texPath, mapPath));
 
-    ayt::render::RendererSubSystem::setWindowProvider({});
-    ayt::render::RendererSubSystem::setBootstrapBackend(ayt::render::Backend::Noop);
-    ayt::render::RendererSubSystem::setBootstrapWindow(&g_sentinelWindowHandle,
-                                                       800, 600);
-    ayt::render::RendererSubSystem rss;
-    CHECK(rss.initialize());
+    auto* rss = registerTestRenderer();
+    CHECK_NOT_NULL(rss);
+    if (rss == nullptr) {
+        return;
+    }
 
     World::instance().initialize();
     Entity* entity = World::instance().createEntity();
@@ -432,7 +459,8 @@ TEST_CASE(cm3_sprite_texture_load_failure_skips)
 
     CHECK_INT_EQ(static_cast<int>(scene.items().size()), 0);
 
-    rss.shutdown();
+    rss->shutdown();
+    unregisterTestRenderer();
     World::instance().shutdown();
     removeFile(texPath);
     removeFile(mapPath);

@@ -138,7 +138,11 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                              "(shaderc missing?)\n");
             }
         }
-        if (!resources.material.isValid()) {
+        // Material validity alone is not enough: createMaterialFromPhoskia
+        // only compiles the shader, so a sprite whose texture failed to
+        // load would submit an item with no albedo. A broken texture
+        // must produce zero items (CM-3 lazy-load failure contract).
+        if (!resources.texture.isValid() || !resources.material.isValid()) {
             continue;
         }
 

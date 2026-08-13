@@ -19,6 +19,7 @@
 #include "AYEntity.h"
 #include "AYEntityModule.h"
 #include "AYRendererSubSystem.h"
+#include "AYTilemapAnimationRuntime.h"
 #include "AYTilemapShaderSources.h"
 #include "AYWorld.h"
 
@@ -149,9 +150,25 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             }
         }
 
-        if (!resources.tilemap || !resources.material.isValid()) {
+        // Material validity alone is not enough: createMaterialFromPhoskia
+        // only compiles the shader, so a tilemap whose atlas texture
+        // failed to load would submit items with no albedo. A broken
+        // texture must produce zero items (CM-3 lazy-load failure
+        // contract). A texture-less tilemap (empty atlasTexturePath)
+        // already fell through via the material gate — same outcome.
+        if (!resources.tilemap || !resources.texture.isValid()
+            || !resources.material.isValid()) {
             continue;
         }
+
+        // CM-5: animated source tile ids resolve through the runtime.
+        // The tick system (460) refreshes resolved[] every frame before
+        // this builder runs (510, same thread — the lane runs with
+        // setRenderThreadEnabled(false)). A path with no runtime entry
+        // (tick system not registered, or load failed) renders fully
+        // static — the AY2D "no table == static" contract.
+        TilemapAnimationRuntimeEntry* animEntry =
+            TilemapAnimationRuntime::instance().find(tm->tilemapPath);
 
         const uint32_t cols = resources.tilemap->getCols();
         const uint32_t rows = resources.tilemap->getRows();
@@ -175,8 +192,12 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
         for (uint32_t row = 0; row < rows; ++row) {
             for (uint32_t col = 0; col < cols; ++col) {
-                const uint32_t tileId = tileIdAt(*resources.tilemap, col, row);
-                const TileUvQuad uv   = tileUvQuad(tileId, grid);
+                uint32_t tileId = tileIdAt(*resources.tilemap, col, row);
+                if (animEntry != nullptr) {
+                    tileId = TilemapAnimationRuntime::resolve(*animEntry,
+                                                              tileId);
+                }
+                const TileUvQuad uv = tileUvQuad(tileId, grid);
 
                 TileEntry entry;
                 entry.payload.sourceRectMin = ayt::math::FVector2(uv.uMin, uv.vMin);

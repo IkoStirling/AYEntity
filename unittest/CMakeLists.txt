@@ -30,6 +30,10 @@ set(SOURCES
     # buildRenderScene closed loop (sticky-Noop) + cull + lazy-load
     # failure + draw-order pin.
     AYTest_2DRenderSystems.cpp
+    # CM-5 (2026-08-12) — animation table runtime: cross-assert vs the
+    # real ayt::ay2d tick/resolve on a shared deterministic case + the
+    # sticky-Noop render closed loop (animated tile payload flips frame).
+    AYTest_TilemapAnimationRuntime.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -60,6 +64,53 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     AYCore
     AYGameLoop
     AYSerializer
+    # CM-5 (2026-08-12): AY2D static lib — test-only, for the
+    # cross-assert against the real ayt::ay2d::tickTilemapAnimation /
+    # resolveAnimatedTileId (AY2D links only AYMath + AYLog, no cycle;
+    # the AYEntity lib itself never links AY2D — dependency lock stays
+    # intact). AY2D's include dir is already on the test include path.
+    AY2D
+)
+
+# CM-5 (2026-08-12): shaderc hints — the sticky-Noop render closed loop
+# (cm5_tilemap_render_animation_closed_loop, and the CM-3 siblings in
+# AYTest_2DRenderSystems.cpp) compiles the 2D shader at runtime through
+# shaderc; without the hint the cases SKIP. Mirror of the AY2D/demo
+# skeleton (do not diverge): SHADERC = bgfx-install shaderc.exe,
+# BGFX_COMMON/SRC = bgfx examples/common + src for common.sh includes.
+set(AY_SHADER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../AYShader")
+if(NOT DEFINED AY_SHADER_SHADERC_PATH)
+    if(WIN32)
+        set(_ays_shaderc_name "shaderc.exe")
+    else()
+        set(_ays_shaderc_name "shaderc")
+    endif()
+    set(AY_SHADER_SHADERC_PATH
+        "${AY_SHADER_ROOT}/thirdParty/bgfx-install/debug/bin/${_ays_shaderc_name}")
+endif()
+if(NOT DEFINED AY_SHADER_BGFX_COMMON_DIR)
+    set(_ays_bgfx_search
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../thirdparty/bgfx/examples/common"
+    )
+    set(AY_SHADER_BGFX_COMMON_DIR "")
+    foreach(_dir IN LISTS _ays_bgfx_search)
+        if(EXISTS "${_dir}/common.sh")
+            set(AY_SHADER_BGFX_COMMON_DIR "${_dir}")
+            break()
+        endif()
+    endforeach()
+endif()
+if(NOT DEFINED AY_SHADER_BGFX_SRC_DIR AND AY_SHADER_BGFX_COMMON_DIR)
+    set(AY_SHADER_BGFX_SRC_DIR "${AY_SHADER_BGFX_COMMON_DIR}/../../src")
+endif()
+get_filename_component(AY_SHADER_SHADERC_PATH "${AY_SHADER_SHADERC_PATH}" ABSOLUTE)
+get_filename_component(AY_SHADER_BGFX_COMMON_DIR "${AY_SHADER_BGFX_COMMON_DIR}" ABSOLUTE)
+get_filename_component(AY_SHADER_BGFX_SRC_DIR "${AY_SHADER_BGFX_SRC_DIR}" ABSOLUTE)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    AY_SHADER_SHADERC_HINT="${AY_SHADER_SHADERC_PATH}"
+    AY_SHADER_BGFX_COMMON_HINT="${AY_SHADER_BGFX_COMMON_DIR}"
+    AY_SHADER_BGFX_SRC_HINT="${AY_SHADER_BGFX_SRC_DIR}"
 )
 
 target_compile_options(${PROJECT_NAME} PRIVATE

@@ -34,6 +34,10 @@ set(SOURCES
     # sprite render (510). All five registered by bootstrapModule().
     src/AYOrthoCameraUpdateSystem.cpp
     src/AYTilemapStreamingSystem.cpp
+    # CM-5 (2026-08-12) — per-path animation table mirror (tick + resolve
+    # + resolve buffer). Driven by TilemapAnimationTickSystem (460),
+    # consumed by TilemapRenderSystem (510).
+    src/AYTilemapAnimationRuntime.cpp
     src/AYTilemapAnimationTickSystem.cpp
     src/AYTilemapRenderSystem.cpp
     src/AYSpriteRenderSystem.cpp
