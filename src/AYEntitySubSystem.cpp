@@ -26,17 +26,24 @@ public:
     }
 
     bool initialize() override {
-        World::instance().initialize();
+        // Own only the process fallback. Scene Worlds are initialized by
+        // Scene::Impl; do not clear an already-active Scene redirect here
+        // (Application / SceneManager may setCurrent before GameLoop init).
+        World::processWorld().initialize();
         ::printf("[Entity] Initialized\n");
         return true;
     }
 
     void shutdown() override {
-        World::instance().shutdown();
+        // Drop Scene redirect, then shut down the process fallback only.
+        // Scene RAII owns Scene World teardown.
+        World::setActiveWorld(nullptr);
+        World::processWorld().shutdown();
         ::printf("[Entity] Shutdown\n");
     }
 
     void update(float dt) override {
+        // Redirects to Scene world when SceneManager::setCurrent is active.
         World::instance().update(dt);
     }
 

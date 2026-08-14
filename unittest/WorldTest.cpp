@@ -11,9 +11,24 @@ TEST_SUITE(World)
 
 TEST_CASE(singleton)
 {
+    World::setActiveWorld(nullptr);
     World& w1 = World::instance();
     World& w2 = World::instance();
     CHECK_TRUE(&w1 == &w2);
+    CHECK_TRUE(&w1 == &World::processWorld());
+}
+
+TEST_CASE(active_world_redirect)
+{
+    World::setActiveWorld(nullptr);
+    CHECK(World::activeWorld() == nullptr);
+    CHECK(&World::instance() == &World::processWorld());
+
+    // Scene-owned Worlds use private ctor; redirect API is covered by
+    // AYScene SceneManager tests. Here only clear/restore behavior.
+    World::setActiveWorld(&World::processWorld());
+    CHECK(World::activeWorld() == &World::processWorld());
+    World::setActiveWorld(nullptr);
 }
 
 TEST_CASE(initialize_shutdown)

@@ -2,21 +2,53 @@
 
 #include <AYWorld.h>
 #include <AYEntityImpl.h>
-#include <cstdio>
 #include <algorithm>
+#include <cstdio>
+#include <cstring>
 
 namespace ayt::entity
 {
 
+namespace {
+
+World* g_activeWorld = nullptr;
+
+} // namespace
+
 World::World() = default;
 
 World::~World() {
+    // If this World was still the active redirect target (e.g. Scene deleted
+    // without SceneManager::setCurrent first), drop the dangling pointer.
+    if (g_activeWorld == this) {
+        g_activeWorld = nullptr;
+    }
     shutdown();
 }
 
+World& World::processWorld() {
+    // MSVC cannot emit a function-local `static World` when the default
+    // ctor is private (helper is outside the class). Heap singleton is
+    // equivalent for the process-wide World.
+    static World* world = nullptr;
+    if (world == nullptr) {
+        world = new World();
+    }
+    return *world;
+}
+
 World& World::instance() {
-    static World world;
-    return world;
+    return g_activeWorld ? *g_activeWorld : processWorld();
+}
+
+void World::setActiveWorld(World* world) noexcept
+{
+    g_activeWorld = world;
+}
+
+World* World::activeWorld() noexcept
+{
+    return g_activeWorld;
 }
 
 bool World::initialize() {
@@ -49,7 +81,11 @@ void World::shutdown() {
     _initialized = false;
     _systemsStarted = false;
 
-    EntityHandlePool::instance().reset();
+    // Shared EntityHandlePool must not be wiped by Scene-owned Worlds —
+    // another World (fallback or Edit) may still hold live handles (LM-1).
+    if (this == &processWorld()) {
+        EntityHandlePool::instance().reset();
+    }
 
     ::printf("[World] Shutdown\n");
 }

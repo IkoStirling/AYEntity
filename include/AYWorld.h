@@ -29,7 +29,19 @@ class Query;
 
 class World {
 public:
+    /// Process fallback World (Meyers). When an active Scene World is set via
+    /// `setActiveWorld`, `instance()` redirects there so EntitySubSystem /
+    /// `bootstrapModule` / `Entity::create` all target the same sim authority.
     static World& instance();
+
+    /// Always the process Meyers World (never redirected). Used by
+    /// EntitySubSystem initialize/shutdown so Scene-owned Worlds stay RAII.
+    static World& processWorld();
+
+    /// Redirect `instance()` to `world`, or clear redirect with nullptr
+    /// (falls back to `processWorld()`). SceneManager::setCurrent owns this.
+    static void setActiveWorld(World* world) noexcept;
+    static World* activeWorld() noexcept;
 
     bool initialize();
     void shutdown();
