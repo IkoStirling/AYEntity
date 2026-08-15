@@ -133,4 +133,57 @@ TEST_CASE(component_factory_by_name_roundtrip)
     World::instance().shutdown();
 }
 
+namespace {
+int g_sceneMigSteps = 0;
+bool migrateScene1To2(uint32_t from, uint32_t to)
+{
+    if (from != 1 || to != 2) {
+        return false;
+    }
+    ++g_sceneMigSteps;
+    return true;
+}
+} // namespace
+
+TEST_CASE(scene_schema_migration_e2e_v1_to_v2)
+{
+    // Envelope E2E: older __schemaVersion=1 file runs registered 1→2 step
+    // before entities are materialized (kSceneSchemaVersion == 2).
+    g_sceneMigSteps = 0;
+    registerSceneSchemaMigration(1, 2, migrateScene1To2);
+
+    World::instance().initialize();
+    registerEntityComponents();
+
+    const char* path = "test_scene_migrate_v1.ayscene";
+    {
+        FILE* f = std::fopen(path, "wb");
+        CHECK_NOT_NULL(f);
+        const char* json =
+            "{\n"
+            "  \"__schemaVersion\": 1,\n"
+            "  \"entities\": [\n"
+            "    {\n"
+            "      \"id\": 1,\n"
+            "      \"name\": \"Migrated\",\n"
+            "      \"components\": []\n"
+            "    }\n"
+            "  ]\n"
+            "}\n";
+        std::fputs(json, f);
+        std::fclose(f);
+    }
+
+    ayt::serializer::SerializeError err;
+    CHECK(loadScene(World::instance(), path, &err));
+    CHECK(err.ok());
+    CHECK_INT_EQ(g_sceneMigSteps, 1);
+
+    Entity* loaded = World::instance().findEntity("Migrated");
+    CHECK_NOT_NULL(loaded);
+
+    std::remove(path);
+    World::instance().shutdown();
+}
+
 TEST_SUITE_END

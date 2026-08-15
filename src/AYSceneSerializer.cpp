@@ -8,7 +8,9 @@
 
 #include <AYSerializer.h>
 
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ayt::entity
@@ -18,14 +20,44 @@ namespace
 
 constexpr const char* kTypeField = "$type";
 
-void clearWorldEntities(World& world) {
+struct SceneMigKey {
+    uint32_t from = 0;
+    uint32_t to = 0;
+    bool operator==(const SceneMigKey& o) const
+    {
+        return from == o.from && to == o.to;
+    }
+};
+
+struct SceneMigKeyHash {
+    size_t operator()(const SceneMigKey& k) const
+    {
+        return (static_cast<size_t>(k.from) << 32) ^ static_cast<size_t>(k.to);
+    }
+};
+
+std::mutex& sceneMigMu()
+{
+    static std::mutex m;
+    return m;
+}
+
+std::unordered_map<SceneMigKey, SceneSchemaMigrateFn, SceneMigKeyHash>& sceneMigMap()
+{
+    static std::unordered_map<SceneMigKey, SceneSchemaMigrateFn, SceneMigKeyHash> map;
+    return map;
+}
+
+void clearWorldEntities(World& world)
+{
     const std::vector<Entity*> entities = world.getAllEntities();
     for (Entity* entity : entities) {
         world.destroyEntity(entity);
     }
 }
 
-bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world) {
+bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world)
+{
     s.beginObject(nullptr);
     Int32 schemaVersion = static_cast<Int32>(kSceneSchemaVersion);
     s.field(kSceneSchemaVersionField, schemaVersion);
@@ -44,7 +76,8 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world) {
 
         s.beginArray("components");
         for (IComponent* component : entity->getComponents()) {
-            if (component == nullptr || !ComponentFactory::isSceneSerializable(component->getName())) {
+            if (component == nullptr
+                || !ComponentFactory::isSceneSerializable(component->getName())) {
                 continue;
             }
 
@@ -64,14 +97,15 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world) {
 }
 
 bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
-                       ayt::serializer::SerializeError* outError) {
+                       ayt::serializer::SerializeError* outError)
+{
     registerEntityComponents();
 
     s.beginObject(nullptr);
 
     Int32 wireVersion = 0;
-    if (static_cast<ayt::serializer::TokenType>(s.peekFieldTokenType(kSceneSchemaVersionField)) ==
-        ayt::serializer::TokenType::Field) {
+    if (static_cast<ayt::serializer::TokenType>(s.peekFieldTokenType(kSceneSchemaVersionField))
+        == ayt::serializer::TokenType::Field) {
         s.field(kSceneSchemaVersionField, wireVersion);
     }
     if (wireVersion <= 0) {
@@ -80,6 +114,15 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
     if (static_cast<uint32_t>(wireVersion) > kSceneSchemaVersion) {
         s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
                       "unsupported scene schema version");
+        if (outError) {
+            *outError = s.lastError();
+        }
+        s.endObject();
+        return false;
+    }
+    if (!migrateSceneSchemaToCurrent(static_cast<uint32_t>(wireVersion))) {
+        s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
+                      "scene schema migration failed");
         if (outError) {
             *outError = s.lastError();
         }
@@ -123,10 +166,12 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                 s.reportError(ayt::serializer::SerializeError::Code::UnknownType,
                               "component entry missing $type");
             } else {
-                IComponent* component = ComponentFactory::addComponent(*entity, typeName.c_str());
+                IComponent* component =
+                    ComponentFactory::addComponent(*entity, typeName.c_str());
                 if (component == nullptr) {
                     s.reportError(ayt::serializer::SerializeError::Code::UnknownType,
-                                  std::string("unknown scene component type: \"") + typeName + '"');
+                                  std::string("unknown scene component type: \"") + typeName
+                                      + '"');
                 } else {
                     ComponentFactory::deserializeComponent(s, typeName.c_str(), *component);
                 }
@@ -152,7 +197,42 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
 
 } // namespace
 
-bool saveScene(const World& world, const std::string& path, ayt::serializer::Format format) {
+void registerSceneSchemaMigration(uint32_t fromVersion, uint32_t toVersion,
+                                  SceneSchemaMigrateFn fn)
+{
+    if (!fn || toVersion != fromVersion + 1) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(sceneMigMu());
+    sceneMigMap()[{fromVersion, toVersion}] = fn;
+}
+
+bool migrateSceneSchemaToCurrent(uint32_t loadedVersion)
+{
+    if (loadedVersion == kSceneSchemaVersion) {
+        return true;
+    }
+    if (loadedVersion > kSceneSchemaVersion) {
+        return false;
+    }
+    for (uint32_t v = loadedVersion; v < kSceneSchemaVersion; ++v) {
+        SceneSchemaMigrateFn fn = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(sceneMigMu());
+            auto it = sceneMigMap().find({v, v + 1});
+            if (it != sceneMigMap().end()) {
+                fn = it->second;
+            }
+        }
+        if (fn && !fn(v, v + 1)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool saveScene(const World& world, const std::string& path, ayt::serializer::Format format)
+{
     registerEntityComponents();
 
     auto serializer = ayt::serializer::createSerializer(format, true);
@@ -166,7 +246,8 @@ bool saveScene(const World& world, const std::string& path, ayt::serializer::For
     return serializer->saveToFile(path);
 }
 
-bool loadScene(World& world, const std::string& path, ayt::serializer::SerializeError* outError) {
+bool loadScene(World& world, const std::string& path, ayt::serializer::SerializeError* outError)
+{
     auto serializer = ayt::serializer::createSerializer(ayt::serializer::Format::Json);
     if (!serializer) {
         if (outError) {
