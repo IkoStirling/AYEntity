@@ -1,6 +1,6 @@
 // SparseSetTest.cpp - SparseSet 存储测试
 
-#include <AYSparseSet.h>
+#include <AYEntity/SparseSet.h>
 #include <AYTest.h>
 
 using namespace ayt::entity;

@@ -1,12 +1,12 @@
 #include <AYEntity.h>
-#include <AYSceneSerializer.h>
-#include <AYComponentFactory.h>
-#include <AYEntityModule.h>
-#include <components/AYAnimationComponent.h>
-#include <components/AYMeshComponent.h>
-#include <components/AYSkeletonComponent.h>
-#include <components/AYTransformComponent.h>
-#include <components/AYHealthComponent.h>
+#include <AYEntity/SceneSerializer.h>
+#include <AYEntity/ComponentFactory.h>
+#include <AYEntity/EntityModule.h>
+#include <AYEntity/components/AnimationComponent.h>
+#include <AYEntity/components/MeshComponent.h>
+#include <AYEntity/components/SkeletonComponent.h>
+#include <AYEntity/components/TransformComponent.h>
+#include <AYEntity/components/HealthComponent.h>
 #include <AYTest.h>
 
 #include <cstring>

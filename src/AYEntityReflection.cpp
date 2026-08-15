@@ -4,21 +4,21 @@
 // headers). Headers are included from many TUs via AYEntity.h; duplicate
 // static finalizers corrupt the CRT debug heap.
 
-#include "AYEntityModule.h"
-#include "AYWorld.h"
+#include "AYEntity/EntityModule.h"
+#include "AYEntity/World.h"
 
-#include "components/AYAnimationComponent.h"
-#include "components/AYAnimationStateMachineComponent.h"
-#include "components/AYHealthComponent.h"
-#include "components/AYMeshComponent.h"
-#include "components/AYNetworkComponent.h"
-#include "components/AYOrthoCameraComponent.h"
-#include "components/AYRigidBodyComponent.h"
-#include "components/AYScriptComponent.h"
-#include "components/AYSkeletonComponent.h"
-#include "components/AYSpriteComponent.h"
-#include "components/AYTilemapComponent.h"
-#include "components/AYTransformComponent.h"
+#include "AYEntity/components/AnimationComponent.h"
+#include "AYEntity/components/AnimationStateMachineComponent.h"
+#include "AYEntity/components/HealthComponent.h"
+#include "AYEntity/components/MeshComponent.h"
+#include "AYEntity/components/NetworkComponent.h"
+#include "AYEntity/components/OrthoCameraComponent.h"
+#include "AYEntity/components/RigidBodyComponent.h"
+#include "AYEntity/components/ScriptComponent.h"
+#include "AYEntity/components/SkeletonComponent.h"
+#include "AYEntity/components/SpriteComponent.h"
+#include "AYEntity/components/TilemapComponent.h"
+#include "AYEntity/components/TransformComponent.h"
 
 namespace ayt::entity
 {

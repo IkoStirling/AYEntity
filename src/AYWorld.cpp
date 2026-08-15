@@ -1,7 +1,7 @@
 // AYWorld.cpp - World implementation
 
-#include <AYWorld.h>
-#include <AYEntityImpl.h>
+#include <AYEntity/World.h>
+#include <AYEntity/EntityImpl.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>

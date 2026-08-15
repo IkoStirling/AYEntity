@@ -8,29 +8,29 @@
 //   - .ayscene save/load round-trip through the ComponentFactory
 //     wire table (a missing kEntries[] row would silently drop
 //     components on load — this case catches it).
-//   - math cross-asserts: AY2DUvMath.h (tileUvQuad / cellCenterWorld)
+//   - math cross-asserts: AYEntity/2DUvMath.h (tileUvQuad / cellCenterWorld)
 //     and OrthoCameraComponent::viewMatrix()/projectionMatrix() are
 //     mirrored from AY2D — every value is compared against the REAL
 //     header-only AY2D helpers (zero link dependency, drift breaks
 //     this build).
 
 #include <AYEntity.h>
-#include <AYEntityImpl.h>
-#include <AYEntityModule.h>
-#include <AYWorld.h>
-#include <AYComponentFactory.h>
-#include <AYSceneSerializer.h>
+#include <AYEntity/EntityImpl.h>
+#include <AYEntity/EntityModule.h>
+#include <AYEntity/World.h>
+#include <AYEntity/ComponentFactory.h>
+#include <AYEntity/SceneSerializer.h>
 
-#include <AY2DUvMath.h>
-#include <components/AYOrthoCameraComponent.h>
-#include <components/AYSpriteComponent.h>
-#include <components/AYTilemapComponent.h>
+#include <AYEntity/2DUvMath.h>
+#include <AYEntity/components/OrthoCameraComponent.h>
+#include <AYEntity/components/SpriteComponent.h>
+#include <AYEntity/components/TilemapComponent.h>
 
 // AY2D header-only math for cross-asserts (test-only include dir).
-#include <AYAtlasDesc.h>
-#include <AYOrthographicCamera.h>
-#include <AYTileMath.h>
-#include <AYTileSamplerUV.h>
+#include <AY2D/AtlasDesc.h>
+#include <AY2D/OrthographicCamera.h>
+#include <AY2D/TileMath.h>
+#include <AY2D/TileSamplerUV.h>
 
 #include <AYMath/MathTypes.h>
 #include <AYTest.h>

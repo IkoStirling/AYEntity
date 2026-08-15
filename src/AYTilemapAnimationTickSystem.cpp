@@ -5,18 +5,18 @@
 // entity on the same path in the same frame (deltaUs == 0), so shared
 // tilemaps advance once regardless of entity count.
 
-#include "AYTilemapAnimationTickSystem.h"
+#include "AYEntity/TilemapAnimationTickSystem.h"
 
 #include "AYEntity.h"
-#include "AYTilemapAnimationRuntime.h"
-#include "AYWorld.h"
+#include "AYEntity/TilemapAnimationRuntime.h"
+#include "AYEntity/World.h"
 
-#include "components/AYTilemapComponent.h"
-#include "components/AYTransformComponent.h"
+#include "AYEntity/components/TilemapComponent.h"
+#include "AYEntity/components/TransformComponent.h"
 
-#include <assetsDefs/IAYTilemap.h>
+#include <AYResource/assetsDefs/ITilemap.h>
 #include <AYCore.h>
-#include <AYResourceManager.h>
+#include <AYResource/ResourceManager.h>
 
 namespace ayt::entity
 {

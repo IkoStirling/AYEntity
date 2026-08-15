@@ -1,17 +1,17 @@
 #pragma once
 // AYEntity.h - Entity and Query template implementations + entry point
 
-#include <IAYEntity.h>
-#include <AYSparseSet.h>
-#include <AYEntityHandle.h>
-#include <AYEntityImpl.h>
-#include <AYWorld.h>
-#include <components/AYTransformComponent.h>
-#include <components/AYHealthComponent.h>
-#include <components/AYMeshComponent.h>
-#include <components/AYRigidBodyComponent.h>
-#include <components/AYScriptComponent.h>
-#include <components/AYNetworkComponent.h>
+#include <AYEntity/IEntity.h>
+#include <AYEntity/SparseSet.h>
+#include <AYEntity/EntityHandle.h>
+#include <AYEntity/EntityImpl.h>
+#include <AYEntity/World.h>
+#include <AYEntity/components/TransformComponent.h>
+#include <AYEntity/components/HealthComponent.h>
+#include <AYEntity/components/MeshComponent.h>
+#include <AYEntity/components/RigidBodyComponent.h>
+#include <AYEntity/components/ScriptComponent.h>
+#include <AYEntity/components/NetworkComponent.h>
 #include <vector>
 
 #ifdef AY_ENTITY_PRECOMPILE_COMPONENTS

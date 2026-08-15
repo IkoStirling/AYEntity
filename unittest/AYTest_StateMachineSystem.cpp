@@ -17,26 +17,26 @@
 // (mirrors AYTest_SkeletonMaskBridge.cpp).
 
 #include <AYEntity.h>
-#include <AYEntityModule.h>
-#include <AYWorld.h>
+#include <AYEntity/EntityModule.h>
+#include <AYEntity/World.h>
 
-#include <AYAnimationSystem.h>
-#include <AYStateMachineSystem.h>
-#include <components/AYAnimationComponent.h>
-#include <components/AYAnimationStateMachineComponent.h>
-#include <components/AYSkeletonComponent.h>
-#include <components/AYTransformComponent.h>
+#include <AYEntity/AnimationSystem.h>
+#include <AYEntity/StateMachineSystem.h>
+#include <AYEntity/components/AnimationComponent.h>
+#include <AYEntity/components/AnimationStateMachineComponent.h>
+#include <AYEntity/components/SkeletonComponent.h>
+#include <AYEntity/components/TransformComponent.h>
 
-#include <ayanimation/AnimationPlayer.h>
-#include <ayanimation/StateMachine.h>
-#include <ayanimation/AnimStateChangedEvent.h>
+#include <AYAnimation/AnimationPlayer.h>
+#include <AYAnimation/StateMachine.h>
+#include <AYAnimation/AnimStateChangedEvent.h>
 
-#include <assetsImpl/AYSkeleton.h>
+#include <AYResource/assetsImpl/Skeleton.h>
 #include <AYMath/MathTypes.h>
 
 #include <AYTest.h>
-#include <AYResourceManager.h>
-#include <ayevent/EventBus.h>
+#include <AYResource/ResourceManager.h>
+#include <AYEventSystem/EventBus.h>
 
 #include <cstdio>
 #include <memory>

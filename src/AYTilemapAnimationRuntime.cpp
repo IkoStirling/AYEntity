@@ -1,7 +1,7 @@
 // AYTilemapAnimationRuntime.cpp — CM-5 (2026-08-12): mirror of the AY2D
 // per-tile animation tick (see the header for the full contract).
 
-#include "AYTilemapAnimationRuntime.h"
+#include "AYEntity/TilemapAnimationRuntime.h"
 
 #include <algorithm>
 

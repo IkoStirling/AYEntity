@@ -1,12 +1,12 @@
 // ComponentTest.cpp - 组件测试
 
 #include <AYEntity.h>
-#include <components/AYTransformComponent.h>
-#include <components/AYMeshComponent.h>
-#include <components/AYHealthComponent.h>
-#include <components/AYRigidBodyComponent.h>
-#include <components/AYScriptComponent.h>
-#include <components/AYNetworkComponent.h>
+#include <AYEntity/components/TransformComponent.h>
+#include <AYEntity/components/MeshComponent.h>
+#include <AYEntity/components/HealthComponent.h>
+#include <AYEntity/components/RigidBodyComponent.h>
+#include <AYEntity/components/ScriptComponent.h>
+#include <AYEntity/components/NetworkComponent.h>
 #include <AYTest.h>
 #include <algorithm>
 #include <cstring>

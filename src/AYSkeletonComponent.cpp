@@ -1,7 +1,7 @@
 // AYSkeletonComponent.cpp — out-of-line ctor/dtor. player uses
 // AnimationPlayerDeleter so delete runs in AYAnimation.cpp only.
 
-#include "components/AYSkeletonComponent.h"
+#include "AYEntity/components/SkeletonComponent.h"
 
 namespace ayt::entity
 {

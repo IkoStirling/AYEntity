@@ -1,6 +1,6 @@
 // AYEntityPrecompile.cpp — AYEntity explicit-instantiation barrel (PR-follow-up to AYScene PR-1)
 //
-// 背景：AYEntity/include/AYWorld.h 与 src/AYComponentFactory.cpp 通过
+// 背景：AYEntity/include/AYEntity/World.h 与 src/AYComponentFactory.cpp 通过
 // anonymous-namespace `addTyped<T>/getTyped<T>/hasTyped<T>` 三个 helper
 // 调用 `Entity::addComponent<T>/getComponent<T>/hasComponent<T>` 这三个
 // member template。AYEntity/lib 自身没有任何 TU 调过这些 template 实例，
@@ -18,16 +18,16 @@
 // `src/detail/*` 同形态，避免污染 SOURCES 顶层公共接口。
 
 #include <AYEntity.h>
-#include <AYComponentFactory.h>
+#include <AYEntity/ComponentFactory.h>
 
-#include <components/AYHealthComponent.h>
-#include <components/AYMeshComponent.h>
-#include <components/AYOrthoCameraComponent.h>
-#include <components/AYSkeletonComponent.h>
-#include <components/AYAnimationComponent.h>
-#include <components/AYSpriteComponent.h>
-#include <components/AYTilemapComponent.h>
-#include <components/AYTransformComponent.h>
+#include <AYEntity/components/HealthComponent.h>
+#include <AYEntity/components/MeshComponent.h>
+#include <AYEntity/components/OrthoCameraComponent.h>
+#include <AYEntity/components/SkeletonComponent.h>
+#include <AYEntity/components/AnimationComponent.h>
+#include <AYEntity/components/SpriteComponent.h>
+#include <AYEntity/components/TilemapComponent.h>
+#include <AYEntity/components/TransformComponent.h>
 
 namespace ayt::entity
 {
@@ -62,7 +62,7 @@ template AnimationComponent* Entity::getComponent<AnimationComponent>();
 template bool Entity::hasComponent<AnimationComponent>() const;
 
 // --- Transform (NOT TransformComponent) --------------------------------------
-// Note: class `Transform` lives in <components/AYTransformComponent.h>; the
+// Note: class `Transform` lives in <components/AYEntity/components/AYEntity/components/AYEntity/components/AYEntity/components/TransformComponent.h>; the
 // C++ name does NOT carry a "Component" suffix. Pre-include guard above
 // ensures the header is parsed; we instantiate the same three members.
 template Transform* Entity::addComponent<Transform>();

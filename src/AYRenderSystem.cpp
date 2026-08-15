@@ -1,16 +1,16 @@
-#include "AYRenderSystem.h"
+#include "AYEntity/RenderSystem.h"
 
 
 
 #include "AYEntity.h"
 
-#include "AYEntityModule.h"
+#include "AYEntity/EntityModule.h"
 
-#include "AYRendererSubSystem.h"
+#include "AYRenderer/RendererSubSystem.h"
 
-#include "components/AYMeshComponent.h"
+#include "AYEntity/components/MeshComponent.h"
 
-#include "components/AYTransformComponent.h"
+#include "AYEntity/components/TransformComponent.h"
 
 
 

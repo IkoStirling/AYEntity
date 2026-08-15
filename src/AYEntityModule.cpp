@@ -1,13 +1,13 @@
-#include "AYEntityModule.h"
-#include "AYAnimationSystem.h"
-#include "AYOrthoCameraUpdateSystem.h"
-#include "AYSkinnedMeshRenderSystem.h"
-#include "AYSpriteRenderSystem.h"
-#include "AYStateMachineSystem.h"
-#include "AYTilemapAnimationTickSystem.h"
-#include "AYTilemapRenderSystem.h"
-#include "AYTilemapStreamingSystem.h"
-#include "AYWorld.h"
+#include "AYEntity/EntityModule.h"
+#include "AYEntity/AnimationSystem.h"
+#include "AYEntity/OrthoCameraUpdateSystem.h"
+#include "AYEntity/SkinnedMeshRenderSystem.h"
+#include "AYEntity/SpriteRenderSystem.h"
+#include "AYEntity/StateMachineSystem.h"
+#include "AYEntity/TilemapAnimationTickSystem.h"
+#include "AYEntity/TilemapRenderSystem.h"
+#include "AYEntity/TilemapStreamingSystem.h"
+#include "AYEntity/World.h"
 
 #include <cstdio>
 #include <cstring>

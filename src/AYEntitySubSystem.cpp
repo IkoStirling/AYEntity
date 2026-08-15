@@ -1,7 +1,7 @@
 // AYEntitySubSystem.cpp - AYEntity 子系统实现
 
 #include "AYEntity.h"
-#include "AYEntityModule.h"
+#include "AYEntity/EntityModule.h"
 #include <AYGameLoop.h>
 #include <cstdio>
 

@@ -20,19 +20,19 @@
 //     AnimNotifyRecord::fromStateName when the next tick fires a
 //     notify. INV-40..42 contracts honored.
 
-#include "AYStateMachineSystem.h"
-#include "components/AYAnimationStateMachineComponent.h"
-#include "components/AYSkeletonComponent.h"
-#include "components/AYAnimationComponent.h"
-#include "AYWorld.h"
+#include "AYEntity/StateMachineSystem.h"
+#include "AYEntity/components/AnimationStateMachineComponent.h"
+#include "AYEntity/components/SkeletonComponent.h"
+#include "AYEntity/components/AnimationComponent.h"
+#include "AYEntity/World.h"
 
-#include <ayanimation/AnimationPlayer.h>
-#include <ayanimation/AnimStateChangedEvent.h>
+#include <AYAnimation/AnimationPlayer.h>
+#include <AYAnimation/AnimStateChangedEvent.h>
 
-#include <assetsDefs/IAYAnimation.h>
-#include <AYResourceManager.h>
+#include <AYResource/assetsDefs/IAnimation.h>
+#include <AYResource/ResourceManager.h>
 
-#include <ayevent/EventBus.h>
+#include <AYEventSystem/EventBus.h>
 
 #include <AYEntity.h>
 

@@ -23,23 +23,23 @@
 // crashes on a sparse-set lookup after the static storage is gone).
 
 #include <AYEntity.h>
-#include <AYEntityModule.h>
-#include <AYWorld.h>
+#include <AYEntity/EntityModule.h>
+#include <AYEntity/World.h>
 
-#include <AYAnimationSystem.h>
-#include <components/AYAnimationComponent.h>
-#include <components/AYSkeletonComponent.h>
-#include <components/AYTransformComponent.h>
+#include <AYEntity/AnimationSystem.h>
+#include <AYEntity/components/AnimationComponent.h>
+#include <AYEntity/components/SkeletonComponent.h>
+#include <AYEntity/components/TransformComponent.h>
 
-#include <ayanimation/AnimationPlayer.h>
-#include <assetsDefs/IAYSkeletonMask.h>   // P3.x刀1 — formal interface in AYResource
+#include <AYAnimation/AnimationPlayer.h>
+#include <AYResource/assetsDefs/ISkeletonMask.h>   // P3.x刀1 — formal interface in AYResource
 
-#include <assetsImpl/AYSkeleton.h>
-#include <assetsImpl/AYSkeletonMask.h>   // P3.x刀1 — concrete moved to AYResource
+#include <AYResource/assetsImpl/Skeleton.h>
+#include <AYResource/assetsImpl/SkeletonMask.h>   // P3.x刀1 — concrete moved to AYResource
 #include <AYMath/MathTypes.h>
 
 #include <AYTest.h>
-#include <AYResourceManager.h>
+#include <AYResource/ResourceManager.h>
 
 #include <cstdio>
 #include <memory>

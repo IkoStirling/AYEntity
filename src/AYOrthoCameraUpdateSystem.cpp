@@ -1,12 +1,12 @@
 // AYOrthoCameraUpdateSystem.cpp — CM-3 (2026-08-11).
 
-#include "AYOrthoCameraUpdateSystem.h"
+#include "AYEntity/OrthoCameraUpdateSystem.h"
 
 #include "AYEntity.h"
-#include "AYRendererSubSystem.h"
-#include "AYWorld.h"
+#include "AYRenderer/RendererSubSystem.h"
+#include "AYEntity/World.h"
 
-#include "components/AYOrthoCameraComponent.h"
+#include "AYEntity/components/OrthoCameraComponent.h"
 
 #include <cstdio>
 

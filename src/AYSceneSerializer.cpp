@@ -1,10 +1,10 @@
 // AYSceneSerializer.cpp — P4-B .ayscene v0 save/load.
 
-#include "AYSceneSerializer.h"
-#include "AYComponentFactory.h"
-#include "AYEntityModule.h"
-#include "AYEntityImpl.h"
-#include "AYWorld.h"
+#include "AYEntity/SceneSerializer.h"
+#include "AYEntity/ComponentFactory.h"
+#include "AYEntity/EntityModule.h"
+#include "AYEntity/EntityImpl.h"
+#include "AYEntity/World.h"
 
 #include <AYSerializer.h>
 

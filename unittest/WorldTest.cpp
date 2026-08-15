@@ -1,8 +1,8 @@
 // WorldTest.cpp - World 管理器测试
 
 #include <AYEntity.h>
-#include <components/AYTransformComponent.h>
-#include <components/AYMeshComponent.h>
+#include <AYEntity/components/TransformComponent.h>
+#include <AYEntity/components/MeshComponent.h>
 #include <AYTest.h>
 
 using namespace ayt::entity;

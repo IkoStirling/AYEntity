@@ -15,24 +15,24 @@
 //   AnimationPlayer::getBoneSkinMatrices() returns. This 30-line
 //   block duplicates AnimationPlayer.cpp:1198-1227 verbatim —
 //   DUPLICATION-OK by design (P2.x cleanup: lift into a free helper
-//   in ayanimation/AYAnimation.h).
+//   in AYAnimation/AYAnimation.h).
 
-#include <AYBlendSpaceSystem.h>
+#include <AYEntity/BlendSpaceSystem.h>
 
-#include <AYEntity.h>      // full definition of Query<T...> (forward-declared in AYWorld.h)
-#include <AYWorld.h>
+#include <AYEntity.h>      // full definition of Query<T...> (forward-declared in AYEntity/World.h)
+#include <AYEntity/World.h>
 
-#include <components/AYBlendSpaceComponent.h>
-#include <components/AYSkeletonComponent.h>
+#include <AYEntity/components/BlendSpaceComponent.h>
+#include <AYEntity/components/SkeletonComponent.h>
 
-#include <ayanimation/BlendSpace.h>
+#include <AYAnimation/BlendSpace.h>
 
 #include <AYMath/MathTypes.h>
 
-#include <assetsDefs/IAYAnimation.h>
-#include <assetsDefs/IAYSkeleton.h>
-#include <assetsImpl/AYSkeleton.h>   // P1.7 — for static_pointer_cast<Skeleton>
-#include <AYResourceManager.h>
+#include <AYResource/assetsDefs/IAnimation.h>
+#include <AYResource/assetsDefs/ISkeleton.h>
+#include <AYResource/assetsImpl/Skeleton.h>   // P1.7 — for static_pointer_cast<Skeleton>
+#include <AYResource/ResourceManager.h>
 
 #include <cassert>
 #include <cstdio>

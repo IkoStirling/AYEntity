@@ -19,26 +19,26 @@
 // inline-test pattern, avoiding static-init duplicates across cases.
 
 #include <AYEntity.h>
-#include <AYEntityImpl.h>
-#include <AYEntityModule.h>
-#include <AYWorld.h>
+#include <AYEntity/EntityImpl.h>
+#include <AYEntity/EntityModule.h>
+#include <AYEntity/World.h>
 
-#include <AY2DUvMath.h>
-#include <AYOrthoCameraUpdateSystem.h>
-#include <AYRendererSubSystem.h>
-#include <AYSpriteRenderSystem.h>
-#include <AYSubSystemRegistry.h>
-#include <AYTilemapAnimationTickSystem.h>
-#include <AYTilemapRenderSystem.h>
-#include <AYTilemapStreamingSystem.h>
+#include <AYEntity/2DUvMath.h>
+#include <AYEntity/OrthoCameraUpdateSystem.h>
+#include <AYRenderer/RendererSubSystem.h>
+#include <AYEntity/SpriteRenderSystem.h>
+#include <AYGameLoop/SubSystemRegistry.h>
+#include <AYEntity/TilemapAnimationTickSystem.h>
+#include <AYEntity/TilemapRenderSystem.h>
+#include <AYEntity/TilemapStreamingSystem.h>
 
-#include <components/AYOrthoCameraComponent.h>
-#include <components/AYSpriteComponent.h>
-#include <components/AYTilemapComponent.h>
-#include <components/AYTransformComponent.h>
+#include <AYEntity/components/OrthoCameraComponent.h>
+#include <AYEntity/components/SpriteComponent.h>
+#include <AYEntity/components/TilemapComponent.h>
+#include <AYEntity/components/TransformComponent.h>
 
-#include <assetsImpl/AYTexture.h>
-#include <assetsImpl/AYTilemapAsset.h>
+#include <AYResource/assetsImpl/Texture.h>
+#include <AYResource/assetsImpl/TilemapAsset.h>
 
 #include <AYIO/File.h>
 #include <AYTest.h>

@@ -1,8 +1,8 @@
 // SystemTest.cpp - 系统调度测试
 
 #include <AYEntity.h>
-#include <components/AYTransformComponent.h>
-#include <components/AYHealthComponent.h>
+#include <AYEntity/components/TransformComponent.h>
+#include <AYEntity/components/HealthComponent.h>
 #include <AYTest.h>
 
 using namespace ayt::entity;

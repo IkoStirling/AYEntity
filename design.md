@@ -741,10 +741,10 @@ AYEntity/
 ├── CMakeLists.txt
 │
 ├── interface/
-│   ├── IAYEntity.h              # 主接口
+│   ├── AYEntity/IEntity.h              # 主接口
 │   ├── IComponent.h             # 组件接口
-│   ├── IEntity.h                # 实体接口
-│   ├── IWorld.h                 # 世界管理器接口
+│   ├── AYEntity/IEntity.h                # 实体接口
+│   ├── AYEntity/World.h                 # 世界管理器接口
 │   ├── ISystem.h                # 系统接口
 │   └── IComponentStorage.h      # 组件存储接口
 │
@@ -752,13 +752,13 @@ AYEntity/
 │   ├── AYEntity.h               # 主入口
 │   ├── ComponentStorage.h       # SparseSet 实现
 │   ├── Entity.h                 # 实体实现
-│   ├── World.h                  # 世界管理器实现
-│   ├── EntityHandle.h           # 实体句柄
+│   ├── AYEntity/World.h                  # 世界管理器实现
+│   ├── AYEntity/EntityHandle.h           # 实体句柄
 │   │
 │   └── components/               # 常用组件
 │       ├── Transform.h
 │       ├── Health.h
-│       ├── Mesh.h
+│       ├── AYResource/assetsImpl/Mesh.h
 │       ├── RigidBody.h
 │       └── ...
 │
@@ -801,7 +801,7 @@ if(AY_ENTITY_PRECOMPILE_COMPONENTS)
     target_sources(${PROJECT_NAME} PRIVATE
         include/components/Transform.h
         include/components/Health.h
-        include/components/Mesh.h
+        include/components/AYResource/assetsImpl/Mesh.h
     )
 endif()
 ```
@@ -955,7 +955,7 @@ GameLoop::submitRenderCommands
 ### 15.2 `bootstrapModule()`（静态库必需）
 
 MSVC 静态库会丢弃未被引用的 `.obj`（`REGISTER_SUBSYSTEM` / `AY_SYSTEM` 静态初始化 TU 可能未链接）。
-因此提供显式、幂等的模块引导 API（`include/AYEntityModule.h`）：
+因此提供显式、幂等的模块引导 API（`include/AYEntity/EntityModule.h`）：
 
 ```cpp
 void bootstrapModule();              // 入口：依次调用下列三者
@@ -986,9 +986,9 @@ Win32：`Transform` 名称与 GDI 宏冲突时使用 `(Transform)` 括号形式�
 ```
 AYEntity/
 ├── include/
-│   ├── AYEntityModule.h
-│   ├── AYRenderSystem.h
-│   ├── AYWorld.h
+│   ├── AYEntity/EntityModule.h
+│   ├── AYEntity/RenderSystem.h
+│   ├── AYEntity/World.h
 │   └── components/
 ├── src/
 │   ├── AYEntityModule.cpp
@@ -1046,14 +1046,14 @@ AYEntity/
 
 `BlendSpace1D` / `BlendSpace2D` 是 AYAnimation 提供的线性单纯形 BlendTree（UE BlendSpace / Unity AnimationBlendTree 1D/2D 等价物）。
 本节只记 ECS 集成层；纯算法细节（2D 单纯形算法、tangent-space quaternion blend、bounding-rect heuristic）见
-[BlendSpace.h](../AYAnimation/include/ayanimation/BlendSpace.h) 的文件头注释。
+[AYAnimation/BlendSpace.h](../AYAnimation/include/AYAnimation/BlendSpace.h) 的文件头注释。
 
-**组件**（`include/components/AYBlendSpaceComponent.h`）：
+**组件**（`include/AYEntity/components/BlendSpaceComponent.h`）：
 
 - `BlendSpaceEntry`：单个 sample point 的 spec — `samplePosition`（1D 取 x、2D 取 xy）、`clipPath`、`playRate`、`looping`、`blendSpaceIndex`。
 - `BlendSpaceComponent`：`is2D` 切 1D/2D、`entries[]`（≥1 才 `isValid()`）、`sampleInput`、`playRate`、`looping`。
 
-**系统**（`include/AYBlendSpaceSystem.h`，priority 430）：
+**系统**（`include/AYEntity/BlendSpaceSystem.h`，priority 430）：
 
 - `onUpdate(dt)` 遍历 `World::query<SkeletonComponent, BlendSpaceComponent>()`；
   对每个有效实体：懒加载每个 entry 的 `clipPath`（`_clipCache` 路径缓存，N 个实体共享 clip 只 parse 一次）→

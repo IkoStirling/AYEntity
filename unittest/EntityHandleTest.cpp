@@ -1,6 +1,6 @@
 // EntityHandleTest.cpp - 实体句柄测试
 
-#include <AYEntityHandle.h>
+#include <AYEntity/EntityHandle.h>
 #include <AYTest.h>
 
 using namespace ayt::entity;

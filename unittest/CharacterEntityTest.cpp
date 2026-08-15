@@ -1,16 +1,16 @@
 // CharacterEntityTest.cpp - Phase 1 ED-02 helper tests.
 //
 // Covers spawnCharacterFromPaths / destroyCharacter from
-// `include/AYCharacterEntity.h`. Mirrors the conventions of
+// `include/AYEntity/CharacterEntity.h`. Mirrors the conventions of
 // EntityTest.cpp / ComponentTest.cpp — World::initialize() per test,
 // Entity::create()/destroy(), CHECK_* macros.
 
 #include <AYEntity.h>
-#include <AYCharacterEntity.h>
-#include <components/AYAnimationComponent.h>
-#include <components/AYMeshComponent.h>
-#include <components/AYSkeletonComponent.h>
-#include <components/AYTransformComponent.h>
+#include <AYEntity/CharacterEntity.h>
+#include <AYEntity/components/AnimationComponent.h>
+#include <AYEntity/components/MeshComponent.h>
+#include <AYEntity/components/SkeletonComponent.h>
+#include <AYEntity/components/TransformComponent.h>
 #include <AYTest.h>
 
 #include <cstring>

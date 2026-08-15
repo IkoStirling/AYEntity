@@ -1,7 +1,7 @@
 // AYEntity.cpp - Entity non-template implementation
 
 #include <AYEntity.h>
-#include <AYComponentFactory.h>
+#include <AYEntity/ComponentFactory.h>
 #include <cstdio>
 
 namespace ayt::entity

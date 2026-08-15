@@ -13,21 +13,21 @@
 // Row-major submission order is the author order for equal sort keys
 // (the Forward2DOpaquePass stable-sorts by packedSortKey).
 
-#include "AYTilemapRenderSystem.h"
+#include "AYEntity/TilemapRenderSystem.h"
 
-#include "AY2DUvMath.h"
+#include "AYEntity/2DUvMath.h"
 #include "AYEntity.h"
-#include "AYEntityModule.h"
-#include "AYRendererSubSystem.h"
-#include "AYTilemapAnimationRuntime.h"
-#include "AYTilemapShaderSources.h"
-#include "AYWorld.h"
+#include "AYEntity/EntityModule.h"
+#include "AYRenderer/RendererSubSystem.h"
+#include "AYEntity/TilemapAnimationRuntime.h"
+#include "AYRenderer/TilemapShaderSources.h"
+#include "AYEntity/World.h"
 
-#include "components/AYTransformComponent.h"
-#include "components/AYTilemapComponent.h"
+#include "AYEntity/components/TransformComponent.h"
+#include "AYEntity/components/TilemapComponent.h"
 
-#include <assetsDefs/IAYTilemap.h>
-#include <AYResourceManager.h>
+#include <AYResource/assetsDefs/ITilemap.h>
+#include <AYResource/ResourceManager.h>
 
 #include <AYMath/MathTransform.h>
 

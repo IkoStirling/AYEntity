@@ -1,4 +1,4 @@
-#include "components/AYNetworkComponent.h"
+#include "AYEntity/components/NetworkComponent.h"
 
 namespace ayt::entity
 {

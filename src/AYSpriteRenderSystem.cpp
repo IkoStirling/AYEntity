@@ -11,17 +11,17 @@
 //      then submit — the Forward2DOpaquePass stable-sorts the same
 //      key, so item order here IS final draw order.
 
-#include "AYSpriteRenderSystem.h"
+#include "AYEntity/SpriteRenderSystem.h"
 
-#include "AY2DUvMath.h"
+#include "AYEntity/2DUvMath.h"
 #include "AYEntity.h"
-#include "AYEntityModule.h"
-#include "AYRendererSubSystem.h"
-#include "AYTilemapShaderSources.h"
-#include "AYWorld.h"
+#include "AYEntity/EntityModule.h"
+#include "AYRenderer/RendererSubSystem.h"
+#include "AYRenderer/TilemapShaderSources.h"
+#include "AYEntity/World.h"
 
-#include "components/AYOrthoCameraComponent.h"
-#include "components/AYSpriteComponent.h"
+#include "AYEntity/components/OrthoCameraComponent.h"
+#include "AYEntity/components/SpriteComponent.h"
 
 #include <AYMath/MathTransform.h>
 

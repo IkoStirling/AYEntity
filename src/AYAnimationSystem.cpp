@@ -33,23 +33,23 @@
 // every AnimationPlayer that binds the same ISkeleton* shared
 // bone-name → bone-index resolution.
 
-#include "AYAnimationSystem.h"
+#include "AYEntity/AnimationSystem.h"
 
-#include <components/AYAnimationComponent.h>
-#include <components/AYSkeletonComponent.h>
+#include <AYEntity/components/AnimationComponent.h>
+#include <AYEntity/components/SkeletonComponent.h>
 
 #include <AYEntity.h>
-#include <AYWorld.h>
-#include <IAYSkeleton.h>
-#include <assetsImpl/AYSkeleton.h>   // P1.7 — for static_pointer_cast<Skeleton>
-#include <AYResourceManager.h>
+#include <AYEntity/World.h>
+#include <AYResource/assetsDefs/ISkeleton.h>
+#include <AYResource/assetsImpl/Skeleton.h>   // P1.7 — for static_pointer_cast<Skeleton>
+#include <AYResource/ResourceManager.h>
 
 // Phase 1.5 — AnimNotify bridge: drain the player's per-frame fired
 // markers and emit each as AnimNotifyEvent on the engine EventBus.
-#include <ayanimation/AnimNotifyEvent.h>
-#include <ayanimation/AnimationPlayer.h>
-#include <assetsDefs/IAYSkeletonMask.h>   // P3.x刀1 — formal interface in AYResource
-#include <ayevent/EventBus.h>
+#include <AYAnimation/AnimNotifyEvent.h>
+#include <AYAnimation/AnimationPlayer.h>
+#include <AYResource/assetsDefs/ISkeletonMask.h>   // P3.x刀1 — formal interface in AYResource
+#include <AYEventSystem/EventBus.h>
 
 #include <algorithm>
 #include <cstdio>

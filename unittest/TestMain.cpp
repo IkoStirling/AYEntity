@@ -1,7 +1,7 @@
 // TestMain.cpp - AYEntity Test Entry Point
 
 #include <AYEntity.h>
-#include <AYEntityModule.h>
+#include <AYEntity/EntityModule.h>
 #include <AYTest.h>
 
 int main(int argc, char** argv) {

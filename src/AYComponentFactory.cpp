@@ -1,16 +1,16 @@
 // AYComponentFactory.cpp — P4-B scene component factory + reflect dispatch.
 
-#include "AYComponentFactory.h"
-#include "AYEntityImpl.h"
+#include "AYEntity/ComponentFactory.h"
+#include "AYEntity/EntityImpl.h"
 
-#include <components/AYAnimationComponent.h>
-#include <components/AYHealthComponent.h>
-#include <components/AYMeshComponent.h>
-#include <components/AYOrthoCameraComponent.h>
-#include <components/AYSkeletonComponent.h>
-#include <components/AYSpriteComponent.h>
-#include <components/AYTilemapComponent.h>
-#include <components/AYTransformComponent.h>
+#include <AYEntity/components/AnimationComponent.h>
+#include <AYEntity/components/HealthComponent.h>
+#include <AYEntity/components/MeshComponent.h>
+#include <AYEntity/components/OrthoCameraComponent.h>
+#include <AYEntity/components/SkeletonComponent.h>
+#include <AYEntity/components/SpriteComponent.h>
+#include <AYEntity/components/TilemapComponent.h>
+#include <AYEntity/components/TransformComponent.h>
 
 #include <AYSerializer.h>
 #include <AYSerializer/SerializerForReflect.h>

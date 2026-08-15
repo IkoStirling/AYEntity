@@ -19,31 +19,31 @@
 // in unittest/CMakeLists.txt); the AYEntity lib itself never links AY2D.
 
 #include <AYEntity.h>
-#include <AYEntityImpl.h>
-#include <AYEntityModule.h>
-#include <AYWorld.h>
+#include <AYEntity/EntityImpl.h>
+#include <AYEntity/EntityModule.h>
+#include <AYEntity/World.h>
 
-#include <AY2DUvMath.h>
-#include <AYRendererSubSystem.h>
-#include <AYSubSystemRegistry.h>
-#include <AYTilemapAnimationRuntime.h>
-#include <AYTilemapAnimationTickSystem.h>
-#include <AYTilemapRenderSystem.h>
+#include <AYEntity/2DUvMath.h>
+#include <AYRenderer/RendererSubSystem.h>
+#include <AYGameLoop/SubSystemRegistry.h>
+#include <AYEntity/TilemapAnimationRuntime.h>
+#include <AYEntity/TilemapAnimationTickSystem.h>
+#include <AYEntity/TilemapRenderSystem.h>
 
-#include <components/AYTilemapComponent.h>
-#include <components/AYTransformComponent.h>
+#include <AYEntity/components/TilemapComponent.h>
+#include <AYEntity/components/TransformComponent.h>
 
-#include <assetsImpl/AYTexture.h>
-#include <assetsImpl/AYTilemapAsset.h>
+#include <AYResource/assetsImpl/Texture.h>
+#include <AYResource/assetsImpl/TilemapAsset.h>
 
-#include <AYResourceManager.h>
+#include <AYResource/ResourceManager.h>
 #include <AYTest.h>
 
 #include <AYIO/File.h>
 
 // Real AY2D — test-only cross-assert target (never linked by the lib).
-#include <AYTileAnimation.h>
-#include <AYTilemap.h>
+#include <AY2D/TileAnimation.h>
+#include <AY2D/Tilemap.h>
 
 #include <cstdio>
 #include <cstring>

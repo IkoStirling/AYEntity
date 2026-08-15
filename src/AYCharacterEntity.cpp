@@ -14,20 +14,20 @@
 //
 // Destroy path uses `World::destroyEntity` which recycles the EntityHandle
 // back into the pool and destructs components. The SkeletonComponent
-// destructor (`include/components/AYSkeletonComponent.h`) `delete[]`s
+// destructor (`include/AYEntity/components/SkeletonComponent.h`) `delete[]`s
 // its `skinMatrices`; `player` is a unique_ptr + AnimationPlayerDeleter.
 
-#include "AYCharacterEntity.h"
+#include "AYEntity/CharacterEntity.h"
 
 #include "AYEntity.h"                  // umbrella: instantiates
                                       //   Entity::addComponent<T>()
                                       //   for every T included below.
-#include "include/AYEntityImpl.h"      // Entity::create / Entity::destroy
-#include "include/AYWorld.h"
-#include "include/components/AYAnimationComponent.h"
-#include "include/components/AYMeshComponent.h"
-#include "include/components/AYSkeletonComponent.h"
-#include "include/components/AYTransformComponent.h"
+#include "AYEntity/EntityImpl.h"      // Entity::create / Entity::destroy
+#include "AYEntity/World.h"
+#include "AYEntity/components/AnimationComponent.h"
+#include "AYEntity/components/MeshComponent.h"
+#include "AYEntity/components/SkeletonComponent.h"
+#include "AYEntity/components/TransformComponent.h"
 
 #include <cstdio>
 

@@ -8,17 +8,17 @@
 // path exists, every skinned entity is submitted as rigid bind-pose
 // (raw mesh verts, no boneMatrices) so characters stay visible.
 
-#include "AYSkinnedMeshRenderSystem.h"
+#include "AYEntity/SkinnedMeshRenderSystem.h"
 
-#include <components/AYMeshComponent.h>
-#include <components/AYSkeletonComponent.h>
+#include <AYEntity/components/MeshComponent.h>
+#include <AYEntity/components/SkeletonComponent.h>
 
 #include <AYEntity.h>
-#include <AYEntityModule.h>
-#include <AYRenderScene.h>
+#include <AYEntity/EntityModule.h>
+#include <AYRenderer/RenderScene.h>
 #include <AYRenderer.h>
-#include <AYRendererSubSystem.h>
-#include <AYWorld.h>
+#include <AYRenderer/RendererSubSystem.h>
+#include <AYEntity/World.h>
 #include <AYMath/MathTransform.h>
 #include <AYMath/MathUtils.h>
 

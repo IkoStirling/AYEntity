@@ -4,9 +4,9 @@
 // visibility streaming pipeline. See the header for the fill-in
 // contract; the empty body mirrors the GBufferPass shell precedent.
 
-#include "AYTilemapStreamingSystem.h"
+#include "AYEntity/TilemapStreamingSystem.h"
 
-#include "AYWorld.h"
+#include "AYEntity/World.h"
 
 namespace ayt::entity
 {
