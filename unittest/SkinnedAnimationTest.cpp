@@ -30,7 +30,7 @@
 
 #include <assetsImpl/AYAnimation.h>
 #include <assetsImpl/AYSkeleton.h>
-#include <aymath/MathTypes.h>
+#include <AYMath/MathTypes.h>
 #include <AYTest.h>
 #include <AYResourceManager.h>   // P1.7 — for trimCache() test
 

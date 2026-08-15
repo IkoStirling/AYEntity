@@ -23,7 +23,7 @@
 #include "components/AYOrthoCameraComponent.h"
 #include "components/AYSpriteComponent.h"
 
-#include <aymath/MathTransform.h>
+#include <AYMath/MathTransform.h>
 
 #include <algorithm>
 #include <cmath>

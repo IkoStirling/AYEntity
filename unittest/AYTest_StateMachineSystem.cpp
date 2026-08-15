@@ -32,7 +32,7 @@
 #include <ayanimation/AnimStateChangedEvent.h>
 
 #include <assetsImpl/AYSkeleton.h>
-#include <aymath/MathTypes.h>
+#include <AYMath/MathTypes.h>
 
 #include <AYTest.h>
 #include <AYResourceManager.h>

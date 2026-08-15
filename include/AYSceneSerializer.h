@@ -1,8 +1,8 @@
 #pragma once
 // AYSceneSerializer.h — P4-B World scene save/load (.ayscene v0).
 
-#include <ayserializer/SerializeError.h>
-#include <ayserializer/SerializerCore.h>
+#include <AYSerializer/SerializeError.h>
+#include <AYSerializer/SerializerCore.h>
 
 #include <cstdint>
 #include <string>

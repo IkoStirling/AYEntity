@@ -19,7 +19,7 @@
 
 #include <IAYEntity.h>
 #include <ayanimation/AnimationPlayer.h>
-#include <aymath/MathTypes.h>
+#include <AYMath/MathTypes.h>
 
 #include <assetsDefs/IAYSkeleton.h>
 #include <assetsImpl/AYSkeleton.h>   // P1.7 — concrete Skeleton type for shared_ptr field

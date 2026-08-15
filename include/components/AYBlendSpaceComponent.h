@@ -10,7 +10,7 @@
 
 #include <IAYEntity.h>
 
-#include <aymath/MathTypes.h>
+#include <AYMath/MathTypes.h>
 
 #include <cstdint>
 #include <string>

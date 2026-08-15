@@ -13,7 +13,7 @@
 #include <components/AYTransformComponent.h>
 
 #include <AYSerializer.h>
-#include <ayserializer/SerializerForReflect.h>
+#include <AYSerializer/SerializerForReflect.h>
 #include <AYReflect.h>
 
 #include <cstring>

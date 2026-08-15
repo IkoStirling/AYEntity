@@ -32,7 +32,7 @@
 #include <AYTileMath.h>
 #include <AYTileSamplerUV.h>
 
-#include <aymath/MathTypes.h>
+#include <AYMath/MathTypes.h>
 #include <AYTest.h>
 
 #include <cstdio>

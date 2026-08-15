@@ -39,7 +39,7 @@
 #include <AYResourceManager.h>
 #include <AYTest.h>
 
-#include <ayio/File.h>
+#include <AYIO/File.h>
 
 // Real AY2D — test-only cross-assert target (never linked by the lib).
 #include <AYTileAnimation.h>

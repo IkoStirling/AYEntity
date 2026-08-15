@@ -41,8 +41,8 @@
 #include <assetsDefs/IAYSkeleton.h>
 #include <assetsImpl/AYAnimation.h>
 #include <assetsImpl/AYSkeleton.h>
-#include <ayio/Path.h>
-#include <aymath/MathTypes.h>
+#include <AYIO/Path.h>
+#include <AYMath/MathTypes.h>
 #include <AYResourceManager.h>
 #include <AYTest.h>
 

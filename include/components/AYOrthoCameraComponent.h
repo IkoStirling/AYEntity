@@ -17,8 +17,8 @@
 #include <AYCore.h>
 #include <IAYEntity.h>
 
-#include <aymath/MathTypes.h>
-#include <aymath/MathUtils.h>
+#include <AYMath/MathTypes.h>
+#include <AYMath/MathUtils.h>
 
 #include <cmath>
 #include <cstdint>

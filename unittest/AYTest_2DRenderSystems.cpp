@@ -40,7 +40,7 @@
 #include <assetsImpl/AYTexture.h>
 #include <assetsImpl/AYTilemapAsset.h>
 
-#include <ayio/File.h>
+#include <AYIO/File.h>
 #include <AYTest.h>
 
 #include <cstdio>

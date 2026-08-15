@@ -2,7 +2,7 @@
 // AYComponentFactory.h — P4-B component dispatch by Reflect type name.
 
 #include <IAYEntity.h>
-#include <ayserializer/SerializerCore.h>
+#include <AYSerializer/SerializerCore.h>
 
 namespace ayt::entity
 {

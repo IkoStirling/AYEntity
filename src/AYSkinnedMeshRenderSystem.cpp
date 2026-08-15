@@ -19,8 +19,8 @@
 #include <AYRenderer.h>
 #include <AYRendererSubSystem.h>
 #include <AYWorld.h>
-#include <aymath/MathTransform.h>
-#include <aymath/MathUtils.h>
+#include <AYMath/MathTransform.h>
+#include <AYMath/MathUtils.h>
 
 #include <cstdio>
 

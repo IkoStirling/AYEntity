@@ -9,7 +9,7 @@
 // the real AY2D headers (header-only, no link needed) so drift breaks
 // the build.
 
-#include <aymath/MathTypes.h>
+#include <AYMath/MathTypes.h>
 
 #include <cstdint>
 

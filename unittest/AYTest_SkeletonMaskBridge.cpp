@@ -36,7 +36,7 @@
 
 #include <assetsImpl/AYSkeleton.h>
 #include <assetsImpl/AYSkeletonMask.h>   // P3.x刀1 — concrete moved to AYResource
-#include <aymath/MathTypes.h>
+#include <AYMath/MathTypes.h>
 
 #include <AYTest.h>
 #include <AYResourceManager.h>

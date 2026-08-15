@@ -29,7 +29,7 @@
 #include <assetsDefs/IAYTilemap.h>
 #include <AYResourceManager.h>
 
-#include <aymath/MathTransform.h>
+#include <AYMath/MathTransform.h>
 
 #include <cstdio>
 
