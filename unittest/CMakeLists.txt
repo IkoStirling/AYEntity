@@ -76,36 +76,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 # (cm5_tilemap_render_animation_closed_loop, and the CM-3 siblings in
 # AYTest_2DRenderSystems.cpp) compiles the 2D shader at runtime through
 # shaderc; without the hint the cases SKIP. Mirror of the AY2D/demo
-# skeleton (do not diverge): SHADERC = bgfx-install shaderc.exe,
-# BGFX_COMMON/SRC = bgfx examples/common + src for common.sh includes.
+# skeleton (do not diverge): shaderc and shader includes come from the
+# centralized AYShader vcpkg integration.
 set(AY_SHADER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../AYShader")
-if(NOT DEFINED AY_SHADER_SHADERC_PATH)
-    if(WIN32)
-        set(_ays_shaderc_name "shaderc.exe")
-    else()
-        set(_ays_shaderc_name "shaderc")
-    endif()
-    set(AY_SHADER_SHADERC_PATH
-        "${AY_SHADER_ROOT}/thirdParty/bgfx-install/debug/bin/${_ays_shaderc_name}")
-endif()
-if(NOT DEFINED AY_SHADER_BGFX_COMMON_DIR)
-    set(_ays_bgfx_search
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../../thirdparty/bgfx/examples/common"
-    )
-    set(AY_SHADER_BGFX_COMMON_DIR "")
-    foreach(_dir IN LISTS _ays_bgfx_search)
-        if(EXISTS "${_dir}/common.sh")
-            set(AY_SHADER_BGFX_COMMON_DIR "${_dir}")
-            break()
-        endif()
-    endforeach()
-endif()
-if(NOT DEFINED AY_SHADER_BGFX_SRC_DIR AND AY_SHADER_BGFX_COMMON_DIR)
-    set(AY_SHADER_BGFX_SRC_DIR "${AY_SHADER_BGFX_COMMON_DIR}/../../src")
-endif()
-get_filename_component(AY_SHADER_SHADERC_PATH "${AY_SHADER_SHADERC_PATH}" ABSOLUTE)
-get_filename_component(AY_SHADER_BGFX_COMMON_DIR "${AY_SHADER_BGFX_COMMON_DIR}" ABSOLUTE)
-get_filename_component(AY_SHADER_BGFX_SRC_DIR "${AY_SHADER_BGFX_SRC_DIR}" ABSOLUTE)
+include("${AY_SHADER_ROOT}/cmake/AYBgfx.cmake")
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     AY_SHADER_SHADERC_HINT="${AY_SHADER_SHADERC_PATH}"
