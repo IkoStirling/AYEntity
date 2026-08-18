@@ -16,11 +16,47 @@ struct Transform : public IComponent {
         position = {0.0f, 0.0f, 0.0f};
         rotation = {0.0f, 0.0f, 0.0f, 1.0f};
         scale    = {1.0f, 1.0f, 1.0f};
+        previousPosition = position;
+        previousRotation = rotation;
     }
 
     AY_PROPERTY(math::FVector3, position, kAttrSerialize)
     AY_PROPERTY(math::FQuaternion, rotation, kAttrSerialize)
     AY_PROPERTY(math::FVector3, scale, kAttrSerialize)
+
+    // Previous authoritative simulation pose used only for presentation.
+    math::FVector3 previousPosition{};
+    math::FQuaternion previousRotation{};
+    bool hasPreviousSimulationPose = false;
+
+    void applySimulationPose(const math::FVector3& newPosition,
+                             const math::FQuaternion& newRotation)
+    {
+        if (hasPreviousSimulationPose) {
+            previousPosition = position;
+            previousRotation = rotation;
+        } else {
+            previousPosition = newPosition;
+            previousRotation = newRotation;
+            hasPreviousSimulationPose = true;
+        }
+        position = newPosition;
+        rotation = newRotation;
+    }
+
+    math::FVector3 interpolatedPosition(float alpha) const
+    {
+        if (!hasPreviousSimulationPose) return position;
+        alpha = alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha);
+        return previousPosition + (position - previousPosition) * alpha;
+    }
+
+    math::FQuaternion interpolatedRotation(float alpha) const
+    {
+        if (!hasPreviousSimulationPose) return rotation;
+        alpha = alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha);
+        return previousRotation.slerp(rotation, alpha);
+    }
 
     void setPosition(float x, float y, float z)
     {

@@ -79,6 +79,10 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     AYEventSystem
 )
 
+# Entity's fixed pre/post bridge binds ECS rigid-body components to the latest
+# AYPhysics snapshot. The component itself keeps only an opaque uint32 handle.
+target_link_libraries(${PROJECT_NAME} PRIVATE AYPhysics)
+
 if(AY_ENTITY_PRECOMPILE_COMPONENTS)
     target_compile_definitions(${PROJECT_NAME} PUBLIC AY_ENTITY_PRECOMPILE_COMPONENTS)
 endif()

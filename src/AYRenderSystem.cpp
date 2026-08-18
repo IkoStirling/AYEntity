@@ -45,8 +45,10 @@ struct CachedDrawResources {
 ayt::math::Float4x4 transformToWorldMatrix(const Transform& transform)
 
 {
-
-    return ayt::math::Transform::getMatrix(transform.position, transform.rotation, transform.scale);
+    const float alpha = ayt::game::GameLoop::instance().getInterpolationFactor();
+    return ayt::math::Transform::getMatrix(transform.interpolatedPosition(alpha),
+                                           transform.interpolatedRotation(alpha),
+                                           transform.scale);
 
 }
 
@@ -319,4 +321,3 @@ void registerRenderSystem()
 
 
 } // namespace ayt::entity
-

@@ -11,6 +11,14 @@ namespace ayt::entity
 // =============================================================================
 class RigidBodyComponent : public IComponent {
 public:
+    enum class SyncMode : uint8_t {
+        None,
+        PhysicsToEntity,
+        EntityToPhysics
+    };
+
+    enum class PhysicsDimension : uint8_t { ThreeD, TwoD };
+
     const char* getName() const override { return "RigidBody"; }
 
     // ===== 基础属性 =====
@@ -54,6 +62,17 @@ public:
     bool isKinematic() const { return _isKinematic; }
     void setKinematic(bool isKinematic) { _isKinematic = isKinematic; }
 
+    // Opaque AYPhysics BodyHandle binding. Kept as uint32_t here so the ECS
+    // component remains serializable without exposing backend types.
+    uint32_t getBodyHandle() const { return _bodyHandle; }
+    void setBodyHandle(uint32_t handle) { _bodyHandle = handle; }
+
+    SyncMode getSyncMode() const { return _syncMode; }
+    void setSyncMode(SyncMode mode) { _syncMode = mode; }
+
+    PhysicsDimension getPhysicsDimension() const { return _physicsDimension; }
+    void setPhysicsDimension(PhysicsDimension dimension) { _physicsDimension = dimension; }
+
     // ===== 碰撞属性 =====
     float getRestitution() const { return _restitution; }
     void setRestitution(float restitution) { _restitution = restitution; }
@@ -85,6 +104,9 @@ private:
     // ===== 物理状态 =====
     bool _isStatic = false;
     bool _isKinematic = false;
+    uint32_t _bodyHandle = 0;
+    SyncMode _syncMode = SyncMode::PhysicsToEntity;
+    PhysicsDimension _physicsDimension = PhysicsDimension::ThreeD;
 
     // ===== 碰撞属性 =====
     float _restitution = 0.3f;

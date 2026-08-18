@@ -176,9 +176,12 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
                                       0.92f, 0.78f, 0.55f, 1.0f);
         }
 
+        const float interpolationAlpha =
+            ayt::game::GameLoop::instance().getInterpolationFactor();
         const ayt::math::Float4x4 worldM =
-            ayt::math::Transform::getMatrix(transform->position,
-                                            transform->rotation,
+            ayt::math::Transform::getMatrix(
+                                            transform->interpolatedPosition(interpolationAlpha),
+                                            transform->interpolatedRotation(interpolationAlpha),
                                             transform->scale);
         scene.add(meshHandle, drawMat, worldM);
         ++submitted;

@@ -146,6 +146,23 @@ TEST_CASE(rigid_body_component)
     World::instance().shutdown();
 }
 
+TEST_CASE(transform_interpolates_between_simulation_poses)
+{
+    Transform transform;
+    transform.applySimulationPose({0.0f, 0.0f, 0.0f},
+                                  {0.0f, 0.0f, 0.0f, 1.0f});
+    transform.applySimulationPose({10.0f, 4.0f, -2.0f},
+                                  {0.0f, 0.0f, 0.0f, 1.0f});
+
+    const auto halfway = transform.interpolatedPosition(0.5f);
+    CHECK_FLOAT_EQ(halfway.x, 5.0f, 0.001f);
+    CHECK_FLOAT_EQ(halfway.y, 2.0f, 0.001f);
+    CHECK_FLOAT_EQ(halfway.z, -1.0f, 0.001f);
+
+    CHECK_FLOAT_EQ(transform.interpolatedPosition(-1.0f).x, 0.0f, 0.001f);
+    CHECK_FLOAT_EQ(transform.interpolatedPosition(2.0f).x, 10.0f, 0.001f);
+}
+
 TEST_CASE(script_component)
 {
     World::instance().initialize();
