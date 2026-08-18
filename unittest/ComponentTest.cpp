@@ -231,4 +231,32 @@ TEST_CASE(network_component)
     World::instance().shutdown();
 }
 
+TEST_CASE(transform_revision_tracks_setter_writes)
+{
+    Transform t;
+    CHECK_INT_EQ(t.revision, 0u);
+
+    t.setPosition(1.0f, 2.0f, 3.0f);
+    CHECK_INT_EQ(t.revision, 1u);
+    t.setRotation(0.0f, 0.0f, 0.0f, 1.0f);
+    CHECK_INT_EQ(t.revision, 2u);
+    t.setScale(2.0f, 2.0f, 2.0f);
+    CHECK_INT_EQ(t.revision, 3u);
+    t.setScale(3.0f);
+    CHECK_INT_EQ(t.revision, 4u);
+    t.translate(1.0f, 0.0f, 0.0f);
+    CHECK_INT_EQ(t.revision, 5u);
+    t.scaleBy(2.0f);
+    CHECK_INT_EQ(t.revision, 6u);
+
+    // Direct field writes bypass the revision counter; sync layers use
+    // poseEquals as the fallback for those.
+    t.position = {9.0f, 9.0f, 9.0f};
+    CHECK_INT_EQ(t.revision, 6u);
+
+    // Physics write-back is engine-internal, not a user mutation.
+    t.applySimulationPose({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f});
+    CHECK_INT_EQ(t.revision, 6u);
+}
+
 TEST_SUITE_END

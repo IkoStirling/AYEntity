@@ -93,6 +93,7 @@ private:
         RigidBodyComponent::SyncMode syncMode = RigidBodyComponent::SyncMode::None;
         math::FVector3 submittedPosition{};
         math::FQuaternion submittedRotation{};
+        uint64_t lastSyncedRevision = 0;
         uint64_t seenEpoch = 0;
         bool hasSubmittedPose = false;
     };
@@ -207,8 +208,13 @@ private:
                 _entityByBody[bodyKey(body, dimension)] = entityId;
                 continue;
             }
+            // Fast path: setter writes bump Transform::revision, so unchanged
+            // entities skip on an int compare. Direct field writes bypass the
+            // counter, so poseEquals stays as the fallback for those.
             if (syncMode != RigidBodyComponent::SyncMode::EntityToPhysics
-                || (binding.hasSubmittedPose && poseEquals(binding, *transform))) {
+                || (binding.hasSubmittedPose
+                    && binding.lastSyncedRevision == transform->revision
+                    && poseEquals(binding, *transform))) {
                 continue;
             }
 
@@ -226,6 +232,7 @@ private:
             if (result == ayt::physics::PhysResult::Ok) {
                 binding.submittedPosition = transform->position;
                 binding.submittedRotation = transform->rotation;
+                binding.lastSyncedRevision = transform->revision;
                 binding.hasSubmittedPose = true;
             } else {
                 if (rejectedCommands == 0) firstFailure = result;

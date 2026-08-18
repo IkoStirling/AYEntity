@@ -29,6 +29,11 @@ struct Transform : public IComponent {
     math::FQuaternion previousRotation{};
     bool hasPreviousSimulationPose = false;
 
+    // Monotonic write counter. Incremented by every mutator below; direct
+    // field writes bypass it, so sync layers keep poseEquals as a fallback.
+    // Not serialized (runtime-only).
+    uint32_t revision = 0;
+
     void applySimulationPose(const math::FVector3& newPosition,
                              const math::FQuaternion& newRotation)
     {
@@ -61,21 +66,25 @@ struct Transform : public IComponent {
     void setPosition(float x, float y, float z)
     {
         position = {x, y, z};
+        ++revision;
     }
 
     void setRotation(float x, float y, float z, float w)
     {
         rotation = {x, y, z, w};
+        ++revision;
     }
 
     void setScale(float x, float y, float z)
     {
         scale = {x, y, z};
+        ++revision;
     }
 
     void setScale(float uniform)
     {
         scale = {uniform, uniform, uniform};
+        ++revision;
     }
 
     void translate(float dx, float dy, float dz)
@@ -83,6 +92,7 @@ struct Transform : public IComponent {
         position.x += dx;
         position.y += dy;
         position.z += dz;
+        ++revision;
     }
 
     void scaleBy(float factor)
@@ -90,6 +100,7 @@ struct Transform : public IComponent {
         scale.x *= factor;
         scale.y *= factor;
         scale.z *= factor;
+        ++revision;
     }
 };
 #undef AY_CURRENT_CLASS
