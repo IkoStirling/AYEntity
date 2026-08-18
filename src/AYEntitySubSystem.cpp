@@ -20,7 +20,11 @@ public:
             .name = "Entity",
             .dependencies = {},
             .basePriority = 0,
-            .timeType = ayt::game::SubSystemDescriptor::TimeType::Scaled
+            .timeType = ayt::game::SubSystemDescriptor::TimeType::Scaled,
+            .phases = ayt::game::phaseBit(ayt::game::FramePhase::FixedPostPhysics)
+                    | ayt::game::phaseBit(ayt::game::FramePhase::World),
+            .clock = ayt::game::ClockDomain::Game,
+            .phasePriority = 0
         };
         return desc;
     }
@@ -69,4 +73,3 @@ void registerEntitySubSystem()
 }
 
 } // namespace ayt::entity
-
