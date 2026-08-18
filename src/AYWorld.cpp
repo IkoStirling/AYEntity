@@ -121,7 +121,6 @@ Entity* World::createEntityInternal() {
     if (_nextEntityId >= _entityPool.size()) {
         _entityPool.resize(_nextEntityId + 1);
     }
-
     _entityPool[_nextEntityId] = EntityHandlePool::instance().allocate(_nextEntityId);
     _entities.push_back(std::unique_ptr<Entity>(entity));
 
@@ -152,14 +151,10 @@ void World::destroyEntityInternal(Entity* e) {
     if (id < _entityPool.size()) {
         EntityHandlePool::instance().release(_entityPool[id]);
     }
-
-    auto it = std::find_if(_entities.begin(), _entities.end(),
-        [id](const std::unique_ptr<Entity>& ptr) {
-            return ptr->getId() == id;
-        });
-
-    if (it != _entities.end()) {
-        _entities.erase(it);
+    const size_t entityIndex = static_cast<size_t>(id - 1u);
+    if (entityIndex < _entities.size()
+        && _entities[entityIndex].get() == e) {
+        _entities[entityIndex].reset();
     }
 
     ::printf("[World] Destroyed entity %u\n", id);
@@ -173,12 +168,8 @@ Entity* World::findEntity(const char* name) const {
 
 Entity* World::findEntity(uint32_t id) const {
     if (id == INVALID_ID) return nullptr;
-    for (auto& entity : _entities) {
-        if (entity->getId() == id) {
-            return entity.get();
-        }
-    }
-    return nullptr;
+    const size_t entityIndex = static_cast<size_t>(id - 1u);
+    return entityIndex < _entities.size() ? _entities[entityIndex].get() : nullptr;
 }
 
 std::vector<Entity*> World::getAllEntities() const {

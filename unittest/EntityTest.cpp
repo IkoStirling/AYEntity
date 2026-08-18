@@ -16,8 +16,9 @@ TEST_CASE(create_and_destroy)
     CHECK_TRUE(e->isValid());
     CHECK_TRUE(e->getId() != INVALID_ID);
 
+    const uint32_t entityId = e->getId();
     Entity::destroy(e);
-    CHECK_FALSE(e->isValid());
+    CHECK_NULL(World::instance().findEntity(entityId));
 
     World::instance().shutdown();
 }

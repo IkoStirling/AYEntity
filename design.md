@@ -345,66 +345,43 @@ void MovementSystem::onUpdate(float dt) {
 
 ## 5. 查询系统
 
-### 5.1 编译时模板查询（C++23 fold expression）
+### 5.1 编译时模板查询（最小稀疏集驱动）
 
 ```cpp
 template<typename... Components>
 class Query {
 public:
-    class Iterator {
-    public:
-        Iterator(uint32_t id, World* w) : _id(id), _world(w) {}
-
-        bool operator!=(const Iterator& other) const {
-            return _id != other._id;
-        }
-
-        Entity* operator*() const {
-            return _world->findEntity(_id);
-        }
-
-        Iterator& operator++() {
-            do {
-                _id++;
-            } while (_id < MAX_ENTITIES && !hasAllComponents());
-            return *this;
-        }
-
-    private:
-        bool hasAllComponents() const {
-            auto* e = _world->findEntity(_id);
-            return e && (e->hasComponent<Components>() && ...);
-        }
-
-        uint32_t _id;
-        World* _world;
-    };
-
-    Query(World* w) : _world(w), _first(findFirst()) {}
-
-    Iterator begin() { return Iterator(_first, _world); }
-    Iterator end() { return Iterator(MAX_ENTITIES, _world); }
-
-private:
-    uint32_t findFirst() const {
-        for (uint32_t id = 1; id < MAX_ENTITIES; id++) {
-            auto* e = _world->findEntity(id);
-            if (e && (e->hasComponent<Components>() && ...)) {
-                return id;
-            }
-        }
-        return MAX_ENTITIES;
+    explicit Query(World* world) : _world(world) {
+        // Cache all requested component storages and choose the smallest
+        // dense entity-id array as the candidate set.
+        initialize();
     }
 
-    World* _world;
-    uint32_t _first;
+    // Iterator walks _candidateIds and advances past ids for which
+    // matches(entityId) is false.
+
+private:
+    void initialize();
+
+    bool matches(uint32_t entityId) const {
+        if (_world->findEntity(entityId) == nullptr) return false;
+        for (const IComponentStorage* storage : _storages) {
+            if (storage == nullptr || !storage->has(entityId)) return false;
+        }
+        return true;
+    }
+
+    World* _world = nullptr;
+    std::array<IComponentStorage*, sizeof...(Components)> _storages{};
+    const std::vector<uint32_t>* _candidateIds = nullptr;
 };
 ```
 
 **特点**：
-- 使用 C++23 fold expression `(e->hasComponent<Components>() && ...)` 消除模板递归歧义
-- 无需 `matchImpl` 等递归辅助函数
-- 简洁高效
+- 不再扫描 `1..MAX_ENTITIES`；遍历成本由最稀有的请求组件数量决定
+- 查询构造时缓存组件存储，迭代时通过 `SparseSet::has()` 做 O(1) 交集判断
+- `World::findEntity(id)` 使用稳定 ID 槽位 O(1) 定位；销毁实体留下空槽，ID 不复用
+- 迭代期间不得直接增删查询涉及的组件；结构变更应延迟到迭代结束后执行
 
 ### 5.2 使用示例
 
@@ -454,6 +431,17 @@ std::vector<Entity*> World::queryByNames(const std::vector<const char*>& compone
 // 使用
 auto entities = world->queryByNames({"Transform", "Health"});
 ```
+
+### 5.4 固定步物理同步
+
+`EntitySubSystem` 在固定步两侧维护持久绑定缓存，避免每个 tick 重建临时散列表：
+
+- `FixedPrePhysics` 查询 `Transform + RigidBodyComponent`，刷新 `entityId -> binding` 与 `(dimension, bodyHandle) -> entityId`；过期条目通过 epoch 清理。
+- `EntityToPhysics` 只在位置或旋转相对上次成功提交发生变化时写入物理命令队列。队列拒绝不会更新提交缓存，因此下一 tick 会重试，并按 tick 聚合告警。
+- `FixedPhysics` 仍由 AYPhysics 的 `stepAndWait` 完成固定步屏障，保证随后读取的是本 tick 已发布的快照。
+- `FixedPostPhysics` 直接用带 2D/3D 维度的 body key 查找绑定，并将快照姿态、速度写回组件，不再往返查询所有实体。
+
+2D 与 3D 的 `BodyHandle` 数值空间彼此独立，因此快照中的 `PhysicsDimension` 必须参与绑定键，不能只用 handle 数值匹配。
 
 ---
 

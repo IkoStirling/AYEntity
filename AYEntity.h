@@ -12,6 +12,8 @@
 #include <AYEntity/components/RigidBodyComponent.h>
 #include <AYEntity/components/ScriptComponent.h>
 #include <AYEntity/components/NetworkComponent.h>
+#include <array>
+#include <cstddef>
 #include <vector>
 
 #ifdef AY_ENTITY_PRECOMPILE_COMPONENTS
@@ -33,56 +35,85 @@ class Query {
 public:
     class Iterator {
     public:
-        Iterator(uint32_t id, World* w) : _id(id), _world(w) {}
+        Iterator(size_t index, Query* query) : _index(index), _query(query) {
+            advanceToMatch();
+        }
 
         bool operator!=(const Iterator& other) const {
-            return _id != other._id;
+            return _index != other._index || _query != other._query;
         }
 
         Entity* operator*() const {
-            return _world->findEntity(_id);
+            return _query->_world->findEntity((*_query->_candidateIds)[_index]);
         }
 
         Iterator& operator++() {
-            do {
-                _id++;
-            } while (_id < MAX_ENTITIES && !hasAllComponents());
+            ++_index;
+            advanceToMatch();
             return *this;
         }
 
     private:
-        bool hasAllComponents() const {
-            auto* e = _world->findEntity(_id);
-            return e && (e->hasComponent<Components>() && ...);
-        }
-
-        uint32_t _id;
-        World* _world;
-    };
-
-    Query(World* w) : _world(w), _first(findFirst()) {}
-    Query() : _world(nullptr), _first(MAX_ENTITIES) {}
-
-    Iterator begin() {
-        if (!_world) return Iterator(MAX_ENTITIES, _world);
-        return Iterator(_first, _world);
-    }
-    Iterator end() { return Iterator(MAX_ENTITIES, _world); }
-
-private:
-    uint32_t findFirst() const {
-        if (!_world) return MAX_ENTITIES;
-        for (uint32_t id = 1; id < MAX_ENTITIES; id++) {
-            auto* e = _world->findEntity(id);
-            if (e && (e->hasComponent<Components>() && ...)) {
-                return id;
+        void advanceToMatch() {
+            if (_query == nullptr || _query->_candidateIds == nullptr) return;
+            while (_index < _query->_candidateIds->size()
+                   && !_query->matches((*_query->_candidateIds)[_index])) {
+                ++_index;
             }
         }
-        return MAX_ENTITIES;
+
+        size_t _index = 0;
+        Query* _query = nullptr;
+    };
+
+    explicit Query(World* w) : _world(w) { initialize(); }
+    Query() = default;
+
+    Iterator begin() {
+        return Iterator(0, this);
+    }
+    Iterator end() {
+        return Iterator(_candidateIds != nullptr ? _candidateIds->size() : 0, this);
     }
 
-    World* _world;
-    uint32_t _first;
+private:
+    static_assert(sizeof...(Components) > 0, "Query requires at least one component type");
+
+    void initialize() {
+        if (_world == nullptr) return;
+
+        size_t storageIndex = 0;
+        size_t smallestSize = static_cast<size_t>(-1);
+        bool allStoragesPresent = true;
+        auto addStorage = [&](auto* storage) {
+            _storages[storageIndex++] = storage;
+            if (storage == nullptr) {
+                allStoragesPresent = false;
+                return;
+            }
+            if (storage->size() < smallestSize) {
+                smallestSize = storage->size();
+                _candidateIds = &storage->getEntityIds();
+            }
+        };
+        (addStorage(_world->getStorage<Components>()), ...);
+
+        if (!allStoragesPresent) {
+            _candidateIds = nullptr;
+        }
+    }
+
+    bool matches(uint32_t entityId) const {
+        if (_world->findEntity(entityId) == nullptr) return false;
+        for (const IComponentStorage* storage : _storages) {
+            if (storage == nullptr || !storage->has(entityId)) return false;
+        }
+        return true;
+    }
+
+    World* _world = nullptr;
+    std::array<IComponentStorage*, sizeof...(Components)> _storages{};
+    const std::vector<uint32_t>* _candidateIds = nullptr;
 };
 
 // =============================================================================

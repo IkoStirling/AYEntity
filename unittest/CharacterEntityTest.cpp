@@ -56,8 +56,9 @@ TEST_CASE(spawn_returns_entity_with_all_four_components)
     CHECK_TRUE(anim->looping);
     CHECK_FLOAT_EQ(anim->playRate, 1.0f, 0.0001f);
 
+    const uint32_t entityId = e->getId();
     destroyCharacter(e);
-    CHECK_FALSE(e->isValid());
+    CHECK_NULL(World::instance().findEntity(entityId));
 
     World::instance().shutdown();
 }
@@ -110,8 +111,9 @@ TEST_CASE(destroy_releases_skeleton_skinmatrices_array)
     CHECK_TRUE(skel->jointCount == 0);
     CHECK_FALSE(skel->loaded);
 
+    const uint32_t entityId = e->getId();
     destroyCharacter(e);
-    CHECK_FALSE(e->isValid());
+    CHECK_NULL(World::instance().findEntity(entityId));
 
     World::instance().shutdown();
 }

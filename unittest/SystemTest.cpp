@@ -105,6 +105,42 @@ TEST_CASE(query_system)
     World::instance().shutdown();
 }
 
+TEST_CASE(query_uses_smallest_component_storage_and_tracks_removal)
+{
+    World::instance().initialize();
+
+    std::vector<Entity*> entities;
+    for (int i = 0; i < 16; ++i) {
+        Entity* entity = World::instance().createEntity();
+        entity->addComponent<Transform>();
+        entities.push_back(entity);
+    }
+    entities[3]->addComponent<MeshComponent>();
+    entities[11]->addComponent<MeshComponent>();
+
+    auto countMatches = []() {
+        int count = 0;
+        for (Entity* entity : World::instance().query<Transform, MeshComponent>()) {
+            CHECK_NOT_NULL(entity);
+            ++count;
+        }
+        return count;
+    };
+
+    CHECK_INT_EQ(countMatches(), 2);
+    entities[3]->removeComponent<MeshComponent>();
+    CHECK_INT_EQ(countMatches(), 1);
+
+    Entity::destroy(entities[11]);
+    entities[11] = nullptr;
+    CHECK_INT_EQ(countMatches(), 0);
+
+    for (Entity* entity : entities) {
+        if (entity != nullptr) Entity::destroy(entity);
+    }
+    World::instance().shutdown();
+}
+
 TEST_CASE(system_auto_registration)
 {
     World::instance().initialize();
