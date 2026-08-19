@@ -90,7 +90,10 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
     _payloads.clear();
 
-    ayt::render::MeshHandle quad = renderer.createUnitQuad();
+    if (!_quad.isValid()) {
+        _quad = renderer.createUnitQuad();
+    }
+    const ayt::render::MeshHandle quad = _quad;
     if (!quad.isValid()) {
         return;
     }

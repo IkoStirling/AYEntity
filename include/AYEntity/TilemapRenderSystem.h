@@ -59,6 +59,11 @@ private:
     // before filling so &_payloads.back() is stable).
     std::vector<ayt::render::DrawPayload2D> _payloads;
 
+    // Shared unit quad, created once on first build. Created per frame
+    // used to leak one GpuMesh (2 bgfx buffers) every frame until the
+    // device ran out of resources mid-session.
+    ayt::render::MeshHandle _quad;
+
     bool _started = false;
 };
 
