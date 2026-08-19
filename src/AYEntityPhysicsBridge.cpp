@@ -93,7 +93,11 @@ bool EntityPhysicsBridge::shapesEqual(
             || x.height != y.height
             || x.isTrigger != y.isTrigger
             || x.friction != y.friction
-            || x.restitution != y.restitution) {
+            || x.restitution != y.restitution
+            || x.offset.x != y.offset.x
+            || x.offset.y != y.offset.y
+            || x.offset.z != y.offset.z
+            || x.hullPoints != y.hullPoints) {
             return false;
         }
     }
@@ -123,6 +127,7 @@ void EntityPhysicsBridge::buildRigidbodyDesc(ayt::physics::RigidbodyDesc& desc,
                            rigidBody.getVelocityZ()};
     desc.material.friction = rigidBody.getFriction();
     desc.material.restitution = rigidBody.getRestitution();
+    desc.gravityScale = rigidBody.getGravityScale();
 }
 
 bool EntityPhysicsBridge::buildColliderDesc(ayt::physics::ColliderDesc& desc,
@@ -142,12 +147,23 @@ bool EntityPhysicsBridge::buildColliderDesc(ayt::physics::ColliderDesc& desc,
         desc.radius = spec.radius;
         desc.height = spec.height;
         break;
+    case ColliderShapeType::ConvexHull: {
+        if (spec.hullPoints.size() < 3u) {
+            return false;  // degenerate — backend would reject anyway
+        }
+        desc.shape = ayt::physics::ColliderShape::ConvexHull;
+        auto data = std::make_shared<ayt::physics::ColliderShapeData>();
+        data->hullPoints = spec.hullPoints;
+        desc.shapeData = std::move(data);
+        break;
+    }
     default:
         return false;
     }
     desc.material.friction = spec.friction;
     desc.material.restitution = spec.restitution;
     desc.isTrigger = spec.isTrigger;
+    desc.offset = spec.offset;
     return true;
 }
 
@@ -330,6 +346,10 @@ void EntityPhysicsBridge::syncEntityToPhysics()
         // --- Collider sync (create / rebuild / release).
         syncColliders(binding, entity, rejectedCommands, firstFailure);
 
+        // --- R10 runtime-parameter sync + force/torque flush.
+        syncRuntimeParams(binding, rejectedCommands, firstFailure);
+        flushEntityForces(binding, rejectedCommands, firstFailure);
+
         if (syncMode == RigidBodyComponent::SyncMode::PhysicsToEntity) {
             _entityByBody[bodyKey(binding.body, dimension)] = entityId;
             continue;
@@ -444,6 +464,175 @@ void EntityPhysicsBridge::syncColliders(PhysicsBinding& binding,
 }
 
 // =============================================================================
+// =============================================================================
+// R10 — runtime parameter sync (incremental commands) + force/torque flush
+// =============================================================================
+
+void EntityPhysicsBridge::syncRuntimeParams(
+    PhysicsBinding& binding,
+    uint32_t& rejectedCommands,
+    ayt::physics::PhysResult& firstFailure)
+{
+    auto* manager = _boundPhysicsManager;
+    RigidBodyComponent* rigidBody = binding.rigidBody;
+    if (manager == nullptr || rigidBody == nullptr) return;
+    const ayt::physics::BodyHandle body = binding.body;
+    if (body == ayt::physics::InvalidBodyHandle) return;
+    const bool is2D =
+        binding.dimension == RigidBodyComponent::PhysicsDimension::TwoD;
+
+    // Fresh binding: the create descriptor already carried mass / friction /
+    // restitution / gravityScale / velocity — baseline from the component
+    // without re-sending (a diff against zeros would re-push every field).
+    if (!binding.paramsSynced) {
+        binding.lastSyncedMass = rigidBody->getMass();
+        binding.lastSyncedFriction = rigidBody->getFriction();
+        binding.lastSyncedRestitution = rigidBody->getRestitution();
+        binding.lastSyncedGravityScale = rigidBody->getGravityScale();
+        binding.lastSyncedVelocity[0] = rigidBody->getVelocityX();
+        binding.lastSyncedVelocity[1] = rigidBody->getVelocityY();
+        binding.lastSyncedVelocity[2] = rigidBody->getVelocityZ();
+        binding.paramsSynced = true;
+        return;
+    }
+
+    auto emit = [&](ayt::physics::PhysResult result) {
+        if (result == ayt::physics::PhysResult::Ok) return true;
+        if (rejectedCommands == 0) firstFailure = result;
+        ++rejectedCommands;
+        return false;
+    };
+
+    // --- mass
+    if (rigidBody->getMass() != binding.lastSyncedMass) {
+        ayt::physics::PhysResult result = ayt::physics::PhysResult::InvalidState;
+        if (is2D) {
+            if (auto* w = manager->world2D()) {
+                result = w->setMass(body, rigidBody->getMass());
+            }
+        } else if (auto* w = manager->world3D()) {
+            result = w->setMass(body, rigidBody->getMass());
+        }
+        if (emit(result)) binding.lastSyncedMass = rigidBody->getMass();
+    }
+
+    // --- friction / restitution (collider-scoped: Box2D per-shape, Jolt
+    // resolves the collider to its owning body). Apply to every bound
+    // collider; with no colliders yet, keep the diff for next tick.
+    const float friction = rigidBody->getFriction();
+    const float restitution = rigidBody->getRestitution();
+    if (friction != binding.lastSyncedFriction
+        || restitution != binding.lastSyncedRestitution) {
+        for (const ayt::physics::ColliderHandle c : binding.colliderHandles) {
+            ayt::physics::PhysResult result = ayt::physics::PhysResult::InvalidState;
+            if (is2D) {
+                if (auto* w = manager->world2D()) {
+                    result = w->setMaterial(c, friction, restitution);
+                }
+            } else if (auto* w = manager->world3D()) {
+                result = w->setMaterial(c, friction, restitution);
+            }
+            if (!emit(result)) return;  // queue full — retry next tick
+        }
+        binding.lastSyncedFriction = friction;
+        binding.lastSyncedRestitution = restitution;
+    }
+
+    // --- gravity scale
+    const float gs = rigidBody->getGravityScale();
+    if (gs != binding.lastSyncedGravityScale) {
+        ayt::physics::PhysResult result = ayt::physics::PhysResult::InvalidState;
+        if (is2D) {
+            if (auto* w = manager->world2D()) {
+                result = w->setGravityScale(body, gs);
+            }
+        } else if (auto* w = manager->world3D()) {
+            result = w->setGravityScale(body, gs);
+        }
+        if (emit(result)) binding.lastSyncedGravityScale = gs;
+    }
+
+    // --- linear velocity (one-shot: a later same-value set does not re-push,
+    // so the physics simulation is not pinned to the component value).
+    const float vx = rigidBody->getVelocityX();
+    const float vy = rigidBody->getVelocityY();
+    const float vz = rigidBody->getVelocityZ();
+    if (vx != binding.lastSyncedVelocity[0]
+        || vy != binding.lastSyncedVelocity[1]
+        || vz != binding.lastSyncedVelocity[2]) {
+        ayt::physics::PhysResult result = ayt::physics::PhysResult::InvalidState;
+        if (is2D) {
+            if (auto* w = manager->world2D()) {
+                result = w->setRigidbodyVelocity(
+                    body, ayt::math::FVector3(vx, vy, vz));
+            }
+        } else if (auto* w = manager->world3D()) {
+            result = w->setRigidbodyVelocity(
+                body, ayt::math::FVector3(vx, vy, vz));
+        }
+        if (emit(result)) {
+            binding.lastSyncedVelocity[0] = vx;
+            binding.lastSyncedVelocity[1] = vy;
+            binding.lastSyncedVelocity[2] = vz;
+        }
+    }
+}
+
+void EntityPhysicsBridge::flushEntityForces(
+    PhysicsBinding& binding,
+    uint32_t& rejectedCommands,
+    ayt::physics::PhysResult& firstFailure)
+{
+    auto* manager = _boundPhysicsManager;
+    RigidBodyComponent* rigidBody = binding.rigidBody;
+    if (manager == nullptr || rigidBody == nullptr) return;
+    const ayt::physics::BodyHandle body = binding.body;
+    if (body == ayt::physics::InvalidBodyHandle) return;
+    const bool is2D =
+        binding.dimension == RigidBodyComponent::PhysicsDimension::TwoD;
+
+    auto emit = [&](ayt::physics::PhysResult result) {
+        if (result == ayt::physics::PhysResult::Ok) return;
+        if (rejectedCommands == 0) firstFailure = result;
+        ++rejectedCommands;
+    };
+
+    // Accumulated force — pushed every tick while non-zero, cleared only on
+    // a successful push so a QueueFull keeps the intent for the next tick.
+    const float fx = rigidBody->getForceX();
+    const float fy = rigidBody->getForceY();
+    const float fz = rigidBody->getForceZ();
+    if (fx != 0.0f || fy != 0.0f || fz != 0.0f) {
+        ayt::physics::PhysResult result = ayt::physics::PhysResult::InvalidState;
+        if (is2D) {
+            if (auto* w = manager->world2D()) {
+                result = w->applyForce(body, ayt::math::FVector3(fx, fy, fz));
+            }
+        } else if (auto* w = manager->world3D()) {
+            result = w->applyForce(body, ayt::math::FVector3(fx, fy, fz));
+        }
+        emit(result);
+        if (result == ayt::physics::PhysResult::Ok) rigidBody->clearForces();
+    }
+
+    // Accumulated torque. 2D worlds read only the Z component.
+    const float tx = rigidBody->getTorqueX();
+    const float ty = rigidBody->getTorqueY();
+    const float tz = rigidBody->getTorqueZ();
+    if (tx != 0.0f || ty != 0.0f || tz != 0.0f) {
+        ayt::physics::PhysResult result = ayt::physics::PhysResult::InvalidState;
+        if (is2D) {
+            if (auto* w = manager->world2D()) {
+                result = w->applyTorque(body, tz);
+            }
+        } else if (auto* w = manager->world3D()) {
+            result = w->applyTorque(body, ayt::math::FVector3(tx, ty, tz));
+        }
+        emit(result);
+        if (result == ayt::physics::PhysResult::Ok) rigidBody->clearTorques();
+    }
+}
+
 // syncPhysicsToEntity — FixedPostPhysics
 // =============================================================================
 

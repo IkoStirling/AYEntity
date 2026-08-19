@@ -409,4 +409,250 @@ TEST_CASE(bridge_2d_body_and_collider_creation)
     World::instance().shutdown();
 }
 
+// =============================================================================
+// R10 — runtime parameter sync (incremental commands) + force/torque flush
+// =============================================================================
+
+TEST_CASE(runtime_param_diffs_emit_incremental_commands)
+{
+    ayt::physics::PhysicsBackendDescriptor desc;
+    desc.kind3D = ayt::physics::BackendKind::Mock;
+    TestRig rig(desc);
+    ayt::physics::testaccess::reset();
+
+    Entity* e = World::instance().createEntity();
+    auto* t = e->addComponent<Transform>();
+    auto* rb = e->addComponent<RigidBodyComponent>();
+    rb->setSyncMode(RigidBodyComponent::SyncMode::EntityToPhysics);
+    t->setPosition(0.0f, 5.0f, 0.0f);
+    rb->setMass(2.0f);
+    rb->setFriction(0.5f);
+    rb->setRestitution(0.3f);
+    rb->setGravityScale(1.0f);
+    rb->setVelocity(0.0f, 0.0f, 0.0f);
+
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    ayt::physics::testaccess::reset();  // drop the create-path commands
+
+    // Diff every runtime param in one tick -> one-shot commands.
+    rb->setMass(4.0f);
+    rb->setGravityScale(0.25f);
+    rb->setVelocity(1.0f, 0.0f, 0.0f);
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    {
+        const auto& cmds = ayt::physics::testaccess::mockBackendCommands();
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::SetMass) == 1u);
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::SetGravityScale) == 1u);
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::SetRigidbodyVelocity) == 1u);
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::SetMaterial) == 0u);
+    }
+
+    // Friction/restitution diff needs a bound collider: add one, then change.
+    auto* collider = e->addComponent<ColliderComponent>();
+    collider->addShape();  // default Box
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    rb->setFriction(0.9f);
+    rb->setRestitution(0.05f);
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    {
+        const auto& cmds = ayt::physics::testaccess::mockBackendCommands();
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::SetMaterial) == 1u);
+    }
+
+    World::instance().destroyEntity(e);
+    rig.bridge.syncEntityToPhysics();
+    rig.manager->shutdown();
+    World::instance().shutdown();
+}
+
+TEST_CASE(unchanged_runtime_params_resend_nothing)
+{
+    ayt::physics::PhysicsBackendDescriptor desc;
+    desc.kind3D = ayt::physics::BackendKind::Mock;
+    TestRig rig(desc);
+    ayt::physics::testaccess::reset();
+
+    Entity* e = World::instance().createEntity();
+    auto* t = e->addComponent<Transform>();
+    auto* rb = e->addComponent<RigidBodyComponent>();
+    rb->setSyncMode(RigidBodyComponent::SyncMode::EntityToPhysics);
+    t->setPosition(0.0f, 5.0f, 0.0f);
+    rb->setMass(2.0f);
+
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    ayt::physics::testaccess::reset();
+
+    // Two quiescent ticks: no runtime commands, ever.
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    const auto& cmds = ayt::physics::testaccess::mockBackendCommands();
+    CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::SetMass) == 0u);
+    CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::SetGravityScale) == 0u);
+    CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::SetRigidbodyVelocity) == 0u);
+    CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::SetMaterial) == 0u);
+    CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::ApplyForce) == 0u);
+    CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::ApplyTorque) == 0u);
+
+    World::instance().destroyEntity(e);
+    rig.bridge.syncEntityToPhysics();
+    rig.manager->shutdown();
+    World::instance().shutdown();
+}
+
+TEST_CASE(entity_force_and_torque_flush_as_commands)
+{
+    ayt::physics::PhysicsBackendDescriptor desc;
+    desc.kind3D = ayt::physics::BackendKind::Mock;
+    TestRig rig(desc);
+    ayt::physics::testaccess::reset();
+
+    Entity* e = World::instance().createEntity();
+    auto* t = e->addComponent<Transform>();
+    auto* rb = e->addComponent<RigidBodyComponent>();
+    rb->setSyncMode(RigidBodyComponent::SyncMode::EntityToPhysics);
+    t->setPosition(0.0f, 5.0f, 0.0f);
+    rb->setMass(2.0f);
+
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    ayt::physics::testaccess::reset();
+
+    // Accumulate + flush in one tick.
+    rb->applyForce(10.0f, 0.0f, 0.0f);
+    rb->applyTorque(0.0f, 0.0f, 5.0f);
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    {
+        const auto& cmds = ayt::physics::testaccess::mockBackendCommands();
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::ApplyForce) == 1u);
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::ApplyTorque) == 1u);
+        // Command payload carries the vector.
+        bool sawForce = false, sawTorque = false;
+        for (const auto& cmd : cmds) {
+            if (cmd.type == ayt::physics::PhysicsCommandType::ApplyForce
+                && cmd.body == rb->getBodyHandle()
+                && cmd.u.vec4.x == 10.0f && cmd.u.vec4.y == 0.0f) {
+                sawForce = true;
+            }
+            if (cmd.type == ayt::physics::PhysicsCommandType::ApplyTorque
+                && cmd.u.vec4.z == 5.0f) {
+                sawTorque = true;
+            }
+        }
+        CHECK(sawForce);
+        CHECK(sawTorque);
+    }
+
+    // Flushed = cleared: the next tick must not re-send.
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    {
+        const auto& cmds = ayt::physics::testaccess::mockBackendCommands();
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::ApplyForce) == 1u);
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::ApplyTorque) == 1u);
+    }
+
+    World::instance().destroyEntity(e);
+    rig.bridge.syncEntityToPhysics();
+    rig.manager->shutdown();
+    World::instance().shutdown();
+}
+
+TEST_CASE(convex_hull_and_offset_reach_collider_desc)
+{
+    // R10: ConvexHull spec -> ColliderDesc.shapeData (point cloud) and
+    // spec.offset -> ColliderDesc.offset, verified on the captured payload.
+    ayt::physics::PhysicsBackendDescriptor desc;
+    desc.kind3D = ayt::physics::BackendKind::Mock;
+    TestRig rig(desc);
+    ayt::physics::testaccess::reset();
+
+    Entity* e = World::instance().createEntity();
+    auto* t = e->addComponent<Transform>();
+    auto* rb = e->addComponent<RigidBodyComponent>();
+    rb->setSyncMode(RigidBodyComponent::SyncMode::EntityToPhysics);
+    t->setPosition(0.0f, 0.0f, 0.0f);
+    auto* collider = e->addComponent<ColliderComponent>();
+    ColliderShapeSpec& spec = collider->addShape();
+    spec.shape = ColliderShapeType::ConvexHull;
+    spec.hullPoints = {
+        ayt::math::FVector3(0.0f, 0.0f, 0.0f),
+        ayt::math::FVector3(1.0f, 0.0f, 0.0f),
+        ayt::math::FVector3(0.0f, 1.0f, 0.0f),
+        ayt::math::FVector3(0.0f, 0.0f, 1.0f),
+    };
+    spec.offset = ayt::math::FVector3(0.0f, 0.25f, 0.0f);
+
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    const auto& payloads = ayt::physics::testaccess::mockBackendCreatePayloads();
+    bool foundHull = false;
+    for (const auto& p : payloads) {
+        if (p.kind != ayt::physics::PhysicsCreatePayload::Kind::Collider) {
+            continue;
+        }
+        const auto& cd = p.colliderDesc;
+        if (cd.shape != ayt::physics::ColliderShape::ConvexHull) {
+            continue;
+        }
+        CHECK_NOT_NULL(cd.shapeData.get());
+        CHECK_INT_EQ(static_cast<int>(cd.shapeData->hullPoints.size()), 4);
+        CHECK_FLOAT_EQ(cd.shapeData->hullPoints[3].z, 1.0f, 0.0001f);
+        CHECK_FLOAT_EQ(cd.offset.x, 0.0f, 0.0001f);
+        CHECK_FLOAT_EQ(cd.offset.y, 0.25f, 0.0001f);
+        foundHull = true;
+    }
+    CHECK(foundHull);
+
+    World::instance().destroyEntity(e);
+    rig.bridge.syncEntityToPhysics();
+    rig.manager->shutdown();
+    World::instance().shutdown();
+}
+
+TEST_CASE(offset_change_rebuilds_collider)
+{
+    // R10: offset participates in the shape-equality fallback — editing it
+    // directly on the spec vector (bypassing revision) must rebuild.
+    ayt::physics::PhysicsBackendDescriptor desc;
+    desc.kind3D = ayt::physics::BackendKind::Mock;
+    TestRig rig(desc);
+    ayt::physics::testaccess::reset();
+
+    Entity* e = World::instance().createEntity();
+    auto* t = e->addComponent<Transform>();
+    auto* rb = e->addComponent<RigidBodyComponent>();
+    rb->setSyncMode(RigidBodyComponent::SyncMode::EntityToPhysics);
+    t->setPosition(0.0f, 0.0f, 0.0f);
+    auto* collider = e->addComponent<ColliderComponent>();
+    collider->addShape();  // default Box
+
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    ayt::physics::testaccess::reset();
+
+    // Direct vector write (revision NOT bumped): bridge must detect via the
+    // deep compare and rebuild -> a second CreateCollider command.
+    collider->shapes[0].offset = ayt::math::FVector3(1.0f, 0.0f, 0.0f);
+    rig.bridge.syncEntityToPhysics();
+    rig.step();
+    {
+        const auto& cmds = ayt::physics::testaccess::mockBackendCommands();
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::CreateCollider) == 1u);
+        CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::DestroyCollider) == 1u);
+    }
+
+    World::instance().destroyEntity(e);
+    rig.bridge.syncEntityToPhysics();
+    rig.manager->shutdown();
+    World::instance().shutdown();
+}
+
 TEST_SUITE_END

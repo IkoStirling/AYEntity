@@ -28,20 +28,17 @@ namespace ayt::entity
 {
 
 // Shape kinds available to an ECS entity. Values intentionally mirror
-// ayt::physics::ColliderShape (Box/Sphere/Capsule) but the enum is
-// independent so the component stays physics-free. The bridge maps via an
-// explicit switch — do not rely on numeric coincidence across layers.
+// ayt::physics::ColliderShape (Box/Sphere/Capsule/ConvexHull) but the enum
+// is independent so the component stays physics-free. The bridge maps via
+// an explicit switch — do not rely on numeric coincidence across layers.
 enum class ColliderShapeType : uint8_t {
-    Box     = 0,
-    Sphere  = 1,
-    Capsule = 2,
+    Box        = 0,
+    Sphere     = 1,
+    Capsule    = 2,
+    ConvexHull = 3,
 };
 
 // One collision shape spec. Editor/scene authored; the bridge consumes it.
-//
-// NOTE: no local offset field — AYPhysics ColliderDesc has no shape
-// transform yet (Jolt backend offsets shapes by identity). Add offset here
-// when the physics layer grows shape-local transforms.
 #define AY_CURRENT_CLASS ColliderShapeSpec
 struct ColliderShapeSpec {
     AY_PROPERTY(ColliderShapeType, shape,        kAttrSerialize)
@@ -51,6 +48,12 @@ struct ColliderShapeSpec {
     AY_PROPERTY(bool,              isTrigger,    kAttrSerialize)
     AY_PROPERTY(float,             friction,     kAttrSerialize)
     AY_PROPERTY(float,             restitution,  kAttrSerialize)
+    // R10: local-space shape offset relative to the body origin (x/y used
+    // in 2D; z ignored). Mirror of ayt::physics::ColliderDesc::offset.
+    AY_PROPERTY(ayt::math::FVector3, offset,      kAttrSerialize)
+    // ConvexHull only: the 3D point cloud. 2D projects onto the XY plane;
+    // >= 3 points required (backend welds + rejects degenerate hulls).
+    AY_PROPERTY(std::vector<ayt::math::FVector3>, hullPoints, kAttrSerialize)
 
     ColliderShapeSpec() {
         shape       = ColliderShapeType::Box;
@@ -60,6 +63,7 @@ struct ColliderShapeSpec {
         isTrigger   = false;
         friction    = 0.5f;
         restitution = 0.3f;
+        offset      = ayt::math::FVector3(0.0f, 0.0f, 0.0f);
     }
 };
 #undef AY_CURRENT_CLASS

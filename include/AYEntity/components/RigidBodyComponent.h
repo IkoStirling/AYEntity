@@ -42,17 +42,38 @@ public:
         _velocityZ += z;
     }
 
-    // ===== 力 =====
+    // ===== 力（累计，bridge 每帧 flush 为 ApplyForce 命令后清零） =====
     void applyForce(float x, float y, float z) {
         _forceX += x;
         _forceY += y;
         _forceZ += z;
     }
 
+    float getForceX() const { return _forceX; }
+    float getForceY() const { return _forceY; }
+    float getForceZ() const { return _forceZ; }
+
     void clearForces() {
         _forceX = 0.0f;
         _forceY = 0.0f;
         _forceZ = 0.0f;
+    }
+
+    // ===== 力矩（累计，bridge 每帧 flush 为 ApplyTorque 命令后清零） =====
+    void applyTorque(float x, float y, float z) {
+        _torqueX += x;
+        _torqueY += y;
+        _torqueZ += z;
+    }
+
+    float getTorqueX() const { return _torqueX; }
+    float getTorqueY() const { return _torqueY; }
+    float getTorqueZ() const { return _torqueZ; }
+
+    void clearTorques() {
+        _torqueX = 0.0f;
+        _torqueY = 0.0f;
+        _torqueZ = 0.0f;
     }
 
     // ===== 物理状态 =====
@@ -80,6 +101,10 @@ public:
     float getFriction() const { return _friction; }
     void setFriction(float friction) { _friction = friction; }
 
+    // ===== 重力缩放 =====
+    float getGravityScale() const { return _gravityScale; }
+    void setGravityScale(float scale) { _gravityScale = scale; }
+
     // ===== 生命周期回调 =====
     void onStart() override {
         if (_mass <= 0.0f) {
@@ -98,6 +123,11 @@ private:
     float _forceY = 0.0f;
     float _forceZ = 0.0f;
 
+    // ===== 力矩（累计） =====
+    float _torqueX = 0.0f;
+    float _torqueY = 0.0f;
+    float _torqueZ = 0.0f;
+
     // ===== 质量 =====
     float _mass = 1.0f;
 
@@ -111,6 +141,9 @@ private:
     // ===== 碰撞属性 =====
     float _restitution = 0.3f;
     float _friction = 0.5f;
+
+    // ===== 重力缩放 =====
+    float _gravityScale = 1.0f;
 };
 
 } // namespace ayt::entity

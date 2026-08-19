@@ -89,6 +89,18 @@ private:
         uint64_t lastSyncedColliderRevision = 0;
         std::vector<ColliderShapeSpec> lastSyncedShapes;
         bool ownsBody = false;  // body created by this bridge -> destroy on teardown
+
+        // R10 runtime-parameter sync: values last pushed as incremental
+        // commands. paramsSynced=false (fresh binding) baselines from the
+        // component without re-sending — the create descriptor already
+        // carried these values. Field diffs after that push one-shot
+        // SetMass / SetMaterial / SetGravityScale / SetRigidbodyVelocity.
+        bool paramsSynced = false;
+        float lastSyncedMass = 0.0f;
+        float lastSyncedFriction = 0.0f;
+        float lastSyncedRestitution = 0.0f;
+        float lastSyncedGravityScale = 0.0f;
+        float lastSyncedVelocity[3] = {0.0f, 0.0f, 0.0f};
     };
 
     ayt::physics::PhysicsManager* resolveManager() const;
@@ -125,6 +137,17 @@ private:
                        Entity* entity,
                        uint32_t& rejectedCommands,
                        ayt::physics::PhysResult& firstFailure);
+    // R10: diff component runtime params (mass / friction / restitution /
+    // gravityScale / velocity) against the last-pushed baseline and emit
+    // one-shot incremental commands.
+    void syncRuntimeParams(PhysicsBinding& binding,
+                           uint32_t& rejectedCommands,
+                           ayt::physics::PhysResult& firstFailure);
+    // R10: flush accumulated entity force / torque as per-frame commands
+    // (cleared only when pushed successfully).
+    void flushEntityForces(PhysicsBinding& binding,
+                           uint32_t& rejectedCommands,
+                           ayt::physics::PhysResult& firstFailure);
     // Destroy every owned body + its colliders (manager handoff path).
     void destroyOwnedBodies();
 
