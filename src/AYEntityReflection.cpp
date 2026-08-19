@@ -9,6 +9,7 @@
 
 #include "AYEntity/components/AnimationComponent.h"
 #include "AYEntity/components/AnimationStateMachineComponent.h"
+#include "AYEntity/components/ColliderComponent.h"
 #include "AYEntity/components/HealthComponent.h"
 #include "AYEntity/components/MeshComponent.h"
 #include "AYEntity/components/NetworkComponent.h"
@@ -36,6 +37,11 @@ AY_FINALIZE_REGISTRATION_METADATA(AnimationStateMachineComponent)
 // must live in this single TU only (see the header comment — duplicate
 // static finalizers corrupt the CRT debug heap).
 AY_FINALIZE_REGISTRATION_METADATA(TilemapComponent)
+// Collider (2026-08-19) — the shape spec struct must be finalized before the
+// component that embeds vector<ColliderShapeSpec> (design.md §TryRegisterVector
+// order constraint). Both live here, in declaration order.
+AY_FINALIZE_REGISTRATION_METADATA(ColliderShapeSpec)
+AY_FINALIZE_REGISTRATION_METADATA(ColliderComponent)
 AY_FINALIZE_REGISTRATION_METADATA(SpriteComponent)
 AY_FINALIZE_REGISTRATION_METADATA(OrthoCameraComponent)
 
@@ -56,6 +62,7 @@ void registerEntityComponents()
     World::registerComponentType<ScriptComponent>("ScriptComponent");
     World::registerComponentType<NetworkComponent>("NetworkComponent");
     World::registerComponentType<RigidBodyComponent>("RigidBodyComponent");
+    World::registerComponentType<ColliderComponent>("ColliderComponent");
     // P3.1 (2026-08-06) — register new component type for the World query.
     World::registerComponentType<AnimationStateMachineComponent>(
         "AnimationStateMachineComponent");

@@ -11,6 +11,9 @@ set(SOURCES
     src/AYWorld.cpp
     src/AYEntity.cpp
     src/AYEntitySubSystem.cpp
+    # Collider bridge (2026-08-19) — body creation + collider sync +
+    # destroy lifecycle extracted out of AYEntitySubSystem for testability.
+    src/AYEntityPhysicsBridge.cpp
     src/AYRenderSystem.cpp
     src/AYEntityReflection.cpp
     src/AYEntityModule.cpp

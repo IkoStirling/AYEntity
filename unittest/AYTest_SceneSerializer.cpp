@@ -3,6 +3,7 @@
 #include <AYEntity/ComponentFactory.h>
 #include <AYEntity/EntityModule.h>
 #include <AYEntity/components/AnimationComponent.h>
+#include <AYEntity/components/ColliderComponent.h>
 #include <AYEntity/components/MeshComponent.h>
 #include <AYEntity/components/SkeletonComponent.h>
 #include <AYEntity/components/TransformComponent.h>
@@ -181,6 +182,57 @@ TEST_CASE(scene_schema_migration_e2e_v1_to_v2)
 
     Entity* loaded = World::instance().findEntity("Migrated");
     CHECK_NOT_NULL(loaded);
+
+    std::remove(path);
+    World::instance().shutdown();
+}
+
+TEST_CASE(scene_save_load_collider_component_roundtrip)
+{
+    // Collider (2026-08-19): first vector-of-shape-spec component in scenes.
+    // Exercises the ColliderShapeSpec struct wire type + enum serialization
+    // + vector field round trip.
+    World::instance().initialize();
+    registerEntityComponents();
+
+    Entity* original = World::instance().createEntity();
+    original->setName("Box");
+    original->addComponent<Transform>();
+    auto* collider = original->addComponent<ColliderComponent>();
+    auto& box = collider->addShape();
+    box.halfExtents = ayt::math::FVector3(1.5f, 2.5f, 3.5f);
+    box.isTrigger = true;
+    box.friction = 0.9f;
+    auto& cap = collider->addShape();
+    cap.shape = ColliderShapeType::Capsule;
+    cap.radius = 0.3f;
+    cap.height = 1.4f;
+    cap.restitution = 0.05f;
+
+    const char* path = "test_scene_collider.ayscene";
+    CHECK(saveScene(World::instance(), path));
+
+    World::instance().destroyEntity(original);
+    CHECK_INT_EQ(static_cast<int>(World::instance().getAllEntities().size()), 0);
+
+    ayt::serializer::SerializeError err;
+    CHECK(loadScene(World::instance(), path, &err));
+    CHECK(err.ok());
+
+    Entity* loaded = World::instance().findEntity("Box");
+    CHECK_NOT_NULL(loaded);
+    auto* loadedCollider = loaded->getComponent<ColliderComponent>();
+    CHECK_NOT_NULL(loadedCollider);
+    CHECK_INT_EQ(static_cast<int>(loadedCollider->shapes.size()), 2);
+    CHECK(loadedCollider->shapes[0].shape == ColliderShapeType::Box);
+    CHECK_FLOAT_EQ(loadedCollider->shapes[0].halfExtents.x, 1.5f, 0.0001f);
+    CHECK_FLOAT_EQ(loadedCollider->shapes[0].halfExtents.z, 3.5f, 0.0001f);
+    CHECK(loadedCollider->shapes[0].isTrigger);
+    CHECK_FLOAT_EQ(loadedCollider->shapes[0].friction, 0.9f, 0.0001f);
+    CHECK(loadedCollider->shapes[1].shape == ColliderShapeType::Capsule);
+    CHECK_FLOAT_EQ(loadedCollider->shapes[1].radius, 0.3f, 0.0001f);
+    CHECK_FLOAT_EQ(loadedCollider->shapes[1].height, 1.4f, 0.0001f);
+    CHECK_FLOAT_EQ(loadedCollider->shapes[1].restitution, 0.05f, 0.0001f);
 
     std::remove(path);
     World::instance().shutdown();

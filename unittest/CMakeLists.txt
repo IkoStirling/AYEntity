@@ -34,6 +34,10 @@ set(SOURCES
     # real ayt::ay2d tick/resolve on a shared deterministic case + the
     # sticky-Noop render closed loop (animated tile payload flips frame).
     AYTest_TilemapAnimationRuntime.cpp
+    # Collider (2026-08-19) — EntityPhysicsBridge integration tests
+    # (body creation params + collider create/rebuild/destroy against a
+    # live PhysicsManager with Mock/Null backends).
+    EntityPhysicsBridgeTest.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES})
@@ -56,6 +60,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     # resolve via PUBLIC link includes — but this one must be exact:
     # AY2D is never linked, so there is no transitive include.)
     ${CMAKE_CURRENT_SOURCE_DIR}/../../AY2D/include
+    # Collider (2026-08-19): AYPhysics public headers + testaccess for
+    # EntityPhysicsBridgeTest (Mock backend command/payload capture).
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../AYPhysics/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../AYPhysics/interface
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
@@ -70,6 +78,10 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     # the AYEntity lib itself never links AY2D — dependency lock stays
     # intact). AY2D's include dir is already on the test include path.
     AY2D
+    # Collider (2026-08-19): AYPhysics static lib — test-only, for
+    # EntityPhysicsBridgeTest (bridge tests construct a live
+    # PhysicsManager; the AYEntity lib links AYPhysics PRIVATE).
+    AYPhysics
 )
 
 # CM-5 (2026-08-12): shaderc hints — the sticky-Noop render closed loop

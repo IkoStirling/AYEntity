@@ -259,4 +259,57 @@ TEST_CASE(transform_revision_tracks_setter_writes)
     CHECK_INT_EQ(t.revision, 6u);
 }
 
+TEST_CASE(collider_component_defaults_and_revision)
+{
+    World::instance().initialize();
+
+    Entity* e = Entity::create();
+    auto* collider = e->addComponent<ColliderComponent>();
+
+    CHECK_NOT_NULL(collider);
+    CHECK_TRUE(strcmp(collider->getName(), "ColliderComponent") == 0);
+    CHECK_FALSE(collider->isValid());
+    CHECK_INT_EQ(collider->revision, 0u);
+    CHECK_INT_EQ(static_cast<int>(collider->shapes.size()), 0);
+
+    // addShape appends a default spec and bumps revision.
+    ColliderShapeSpec& box = collider->addShape();
+    CHECK_TRUE(collider->isValid());
+    CHECK_INT_EQ(collider->revision, 1u);
+    CHECK_INT_EQ(static_cast<int>(collider->shapes.size()), 1);
+    CHECK(box.shape == ColliderShapeType::Box);
+    CHECK_FLOAT_EQ(box.halfExtents.x, 0.5f, 0.001f);
+    CHECK_FLOAT_EQ(box.radius, 0.5f, 0.001f);
+    CHECK_FLOAT_EQ(box.height, 1.0f, 0.001f);
+    CHECK_FALSE(box.isTrigger);
+    CHECK_FLOAT_EQ(box.friction, 0.5f, 0.001f);
+    CHECK_FLOAT_EQ(box.restitution, 0.3f, 0.001f);
+
+    box.halfExtents = {2.0f, 2.0f, 2.0f};
+    collider->addShape();
+    CHECK_INT_EQ(collider->revision, 2u);
+    CHECK_INT_EQ(static_cast<int>(collider->shapes.size()), 2);
+
+    collider->removeShape(0);
+    CHECK_INT_EQ(collider->revision, 3u);
+    CHECK_INT_EQ(static_cast<int>(collider->shapes.size()), 1);
+
+    collider->removeShape(99);  // out-of-range no-op, no bump
+    CHECK_INT_EQ(collider->revision, 3u);
+
+    collider->clearShapes();
+    CHECK_INT_EQ(collider->revision, 4u);
+    CHECK_FALSE(collider->isValid());
+    collider->clearShapes();  // empty no-op, no bump
+    CHECK_INT_EQ(collider->revision, 4u);
+
+    // Direct vector writes bypass the revision counter; sync layers use
+    // deep-compare as the fallback for those.
+    collider->shapes.push_back(ColliderShapeSpec());
+    CHECK_INT_EQ(collider->revision, 4u);
+
+    Entity::destroy(e);
+    World::instance().shutdown();
+}
+
 TEST_SUITE_END

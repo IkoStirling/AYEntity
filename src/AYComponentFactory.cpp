@@ -4,6 +4,7 @@
 #include "AYEntity/EntityImpl.h"
 
 #include <AYEntity/components/AnimationComponent.h>
+#include <AYEntity/components/ColliderComponent.h>
 #include <AYEntity/components/HealthComponent.h>
 #include <AYEntity/components/MeshComponent.h>
 #include <AYEntity/components/OrthoCameraComponent.h>
@@ -85,6 +86,12 @@ const ComponentWireEntry* findEntry(const char* typeName) {
         {"HealthComponent",
          addTyped<HealthComponent>, getTyped<HealthComponent>, hasTyped<HealthComponent>,
          serializeTyped<HealthComponent>, deserializeTyped<HealthComponent>},
+        // Collider (2026-08-19) — .ayscene wire type. getName() returns
+        // "ColliderComponent" to match this key (writeSceneEnvelope resolves
+        // by getName(); readSceneEnvelope by $type).
+        {"ColliderComponent",
+         addTyped<ColliderComponent>, getTyped<ColliderComponent>, hasTyped<ColliderComponent>,
+         serializeTyped<ColliderComponent>, deserializeTyped<ColliderComponent>},
         // CM-3 (2026-08-11) — 2D lane components (.ayscene wire types).
         {"TilemapComponent",
          addTyped<TilemapComponent>, getTyped<TilemapComponent>, hasTyped<TilemapComponent>,

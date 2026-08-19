@@ -10,6 +10,7 @@
 #include <AYEntity/components/HealthComponent.h>
 #include <AYEntity/components/MeshComponent.h>
 #include <AYEntity/components/RigidBodyComponent.h>
+#include <AYEntity/components/ColliderComponent.h>
 #include <AYEntity/components/ScriptComponent.h>
 #include <AYEntity/components/NetworkComponent.h>
 #include <array>

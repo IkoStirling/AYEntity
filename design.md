@@ -1074,6 +1074,48 @@ AYEntity/
 **Bootstrap 现状**：P2.1 阶段 `bootstrapModule()` **未自动注册** `BlendSpaceSystem` —— 引擎集成侧还在对齐 `registerBlendSpaceSystem()` 的入口时机。
 单测里显式调 `registerBlendSpaceSystem()`，未来 §15.2 的 `bootstrapModule()` 改成"无条件注册 BlendSpaceSystem" 时直接补一行即可。
 
+### 15.8 物理参数桥 + ColliderComponent（2026-08-19）
+
+**背景**：RigidBodyComponent 的 `_bodyHandle` 之前没有任何桥接代码创建 body（只有外部场景/手动赋值），
+mass / friction / restitution / velocity 字段是死字段。本次补齐 create-time 参数桥，并把碰撞体从无到有建立起来。
+
+**组件**（`include/AYEntity/components/ColliderComponent.h`）：
+
+- `ColliderShapeSpec`：单个形状 spec — `shape`（Box/Sphere/Capsule，枚举值镜像 `ayt::physics::ColliderShape` 但独立，桥接用 switch 映射）、
+  `halfExtents`（Box）、`radius`/`height`（Sphere/Capsule）、`isTrigger`、`friction`/`restitution`（material override，Unity 语义挂 collider）。
+  **无 offset 字段**：AYPhysics `ColliderDesc` 尚无形状局部变换（Jolt 后端 offset 恒为 identity），等物理层支持再加。
+- `ColliderComponent`：`shapes[]`（一个组件 = 一个 body 的全部形状；复合形状 = vector 多条目，避免 per-type 单实例存储改 multi-map）、
+  `revision`（与 `Transform::revision` 同语义：mutator（addShape/removeShape/clearShapes）自增；直接改 vector 绕过 →
+  桥接层 deep-compare 兜底）。
+
+**桥**（`include/AYEntity/EntityPhysicsBridge.h` + `src/AYEntityPhysicsBridge.cpp`）：
+
+- 从 `EntitySubSystem` 抽出的可测类；`EntitySubSystem` 退化为薄胶水层。测试用 `setPhysicsManager()` 注入，生产走 `PhysicsSubSystem::findRegistered()`。
+- **FixedPrePhysics `syncEntityToPhysics()`**：
+  1. body 无效且 `SyncMode != None` → 用组件字段构造 `RigidbodyDesc`（type 由 static/kinematic 映射、mass、velocity、friction/restitution、pose）→ `createRigidbody` → `setBodyHandle` 写回。失败保持 binding 下 tick 重试。
+  2. collider 同步：`revision` 变更或 deep-compare 不等 → destroy 旧 collider 句柄 → 按 `shapes[]` 顺序重建。
+  3. pose 提交（EntityToPhysics，revision 快路径 + poseEquals 兜底，与 2859aa2 相同）。
+  4. epoch sweep：实体销毁 / 组件移除 → **destroy 自己创建的 body + collider**（修复此前 body 泄漏）。
+- **FixedPostPhysics `syncPhysicsToEntity()`**：PhysicsToEntity snapshot → Transform `applySimulationPose` + velocity 写回（原逻辑不动）。
+- **所有权规则**：桥创建的 body（`ownsBody`）在 sweep / manager 切换时销毁；外部预置句柄（场景作者）只收养不销毁。
+  `shutdown()` 只清表不销毁（PhysicsManager 自身 shutdown 会销毁后端 world 的全部 body，避免子系统关停顺序导致悬垂）。
+
+**注册点**（全部接线完毕）：
+
+- `AYEntityReflection.cpp`：`AY_FINALIZE_REGISTRATION_METADATA(ColliderShapeSpec)` **先于** `ColliderComponent`（vector-of-struct 注册顺序硬约束）；`registerComponentType<ColliderComponent>("ColliderComponent")`。
+- `AYComponentFactory.cpp`：`ColliderComponent` wire entry — `.ayscene` 序列化必须；**`getName()` 返回 "ColliderComponent" 以匹配 factory key**（save 按 getName() 解析，load 按 $type）。
+- `AYEntity.h` umbrella + `AYEntityPrecompile.cpp` 显式实例化（LNK2019 防护）。
+- 编译期注意：bridge 实现 TU 必须自行 include `<AYPhysics/PhysicsManager.h>` 等实体头 —— `EntityPhysicsBridge.h` 只做前置声明。
+
+**测试**（1132/1132 PASS）：
+
+- `ComponentTest.cpp`：默认值 / revision 自增语义 / 直接 vector 写不 bump（兜底文档化）。
+- `EntityPhysicsBridgeTest.cpp`（8 case，Mock 后端命令/载荷捕获 + Null 行为路径）：
+  body 创建参数映射（mass/friction/restitution/velocity/pose 逐字段断言 payload）、static/kinematic type 映射、
+  `SyncMode::None` 不创建、collider 创建与幂等（二次 sync 零新命令）、revision bump 重建、直接 vector 写兜底重建、
+  空 shapes 零 collider、实体销毁连带 body+collider 销毁、外部句柄收养不销毁、2D 路径。
+- `AYTest_SceneSerializer.cpp`：ColliderComponent `.ayscene` round-trip（vector-of-struct + enum 序列化首例）。
+
 ---
 
 ## 16. 参考

@@ -23,6 +23,7 @@
 #include <AYEntity/components/HealthComponent.h>
 #include <AYEntity/components/MeshComponent.h>
 #include <AYEntity/components/OrthoCameraComponent.h>
+#include <AYEntity/components/ColliderComponent.h>
 #include <AYEntity/components/SkeletonComponent.h>
 #include <AYEntity/components/AnimationComponent.h>
 #include <AYEntity/components/SpriteComponent.h>
@@ -83,5 +84,10 @@ template bool Entity::hasComponent<SpriteComponent>() const;
 template OrthoCameraComponent* Entity::addComponent<OrthoCameraComponent>();
 template OrthoCameraComponent* Entity::getComponent<OrthoCameraComponent>();
 template bool Entity::hasComponent<OrthoCameraComponent>() const;
+
+// --- ColliderComponent (2026-08-19) ------------------------------------------
+template ColliderComponent* Entity::addComponent<ColliderComponent>();
+template ColliderComponent* Entity::getComponent<ColliderComponent>();
+template bool Entity::hasComponent<ColliderComponent>() const;
 
 } // namespace ayt::entity
