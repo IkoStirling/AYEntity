@@ -40,9 +40,8 @@ private:
         }
     };
 
-    // Per-system cache of (path → material handle). Keeps the
-    // SkinnedLit material loaded once per unique cacheKey (which
-    // for the Phase 1 demo is a constant ".phoskia" path).
+    // Per-system cache for generated fallback materials. Cooked .aymat
+    // paths are cached by Renderer::loadMaterial itself.
     std::unordered_map<MaterialKey, ayt::render::MaterialHandle, MaterialKeyHash> _materialCache;
 
     bool _started = false;
