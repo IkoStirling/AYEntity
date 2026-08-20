@@ -73,6 +73,9 @@ void main()
 
 void SkinnedMeshRenderSystem::onStart()
 {
+    _materialCache.clear();
+    _meshSubmissionCache.clear();
+
     ayt::render::RendererSubSystem* rss =
         ayt::render::RendererSubSystem::findRegistered();
     if (rss == nullptr) {
@@ -93,6 +96,104 @@ void SkinnedMeshRenderSystem::onStart()
 
 void SkinnedMeshRenderSystem::onUpdate(float /*dt*/)
 {
+}
+
+ayt::render::MaterialHandle SkinnedMeshRenderSystem::loadMaterialCached(
+    ayt::render::Renderer& renderer, const std::string& path)
+{
+    if (path.empty()) {
+        return {};
+    }
+    const MaterialKey key{path};
+    const auto found = _materialCache.find(key);
+    if (found != _materialCache.end()) {
+        return found->second;
+    }
+
+    const ayt::render::MaterialHandle material = renderer.loadMaterial(path);
+    if (material.isValid()) {
+        _materialCache.emplace(key, material);
+    }
+    return material;
+}
+
+SkinnedMeshRenderSystem::CachedMeshSubmission*
+SkinnedMeshRenderSystem::loadMeshSubmissionCached(
+    ayt::render::Renderer& renderer, const std::string& meshPath)
+{
+    const auto found = _meshSubmissionCache.find(meshPath);
+    if (found != _meshSubmissionCache.end()) {
+        return &found->second;
+    }
+
+    CachedMeshSubmission cached;
+    cached.mesh = renderer.loadMesh(meshPath);
+    if (!cached.mesh.isValid()) {
+        return nullptr;
+    }
+
+    const std::shared_ptr<ayt::resource::IMesh> sourceMesh =
+        ayt::resource::ResourceManager::instance()
+            .load<ayt::resource::IMesh>(meshPath);
+    if (sourceMesh == nullptr) {
+        return nullptr;
+    }
+
+    const uint32_t submeshCount = sourceMesh->getSubmeshCount();
+    const uint32_t slotCount = sourceMesh->getMaterialSlotCount();
+    const ayt::resource::IMesh::Submesh* submeshes = sourceMesh->getSubmeshes();
+
+    bool legacyOrdinalSlots = submeshCount > 1
+                           && submeshCount == slotCount
+                           && submeshes != nullptr;
+    for (uint32_t i = 0; legacyOrdinalSlots && i < submeshCount; ++i) {
+        legacyOrdinalSlots = submeshes[i].materialIndex == 0;
+    }
+    if (legacyOrdinalSlots) {
+        static bool s_legacySlotLog = false;
+        if (!s_legacySlotLog) {
+            std::fprintf(stderr,
+                         "[SkinnedMeshRenderSystem] legacy submesh "
+                         "material indices detected; using slot order\n");
+            s_legacySlotLog = true;
+        }
+    }
+
+    cached.submeshes.reserve(submeshCount);
+    for (uint32_t i = 0; submeshes != nullptr && i < submeshCount; ++i) {
+        const ayt::resource::IMesh::Submesh& submesh = submeshes[i];
+        if (submesh.indexCount == 0) {
+            continue;
+        }
+
+        CachedSubmeshSubmission submission;
+        submission.firstIndex = submesh.indexOffset;
+        submission.indexCount = submesh.indexCount;
+        const uint32_t slotIndex = legacyOrdinalSlots ? i : submesh.materialIndex;
+        if (slotIndex < slotCount) {
+            const char* slot = sourceMesh->getMaterialSlot(slotIndex);
+            if (slot != nullptr && slot[0] != '\0') {
+                const std::string materialPath =
+                    ayt::resource::resolveAssetPath(meshPath, slot);
+                submission.material = loadMaterialCached(renderer, materialPath);
+                if (!submission.material.isValid()) {
+                    static uint32_t s_slotFailLog = 0;
+                    if (s_slotFailLog < 5) {
+                        std::fprintf(stderr,
+                                     "[SkinnedMeshRenderSystem] loadMaterial "
+                                     "slot %u ('%s') failed; using fallback\n",
+                                     slotIndex, materialPath.c_str());
+                        ++s_slotFailLog;
+                    }
+                }
+            }
+        }
+        cached.submeshes.push_back(submission);
+    }
+
+    auto [inserted, unused] = _meshSubmissionCache.emplace(meshPath, std::move(cached));
+    (void)unused;
+    return &inserted->second;
 }
 
 void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
@@ -137,9 +238,9 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
         if (!meshComp->skinned) continue;
         if (!meshComp->visible || meshComp->meshPath.empty()) continue;
 
-        const ayt::render::MeshHandle meshHandle =
-            renderer.loadMesh(meshComp->meshPath);
-        if (!meshHandle.isValid()) {
+        CachedMeshSubmission* meshSubmission =
+            loadMeshSubmissionCached(renderer, meshComp->meshPath);
+        if (meshSubmission == nullptr || !meshSubmission->mesh.isValid()) {
             ++skippedNoMesh;
             static uint32_t s_meshFailLog = 0;
             if (s_meshFailLog < 3) {
@@ -157,7 +258,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
         ayt::render::MaterialHandle fallbackMat = rigidIt->second;
         if (!meshComp->materialPath.empty()) {
             const ayt::render::MaterialHandle cooked =
-                renderer.loadMaterial(meshComp->materialPath);
+                loadMaterialCached(renderer, meshComp->materialPath);
             if (cooked.isValid()) {
                 fallbackMat = cooked;
             } else {
@@ -186,88 +287,23 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
                                             transform->interpolatedRotation(interpolationAlpha),
                                             transform->scale);
 
-        // The renderer owns one shared GPU vertex/index buffer. Expand the
-        // cooked mesh's submesh table into draw ranges so every range binds
-        // the material slot authored for that part of the FBX.
-        const std::shared_ptr<ayt::resource::IMesh> sourceMesh =
-            ayt::resource::ResourceManager::instance()
-                .load<ayt::resource::IMesh>(meshComp->meshPath);
         bool submittedSubmesh = false;
-        if (sourceMesh != nullptr) {
-            const uint32_t submeshCount = sourceMesh->getSubmeshCount();
-            const uint32_t slotCount = sourceMesh->getMaterialSlotCount();
-            const ayt::resource::IMesh::Submesh* submeshes =
-                sourceMesh->getSubmeshes();
-
-            // Compatibility for assets cooked before FBXParser started
-            // writing materialIndex: those files contain N slots and N
-            // submeshes but every materialIndex is zero. Their slot order
-            // still matches submesh order, so they can render correctly
-            // without requiring the user to delete the current cache.
-            bool legacyOrdinalSlots = submeshCount > 1
-                                   && submeshCount == slotCount
-                                   && submeshes != nullptr;
-            for (uint32_t i = 0; legacyOrdinalSlots && i < submeshCount; ++i) {
-                legacyOrdinalSlots = submeshes[i].materialIndex == 0;
-            }
-
-            if (legacyOrdinalSlots) {
-                static bool s_legacySlotLog = false;
-                if (!s_legacySlotLog) {
-                    std::fprintf(stderr,
-                                 "[SkinnedMeshRenderSystem] legacy submesh "
-                                 "material indices detected; using slot order\n");
-                    s_legacySlotLog = true;
-                }
-            }
-
-            for (uint32_t i = 0; submeshes != nullptr && i < submeshCount; ++i) {
-                const ayt::resource::IMesh::Submesh& submesh = submeshes[i];
-                if (submesh.indexCount == 0) {
-                    continue;
-                }
-
-                ayt::render::MaterialHandle submeshMat = fallbackMat;
-                const uint32_t slotIndex = legacyOrdinalSlots
-                    ? i : submesh.materialIndex;
-                if (slotIndex < slotCount) {
-                    const char* slot = sourceMesh->getMaterialSlot(slotIndex);
-                    if (slot != nullptr && slot[0] != '\0') {
-                        const std::string materialPath =
-                            ayt::resource::resolveAssetPath(meshComp->meshPath,
-                                                            slot);
-                        const ayt::render::MaterialHandle cooked =
-                            renderer.loadMaterial(materialPath);
-                        if (cooked.isValid()) {
-                            submeshMat = cooked;
-                        } else {
-                            static uint32_t s_slotFailLog = 0;
-                            if (s_slotFailLog < 5) {
-                                std::fprintf(stderr,
-                                             "[SkinnedMeshRenderSystem] "
-                                             "loadMaterial slot %u ('%s') failed; "
-                                             "using fallback\n",
-                                             slotIndex, materialPath.c_str());
-                                ++s_slotFailLog;
-                            }
-                        }
-                    }
-                }
-
-                ayt::render::DrawItem item;
-                item.mesh = meshHandle;
-                item.material = submeshMat;
-                item.firstIndex = submesh.indexOffset;
-                item.indexCount = submesh.indexCount;
-                item.world = worldM;
-                scene.add(item);
-                ++submitted;
-                submittedSubmesh = true;
-            }
+        for (const CachedSubmeshSubmission& submesh : meshSubmission->submeshes) {
+            const ayt::render::MaterialHandle submeshMat =
+                submesh.material.isValid() ? submesh.material : fallbackMat;
+            ayt::render::DrawItem item;
+            item.mesh = meshSubmission->mesh;
+            item.material = submeshMat;
+            item.firstIndex = submesh.firstIndex;
+            item.indexCount = submesh.indexCount;
+            item.world = worldM;
+            scene.add(item);
+            ++submitted;
+            submittedSubmesh = true;
         }
 
         if (!submittedSubmesh) {
-            scene.add(meshHandle, fallbackMat, worldM);
+            scene.add(meshSubmission->mesh, fallbackMat, worldM);
             ++submitted;
         }
 

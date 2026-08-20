@@ -5,15 +5,17 @@
 // RendererSubSystem::setSceneBuilder's append-to-chain behavior.
 
 #include <AYEntity/IEntity.h>
+#include <AYRenderer/RenderTypes.h>
 
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace ayt::render
 {
 struct RenderScene;
-struct MaterialHandle;
+class Renderer;
 }
 
 namespace ayt::entity
@@ -29,6 +31,8 @@ public:
 
 private:
     void buildSkinnedScene(ayt::render::RenderScene& scene);
+    ayt::render::MaterialHandle loadMaterialCached(
+        ayt::render::Renderer& renderer, const std::string& path);
 
     struct MaterialKey {
         std::string path;
@@ -41,8 +45,23 @@ private:
     };
 
     // Per-system cache for generated fallback materials. Cooked .aymat
-    // paths are cached by Renderer::loadMaterial itself.
+    // paths also live here so the per-frame path never re-enters Renderer.
     std::unordered_map<MaterialKey, ayt::render::MaterialHandle, MaterialKeyHash> _materialCache;
+
+    struct CachedSubmeshSubmission {
+        ayt::render::MaterialHandle material;
+        uint32_t firstIndex = 0;
+        uint32_t indexCount = 0;
+    };
+    struct CachedMeshSubmission {
+        ayt::render::MeshHandle mesh;
+        std::vector<CachedSubmeshSubmission> submeshes;
+    };
+
+    CachedMeshSubmission* loadMeshSubmissionCached(
+        ayt::render::Renderer& renderer, const std::string& meshPath);
+
+    std::unordered_map<std::string, CachedMeshSubmission> _meshSubmissionCache;
 
     bool _started = false;
 };
