@@ -52,6 +52,8 @@ private:
         ayt::render::MaterialHandle material;
         uint32_t firstIndex = 0;
         uint32_t indexCount = 0;
+        uint32_t sourceMaterialIndex = 0;
+        std::string materialPath;
     };
     struct CachedMeshSubmission {
         ayt::render::MeshHandle mesh;
@@ -62,6 +64,13 @@ private:
         ayt::render::Renderer& renderer, const std::string& meshPath);
 
     std::unordered_map<std::string, CachedMeshSubmission> _meshSubmissionCache;
+
+    // P2.1 visibility diagnostics. These are intentionally process-local
+    // switches so the normal material pipeline remains unchanged. Set
+    // AY_SKINNED_DIAGNOSTIC=log, solid, or solid-doublesided before launch.
+    bool _diagnosticLog = false;
+    bool _diagnosticSolid = false;
+    bool _diagnosticDoubleSided = false;
 
     bool _started = false;
 };

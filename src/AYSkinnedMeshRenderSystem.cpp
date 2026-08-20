@@ -24,13 +24,23 @@
 #include <AYResource/AssetPath.h>
 #include <AYResource/ResourceManager.h>
 #include <AYResource/assetsDefs/IMesh.h>
+#include <AYIO/Env.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 
 namespace ayt::entity
 {
 
 namespace {
+
+std::string lowerCopy(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return value;
+}
 
 const char* kSkinnedLitFragmentSc = R"(
 $input v_normal, v_texcoord0
@@ -75,6 +85,22 @@ void SkinnedMeshRenderSystem::onStart()
 {
     _materialCache.clear();
     _meshSubmissionCache.clear();
+
+    const std::string diagnostic = lowerCopy(
+        ayt::io::env::get("AY_SKINNED_DIAGNOSTIC").value_or(""));
+    _diagnosticLog = diagnostic == "log" || diagnostic == "1"
+                  || diagnostic == "solid" || diagnostic == "solid-doublesided"
+                  || diagnostic == "solid_double_sided" || diagnostic == "all";
+    _diagnosticSolid = diagnostic == "solid" || diagnostic == "solid-doublesided"
+                    || diagnostic == "solid_double_sided" || diagnostic == "all";
+    _diagnosticDoubleSided = diagnostic == "solid-doublesided"
+                          || diagnostic == "solid_double_sided" || diagnostic == "all";
+    if (_diagnosticLog) {
+        std::fprintf(stderr,
+                     "[SkinnedMeshDiagnostic] mode=%s solid=%d doubleSided=%d\n",
+                     diagnostic.c_str(), _diagnosticSolid ? 1 : 0,
+                     _diagnosticDoubleSided ? 1 : 0);
+    }
 
     ayt::render::RendererSubSystem* rss =
         ayt::render::RendererSubSystem::findRegistered();
@@ -169,12 +195,14 @@ SkinnedMeshRenderSystem::loadMeshSubmissionCached(
         CachedSubmeshSubmission submission;
         submission.firstIndex = submesh.indexOffset;
         submission.indexCount = submesh.indexCount;
+        submission.sourceMaterialIndex = submesh.materialIndex;
         const uint32_t slotIndex = legacyOrdinalSlots ? i : submesh.materialIndex;
         if (slotIndex < slotCount) {
             const char* slot = sourceMesh->getMaterialSlot(slotIndex);
             if (slot != nullptr && slot[0] != '\0') {
                 const std::string materialPath =
                     ayt::resource::resolveAssetPath(meshPath, slot);
+                submission.materialPath = materialPath;
                 submission.material = loadMaterialCached(renderer, materialPath);
                 if (!submission.material.isValid()) {
                     static uint32_t s_slotFailLog = 0;
@@ -189,6 +217,46 @@ SkinnedMeshRenderSystem::loadMeshSubmissionCached(
             }
         }
         cached.submeshes.push_back(submission);
+    }
+
+    if (_diagnosticLog) {
+        uint64_t coveredIndices = 0;
+        uint32_t invalidRanges = 0;
+        uint32_t cachedOrdinal = 0;
+        for (uint32_t i = 0; i < submeshCount; ++i) {
+            const auto& submesh = submeshes[i];
+            const uint64_t end = static_cast<uint64_t>(submesh.indexOffset)
+                               + static_cast<uint64_t>(submesh.indexCount);
+            if (submesh.indexCount == 0 || end > sourceMesh->getIndexCount()) {
+                ++invalidRanges;
+            }
+            coveredIndices += submesh.indexCount;
+            const uint32_t slotIndex = legacyOrdinalSlots ? i : submesh.materialIndex;
+            const char* slot = slotIndex < slotCount
+                             ? sourceMesh->getMaterialSlot(slotIndex) : nullptr;
+            const bool materialLoaded = submesh.indexCount != 0
+                && cachedOrdinal < cached.submeshes.size()
+                && cached.submeshes[cachedOrdinal++].material.isValid();
+            std::fprintf(stderr,
+                         "[SkinnedMeshDiagnostic] mesh=%s submesh=%u "
+                         "first=%u count=%u materialIndex=%u slot=%u "
+                         "material=%s loaded=%d range=%s\n",
+                         meshPath.c_str(), i, submesh.indexOffset,
+                         submesh.indexCount, submesh.materialIndex, slotIndex,
+                         slot != nullptr ? slot : "<invalid-slot>",
+                         materialLoaded ? 1 : 0,
+                         (submesh.indexCount != 0 && end <= sourceMesh->getIndexCount())
+                             ? "ok" : "INVALID");
+        }
+        std::fprintf(stderr,
+                     "[SkinnedMeshDiagnostic] mesh=%s vertices=%u indices=%u "
+                     "submeshes=%u slots=%u coveredIndices=%llu invalidRanges=%u "
+                     "skin=%d bounds=%d\n",
+                     meshPath.c_str(), sourceMesh->getVertexCount(),
+                     sourceMesh->getIndexCount(), submeshCount, slotCount,
+                     static_cast<unsigned long long>(coveredIndices), invalidRanges,
+                     sourceMesh->hasSkinWeights() ? 1 : 0,
+                     sourceMesh->hasBounds() ? 1 : 0);
     }
 
     auto [inserted, unused] = _meshSubmissionCache.emplace(meshPath, std::move(cached));
@@ -288,9 +356,12 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
                                             transform->scale);
 
         bool submittedSubmesh = false;
+        uint32_t submeshOrdinal = 0;
         for (const CachedSubmeshSubmission& submesh : meshSubmission->submeshes) {
             const ayt::render::MaterialHandle submeshMat =
-                submesh.material.isValid() ? submesh.material : fallbackMat;
+                _diagnosticSolid
+                    ? rigidIt->second
+                    : (submesh.material.isValid() ? submesh.material : fallbackMat);
             ayt::render::DrawItem item;
             item.mesh = meshSubmission->mesh;
             item.material = submeshMat;
@@ -300,6 +371,17 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
             scene.add(item);
             ++submitted;
             submittedSubmesh = true;
+            if (_diagnosticLog && _diagnosticSolid && submeshOrdinal < 3) {
+                std::fprintf(stderr,
+                             "[SkinnedMeshDiagnostic] draw submesh=%u "
+                             "first=%u count=%u forced=solid\n",
+                             submeshOrdinal, submesh.firstIndex, submesh.indexCount);
+            }
+            ++submeshOrdinal;
+        }
+
+        if (_diagnosticSolid && _diagnosticDoubleSided) {
+            renderer.setMaterialSurfaceProperties(rigidIt->second, 0, 0.5f, true);
         }
 
         if (!submittedSubmesh) {
