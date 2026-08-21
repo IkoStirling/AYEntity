@@ -5,6 +5,7 @@
 // RendererSubSystem::setSceneBuilder's append-to-chain behavior.
 
 #include <AYEntity/IEntity.h>
+#include <AYMath/MathTypes.h>
 #include <AYRenderer/RenderTypes.h>
 
 #include <cstdint>
@@ -54,6 +55,10 @@ private:
         uint32_t indexCount = 0;
         uint32_t sourceMaterialIndex = 0;
         std::string materialPath;
+        // Bind-pose center of this index range. TransparentPass sorts whole
+        // DrawItems, so every imported submesh needs its own spatial key;
+        // using only the entity origin leaves all character layers tied.
+        ayt::math::FVector3 localCenter{0.0f, 0.0f, 0.0f};
     };
     struct CachedMeshSubmission {
         ayt::render::MeshHandle mesh;

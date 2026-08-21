@@ -28,7 +28,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
+#include <cstring>
+#include <limits>
 
 namespace ayt::entity
 {
@@ -40,6 +43,75 @@ std::string lowerCopy(std::string value)
     std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
+}
+
+ayt::math::FVector3 indexedRangeCenter(
+    const ayt::resource::IMesh& mesh,
+    const ayt::resource::IMesh::Submesh& submesh)
+{
+    if (!mesh.hasAttribute(ayt::resource::MeshAttribute::Position)
+        || mesh.getVertexData() == nullptr || mesh.getIndexData() == nullptr
+        || mesh.getVertexStride() == 0 || submesh.indexCount == 0) {
+        return mesh.hasBounds() ? mesh.getBounds().center
+                                : ayt::math::FVector3(0.0f, 0.0f, 0.0f);
+    }
+
+    const uint64_t rangeEnd = std::min<uint64_t>(
+        static_cast<uint64_t>(submesh.indexOffset) + submesh.indexCount,
+        mesh.getIndexCount());
+    const auto positionInfo =
+        mesh.getAttributeInfo(ayt::resource::MeshAttribute::Position);
+    if (positionInfo.count < 3 || rangeEnd <= submesh.indexOffset) {
+        return mesh.hasBounds() ? mesh.getBounds().center
+                                : ayt::math::FVector3(0.0f, 0.0f, 0.0f);
+    }
+
+    double sumX = 0.0;
+    double sumY = 0.0;
+    double sumZ = 0.0;
+    uint64_t validCount = 0;
+    for (uint64_t cursor = submesh.indexOffset; cursor < rangeEnd; ++cursor) {
+        const uint32_t vertexIndex = mesh.getIndexData()[cursor];
+        if (vertexIndex >= mesh.getVertexCount()) {
+            continue;
+        }
+        float position[3]{};
+        const uint8_t* source = mesh.getVertexData()
+            + static_cast<size_t>(vertexIndex) * mesh.getVertexStride()
+            + positionInfo.offset;
+        std::memcpy(position, source, sizeof(position));
+        sumX += position[0];
+        sumY += position[1];
+        sumZ += position[2];
+        ++validCount;
+    }
+    if (validCount == 0) {
+        return mesh.hasBounds() ? mesh.getBounds().center
+                                : ayt::math::FVector3(0.0f, 0.0f, 0.0f);
+    }
+    const double inverseCount = 1.0 / static_cast<double>(validCount);
+    return ayt::math::FVector3(
+        static_cast<float>(sumX * inverseCount),
+        static_cast<float>(sumY * inverseCount),
+        static_cast<float>(sumZ * inverseCount));
+}
+
+int32_t transparentDistanceSortKey(
+    const ayt::math::FVector3& localCenter,
+    const ayt::math::Float4x4& world,
+    const ayt::math::FVector3& camera) noexcept
+{
+    const ayt::math::FVector3 center = world.transformPoint(localCenter);
+    const double dx = static_cast<double>(center.x) - camera.x;
+    const double dy = static_cast<double>(center.y) - camera.y;
+    const double dz = static_cast<double>(center.z) - camera.z;
+    // Preserve sub-millimetre separation between layered face/eye/clothing
+    // meshes while retaining a useful range of roughly 21 km.
+    const double scaledDistance = std::sqrt(dx * dx + dy * dy + dz * dz)
+                                * 100000.0;
+    return static_cast<int32_t>(std::min(
+        scaledDistance,
+        static_cast<double>(std::numeric_limits<int32_t>::max())));
 }
 
 const char* kSkinnedLitFragmentSc = R"(
@@ -196,6 +268,7 @@ SkinnedMeshRenderSystem::loadMeshSubmissionCached(
         submission.firstIndex = submesh.indexOffset;
         submission.indexCount = submesh.indexCount;
         submission.sourceMaterialIndex = submesh.materialIndex;
+        submission.localCenter = indexedRangeCenter(*sourceMesh, submesh);
         const uint32_t slotIndex = legacyOrdinalSlots ? i : submesh.materialIndex;
         if (slotIndex < slotCount) {
             const char* slot = sourceMesh->getMaterialSlot(slotIndex);
@@ -272,6 +345,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
         ayt::render::RendererSubSystem::findRegistered();
     if (rss == nullptr) return;
     ayt::render::Renderer& renderer = rss->renderer();
+    const ayt::math::FVector3 cameraPosition = renderer.mainCameraPosition();
 
     constexpr const char* kRigidKey = "AYEntity_RigidLit_bgfx_v2";
     const MaterialKey rigidKey{ kRigidKey };
@@ -368,6 +442,8 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
             item.firstIndex = submesh.firstIndex;
             item.indexCount = submesh.indexCount;
             item.world = worldM;
+            item.sortKey = transparentDistanceSortKey(
+                submesh.localCenter, worldM, cameraPosition);
             scene.add(item);
             ++submitted;
             submittedSubmesh = true;
