@@ -33,6 +33,7 @@
 #include <AY2D/TileSamplerUV.h>
 
 #include <AYMath/MathTypes.h>
+#include <AYMath/CoordinateConvention.h>
 #include <AYTest.h>
 
 #include <cstdio>
@@ -233,6 +234,58 @@ TEST_CASE(cm3_orthocamera_matrix_matches_ay2d)
 
     checkMatrixEq(mine.viewMatrix(), ref.viewMatrix());
     checkMatrixEq(mine.projectionMatrix(), ref.projectionMatrix());
+}
+
+// ─── #9.1 — LH invariant pin (H3, lh-rh-split-entity audit 2026-08-24). ─
+//
+// The matrix-vs-reference test above compares two consumers of the
+// same AYMath header — if `math::lh::` ever degrades to a default-RH
+// `math::ortho`, both sides agree and the test still passes. These
+// cases pin the LH invariant directly so a future AYMath refactor /
+// backend swap / removal of the `math::lh::` prefix shows up as a
+// red bar instead of mirrored geometry in shipped scenes.
+TEST_CASE(cm3_orthocamera_engine_coord_convention_is_lh)
+{
+    // 1. AYMath convention tags still describe LH / Y-up / +Z forward /
+    //    CCW / V-top. Bumping the cacheTag forces a release-note update
+    //    AND every test that asserts the literal string below.
+    CHECK_TRUE(ayt::math::EngineCoordinateConvention::validate());
+    CHECK_NOT_NULL(ayt::math::EngineCoordinateConvention::cacheTag);
+    CHECK(std::strcmp(ayt::math::EngineCoordinateConvention::cacheTag,
+                      "ay-coordinates-lh-yup-zfwd-ccw-uvtop-m-v1") == 0);
+    CHECK_TRUE(ayt::math::EngineCoordinateConvention::matchesAssetTag(
+        ayt::math::EngineCoordinateConvention::cacheTag));
+    // A clearly-wrong tag must NOT match (negative sanity).
+    CHECK_FALSE(ayt::math::EngineCoordinateConvention::matchesAssetTag(
+        "ay-coordinates-rh-yup-zfwd-cw-uvtop-m-v1"));
+    CHECK_FALSE(ayt::math::EngineCoordinateConvention::matchesAssetTag(nullptr));
+}
+
+TEST_CASE(cm3_orthocamera_projection_matrix_is_left_handed)
+{
+    // For nearZ=-1, farZ=1 the LH DirectX-style ortho yields:
+    //   M[2][2] =  1/(zFar - zNear) =  0.5  (depth maps to [0,1])
+    //   M[2][3] = -zNear/(zFar - zNear) = 0.5
+    //   M[3][2] =  0                    (LH has no -1 in row 3)
+    // whereas the RH OpenGL-style ortho yields:
+    //   M[2][2] = -(zFar+zNear)/(zFar-zNear) = 0
+    //   M[2][3] = -2*zFar*zNear/(zFar-zNear) = 0.5
+    //   M[3][2] = -2/(zFar-zNear) = -1
+    OrthoCameraComponent mine;
+    mine.nearZ = -1.0f;
+    mine.farZ  =  1.0f;
+    mine.viewSize = 2.0f;
+    mine.viewportAspect = 1.0f;
+
+    const auto p = mine.projectionMatrix();
+    CHECK_FLOAT_EQ(p.row[2].z, 0.5f, 1e-6f);   // LH-only marker
+    CHECK_FLOAT_EQ(p.row[2].w, 0.5f, 1e-6f);
+    CHECK_FLOAT_EQ(p.row[3].z, 0.0f, 1e-6f);   // LH row-3 col-2 = 0 (RH would be -1)
+    // Sanity: scaling terms still work as before. With
+    // viewSize=2.0, aspect=1.0: left=-1, right=1, so M[0][0]=2/(1-(-1))=1.
+    // Same for M[1][1] (top=1, bottom=-1).
+    CHECK_FLOAT_EQ(p.row[0].x, 1.0f,                1e-6f);
+    CHECK_FLOAT_EQ(p.row[1].y, 1.0f,                1e-6f);
 }
 
 // ─── #10 — .ayscene round-trip through the wire table. ────────────
