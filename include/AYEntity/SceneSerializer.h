@@ -14,6 +14,13 @@ class World;
 
 constexpr uint32_t kSceneSchemaVersion = 2;
 constexpr const char* kSceneSchemaVersionField = "__schemaVersion";
+// H1 (lh-rh-split-entity audit 2026-08-24): embed the engine's
+// coordinate-convention cache tag alongside __schemaVersion so a
+// scene cooked under a different handedness / V-origin / winding
+// is rejected at load time instead of silently producing mirrored
+// geometry when the renderer / backend swaps. See
+// AYMath/CoordinateConvention.h for the canonical tag source.
+constexpr const char* kCoordinateConventionField = "__coordConvention";
 
 /// Envelope-level schema step (from → from+1). Missing steps are no-ops
 /// so older files load when only component-level MigrationManager matters.

@@ -7,11 +7,13 @@
 #include "AYEntity/World.h"
 
 #include <AYSerializer.h>
+#include <AYMath/CoordinateConvention.h>
 
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <cstdio>
 
 namespace ayt::entity
 {
@@ -61,6 +63,12 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world)
     s.beginObject(nullptr);
     Int32 schemaVersion = static_cast<Int32>(kSceneSchemaVersion);
     s.field(kSceneSchemaVersionField, schemaVersion);
+    // H1 (lh-rh-split-entity audit 2026-08-24): embed the engine's
+    // canonical coordinate-convention cache tag so a future
+    // backend/convention swap can reject mismatched scenes at load
+    // time. See CoordinateConvention.h for the tag source of truth.
+    std::string coordConvention = ayt::math::EngineCoordinateConvention::cacheTag;
+    s.field(kCoordinateConventionField, coordConvention);
 
     s.beginArray("entities");
     for (Entity* entity : world.getAllEntities()) {
@@ -128,6 +136,38 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
         }
         s.endObject();
         return false;
+    }
+
+    // H1 (lh-rh-split-entity audit 2026-08-24): validate the scene's
+    // coordinate-convention tag against the engine's canonical tag
+    // before doing any per-component work. A mismatch means the scene
+    // was cooked under a different handedness / V-origin / winding
+    // and would silently produce mirrored geometry when the renderer
+    // backend swaps — reject here. Missing tag = back-compat with
+    // scenes written before the field existed; warn but accept.
+    std::string coordConvention;
+    if (static_cast<ayt::serializer::TokenType>(s.peekFieldTokenType(kCoordinateConventionField))
+        == ayt::serializer::TokenType::Field) {
+        s.field(kCoordinateConventionField, coordConvention);
+        if (!ayt::math::EngineCoordinateConvention::matchesAssetTag(coordConvention.c_str())) {
+            s.reportError(
+                ayt::serializer::SerializeError::Code::InvalidInput,
+                std::string("scene coordinate convention mismatch: file='")
+                    + coordConvention + "' engine='"
+                    + ayt::math::EngineCoordinateConvention::cacheTag
+                    + "'. Scene was cooked under a different handedness / V-origin / winding.");
+            if (outError) {
+                *outError = s.lastError();
+            }
+            s.endObject();
+            return false;
+        }
+    } else {
+        std::fprintf(stderr,
+                     "[AYSceneSerializer] WARNING: scene file lacks '%s' field; "
+                     "loaded with engine default '%s'. Re-save to embed the tag.\n",
+                     kCoordinateConventionField,
+                     ayt::math::EngineCoordinateConvention::cacheTag);
     }
 
     s.beginArray("entities");
