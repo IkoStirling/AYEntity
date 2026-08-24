@@ -107,7 +107,7 @@ struct OrthoCameraComponent : public IComponent {
         const float right  =  half * aspect;
         const float bottom = -half;
         const float top    =  half;
-        return math::ortho(left, right, bottom, top, nearZ, farZ);
+        return math::lh::ortho(left, right, bottom, top, nearZ, farZ);
     }
 };
 #undef AY_CURRENT_CLASS
