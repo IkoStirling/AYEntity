@@ -20,7 +20,6 @@
 #include <AYMath/MathTypes.h>
 #include <AYMath/MathUtils.h>
 
-#include <cmath>
 #include <cstdint>
 
 namespace ayt::entity
@@ -70,30 +69,23 @@ struct OrthoCameraComponent : public IComponent {
     // (AY2D/OrthographicCamera.h:116-149). Translate by -position,
     // rotate by -rotationRadians about +z, scale by 1/zoom. Y axis
     // is bottom-up — no Y flip here (the projection matches).
+    //
+    // Routed through the AYMath composition API
+    // (translate/rotate/scale) rather than hand-rolled Float4x4 row
+    // writes — keeps future 2.5D additions (e.g. rotateY) routed
+    // through the lh:: helpers instead of reintroducing a hand-built
+    // handedness bug. (M1, lh-rh-split-entity audit 2026-08-24.)
     [[nodiscard]] math::Float4x4 viewMatrix() const noexcept {
+        // Non-uniform scale: Z stays 1.0 so the matrix exactly matches
+        // AY2D's hand-rolled OrthographicCamera::viewMatrix() (which
+        // preserves Z via m.row[2].z = 1.0f). math::scale(s) would use
+        // uniform (s,s,s) and diverge at row[2][2]; tests
+        // checkMatrixEq-compare against AY2D's reference.
         const float s = 1.0f / zoom;
-
-        // Scale (1/zoom, 1/zoom, 1, 1).
-        math::Float4x4 m = math::Float4x4::identity();
-        m.row[0].x = s;
-        m.row[1].y = s;
-        m.row[2].z = 1.0f;
-
-        // Rotation about z by -rotationRadians (world rotates under
-        // the camera, so the camera's own rotation is negated).
-        const float c  = std::cos(rotationRadians);
-        const float sn = std::sin(rotationRadians);
-        math::Float4x4 r = math::Float4x4::identity();
-        r.row[0].x =  c;
-        r.row[0].y =  sn;
-        r.row[1].x = -sn;
-        r.row[1].y =  c;
-        m = r * m;
-
-        // Translate by -position.
-        m.row[0].w = -positionX;
-        m.row[1].w = -positionY;
-        return m;
+        return math::translate(-positionX, -positionY, 0.0f)
+             * math::rotate(math::FVector3(0.0f, 0.0f, 1.0f),
+                            -rotationRadians)
+             * math::scale(s, s, 1.0f);
     }
 
     // Mirror of ayt::ay2d::OrthographicCamera::projectionMatrix()
