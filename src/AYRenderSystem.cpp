@@ -275,6 +275,16 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
         // TransparentPass sorts descending by sortKey (far → near).
         // Distance² × 100 → int; farther objects get larger keys.
+        //
+        // L2 (lh-rh-split-entity audit 2026-08-24): reads the world
+        // translation by assuming Float4x4 stores translation in
+        // row[0..2].w (row-major math convention — same layout as
+        // Float4x4::decompose, see AYMath/MathTypes.h:842). AYMath
+        // does not expose a translation-only accessor, and
+        // switching to decompose() would also pull rotation/scale —
+        // overkill for a squared-distance sort. If Float4x4 storage
+        // ever flips to column-major, replace the three reads below
+        // with a single decompose() call.
         {
             const ayt::math::FVector3 cam = renderer.mainCameraPosition();
             const float tx = item.world.row[0].w;

@@ -61,6 +61,13 @@ namespace ayt::entity
 namespace
 {
 
+// L2 (lh-rh-split-entity audit 2026-08-24): reads Float4x4 row[1].w
+// as Y translation. Assumes row-major storage (translation lives in
+// the W column — same convention as Float4x4::decompose at
+// AYMath/MathTypes.h:842). AYMath has no translation-only accessor;
+// if Float4x4 ever flips to column-major, this becomes
+// m.col[3].y. Used to bake a per-bone vertical offset into the
+// debug-draw skin matrix overlay.
 float skinMatrixTranslationY(const ayt::math::Float4x4& m)
 {
     return m.row[1].w;

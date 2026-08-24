@@ -3,6 +3,12 @@
 // Skeleton + AnimationPlayer. Owns the playback state and the per-bone
 // skin matrices that the renderer uploads to the Skeleton UBO.
 //
+// Coordinate convention: LH, Y-up, +Z forward, CCW winding, V-top
+// (see AYMath/CoordinateConvention.h). The skinMatrices[] entries
+// below are (world * inverseBind) — both factors are assumed LH, and
+// silently flipping the convention would mirror every skinned mesh.
+// (M3 / H2, lh-rh-split-entity audit 2026-08-24.)
+//
 // P0 (2026-07-26): skeleton field is now a concrete
 // ayt::resource::Skeleton (not the deleted ayt::anim::Skeleton). The
 // adapter that previously copied fields from ISkeleton -> ayt::anim::Skeleton

@@ -35,6 +35,16 @@ struct TilemapComponent : public IComponent {
     // grid of tiles of size (IAYTilemap::getTileWidth() x
     // getTileHeight()) with zero gutter — the AY2D dense-atlas
     // convention (ATLAS origin-bottom-left, tile-id 0 at bottom-left).
+    //
+    // M2 (lh-rh-split-entity audit 2026-08-24): the AY2D authoring
+    // convention is intentionally V-bottom-left for tilemap atlas
+    // data, even though the AYMath engine-wide default is V-top
+    // (CoordinateConvention.h::textureVOrigin). The override lives
+    // HERE, in the AY2D dense-atlas contract — UV math in
+    // AYEntity/2DUvMath.h:41-69 already compensates. A future
+    // render-backend V-origin flip must NOT change this atlas
+    // convention without also updating 2DUvMath + every authored
+    // .ayatlas asset. See design.md §3.2.
     AY_PROPERTY(int32_t, atlasTilesPerRow, kAttrSerialize)
     AY_PROPERTY(int32_t, atlasTilesPerColumn, kAttrSerialize)
     // 2D draw ordering: layer (high byte of packedSortKey) wins, then

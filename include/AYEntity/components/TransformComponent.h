@@ -1,5 +1,11 @@
 #pragma once
 // AYTransform.h - transform component
+//
+// Coordinate convention: LH, Y-up, +Z forward, CCW winding, V-top
+// (see AYMath/CoordinateConvention.h). The default quaternion
+// (0,0,0,1) is the LH identity; do NOT introduce quaternions built
+// under an RH rotation convention here. (L1 / M3, lh-rh-split-entity
+// audit 2026-08-24.)
 
 #include <AYCore.h>
 #include <AYEntity/IEntity.h>

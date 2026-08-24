@@ -1,5 +1,20 @@
 #pragma once
 // AYEntity/components/AYEntity/components/AYEntity/components/AYEntity/components/NetworkComponent.h - network replication component
+//
+// L3 (lh-rh-split-entity audit 2026-08-24): replicated IComponent
+// payloads are assumed to live in the engine's coordinate convention
+// (LH, Y-up, +Z forward, CCW, atlas V-top — see
+// AYMath/CoordinateConvention.h). For the common case of
+// replicating Transform::rotation, this means the quaternion is the
+// LH identity convention (no implicit (w → -w) flip on the wire).
+// A peer running under a different handedness must apply a
+// coord-conversion adapter at the wire boundary; doing it inside
+// AYEntity is out of scope (AYEntity does not link AYNetwork and
+// does not know the peer's convention). Callers that bind a
+// ReplicatedTarget of type "Transform" must therefore guarantee the
+// sender and receiver agree on the engine LH contract — adding a
+// per-component coord-convention tag here would over-promise (it is
+// the caller's responsibility today). See design.md §3.2.
 
 #include <AYEntity/IEntity.h>
 

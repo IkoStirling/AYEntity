@@ -2,6 +2,12 @@
 // AYEntity/components/AYEntity/components/AYEntity/components/AYEntity/components/OrthoCameraComponent.h — CM-3 (2026-08-11): 2D orthographic camera
 // metadata + header-only view/projection math.
 //
+// Coordinate convention: LH, Y-up, +Z forward, CCW winding, atlas V-top
+// (see AYMath/CoordinateConvention.h). Routed through math::lh::* and
+// the AYMath composition API (translate/rotate/scale) — do NOT
+// reintroduce bare math::* / math::rh::* or hand-rolled Float4x4 row
+// writes here. (M3, lh-rh-split-entity audit 2026-08-24.)
+//
 // viewMatrix()/projectionMatrix() mirror ayt::ay2d::OrthographicCamera
 // (AY2D/OrthographicCamera.h:116-163) exactly — same origin-centered
 // convention, zoom as a view-side scale, viewSize = VERTICAL world
