@@ -93,4 +93,25 @@ endif()
 enable_testing()
 add_subdirectory(unittest)
 
+# ----------------------------------------------------------------------------
+# M4 (lh-rh-split-entity audit 2026-08-24): public-header bgfx-leak guard.
+# AYEntity is a downstream consumer of AYRenderer; mirrors AY2D / AYScene
+# (audit F-5, design.md §11.2). Public headers under include/AYEntity/**
+# MUST NOT include <bgfx/*.h> or <bx/*.h>; such includes belong in
+# src/detail/* or private header paths only. Re-running the guard:
+#   cmake --build . --target ayentity_check_no_bgfx_in_public_headers
+# ----------------------------------------------------------------------------
+set(AYENTITY_PUBLIC_HEADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
+
+add_custom_target(ayentity_check_no_bgfx_in_public_headers
+    COMMAND ${CMAKE_COMMAND}
+        -DAYTGT_PUBLIC_HEADER_DIR="${AYENTITY_PUBLIC_HEADER_DIR}"
+        -DAYTGT_MODULE_NAME="${PROJECT_NAME}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckNoBgfxInPublicHeaders.cmake"
+    COMMENT "AYEntity public-header bgfx/bx leak guard (audit F-5 / M4)"
+    VERBATIM
+)
+
+add_dependencies(${PROJECT_NAME} ayentity_check_no_bgfx_in_public_headers)
+
 message(STATUS "AYEntity v0.1.0 (P2.1 BlendSpace + NetworkComponent + P4-B .ayscene save) — see ${CMAKE_CURRENT_SOURCE_DIR}/design.md")
