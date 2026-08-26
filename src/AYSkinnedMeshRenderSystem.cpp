@@ -4,9 +4,9 @@
 // AND a SkeletonComponent. Coexists with RenderSystem via
 // RendererSubSystem::setSceneBuilder's append-to-chain behavior.
 //
-// Deferred GBufferFill has no bone palette. Until a skinned GBuffer
-// path exists, every skinned entity is submitted as rigid bind-pose
-// (raw mesh verts, no boneMatrices) so characters stay visible.
+// Cooked meshes carry one local-to-global bone palette per render section.
+// DrawItems borrow the complete runtime pose and the section remap; every
+// renderer pass resolves the same palette before submitting.
 
 #include "AYEntity/SkinnedMeshRenderSystem.h"
 
@@ -240,6 +240,16 @@ SkinnedMeshRenderSystem::loadMeshSubmissionCached(
     const uint32_t submeshCount = sourceMesh->getSubmeshCount();
     const uint32_t slotCount = sourceMesh->getMaterialSlotCount();
     const ayt::resource::IMesh::Submesh* submeshes = sourceMesh->getSubmeshes();
+    const uint32_t paletteCount = sourceMesh->getSkinPaletteCount();
+    const ayt::resource::SkinPalette* palettes = sourceMesh->getSkinPalettes();
+    const uint32_t paletteJointCount = sourceMesh->getSkinPaletteJointCount();
+    const uint32_t* paletteJoints = sourceMesh->getSkinPaletteJoints();
+    if (paletteCount != 0u && paletteCount != submeshCount) {
+        std::fprintf(stderr,
+                     "[SkinnedMeshRenderSystem] mesh '%s' has %u palettes for %u submeshes\n",
+                     meshPath.c_str(), paletteCount, submeshCount);
+        return nullptr;
+    }
 
     bool legacyOrdinalSlots = submeshCount > 1
                            && submeshCount == slotCount
@@ -269,6 +279,22 @@ SkinnedMeshRenderSystem::loadMeshSubmissionCached(
         submission.indexCount = submesh.indexCount;
         submission.sourceMaterialIndex = submesh.materialIndex;
         submission.localCenter = indexedRangeCenter(*sourceMesh, submesh);
+        if (palettes != nullptr && i < paletteCount) {
+            const ayt::resource::SkinPalette& palette = palettes[i];
+            const uint64_t paletteEnd = static_cast<uint64_t>(palette.jointOffset)
+                                      + palette.jointCount;
+            if (paletteEnd > paletteJointCount
+                || (palette.jointCount > 0u && paletteJoints == nullptr)) {
+                std::fprintf(stderr,
+                             "[SkinnedMeshRenderSystem] mesh '%s' palette %u is invalid\n",
+                             meshPath.c_str(), i);
+                return nullptr;
+            }
+            if (palette.jointCount > 0u) {
+                submission.bonePalette.assign(paletteJoints + palette.jointOffset,
+                                              paletteJoints + paletteEnd);
+            }
+        }
         const uint32_t slotIndex = legacyOrdinalSlots ? i : submesh.materialIndex;
         if (slotIndex < slotCount) {
             const char* slot = sourceMesh->getMaterialSlot(slotIndex);
@@ -444,6 +470,29 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
             item.world = worldM;
             item.sortKey = transparentDistanceSortKey(
                 submesh.localCenter, worldM, cameraPosition);
+            if (skel->loaded && skel->skinMatrices != nullptr && skel->jointCount > 0u) {
+                item.boneMatrices = skel->skinMatrices;
+                item.skeletonJointCount = skel->jointCount;
+                if (!submesh.bonePalette.empty()) {
+                    item.boneRemap = submesh.bonePalette.data();
+                    item.jointCount = static_cast<uint32_t>(submesh.bonePalette.size());
+                } else if (skel->jointCount <= ayt::render::kUniformSkinPaletteCapacity) {
+                    // Legacy/procedural mesh whose vertex indices already
+                    // address the first matrices directly.
+                    item.jointCount = skel->jointCount;
+                } else {
+                    static uint32_t s_missingPaletteLog = 0u;
+                    if (s_missingPaletteLog < 3u) {
+                        std::fprintf(stderr,
+                                     "[SkinnedMeshRenderSystem] mesh '%s' has %u joints but no "
+                                     "section palette; draw uses bind pose\n",
+                                     meshComp->meshPath.c_str(), skel->jointCount);
+                        ++s_missingPaletteLog;
+                    }
+                    item.boneMatrices = nullptr;
+                    item.skeletonJointCount = 0u;
+                }
+            }
             scene.add(item);
             ++submitted;
             submittedSubmesh = true;
@@ -468,7 +517,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
         static bool s_once = false;
         if (!s_once) {
             std::fprintf(stderr,
-                         "[SkinnedMeshRenderSystem] bind-pose submit "
+                         "[SkinnedMeshRenderSystem] skinned submit "
                          "(loaded=%d joints=%u scale=%.4f pos=(%.2f,%.2f,%.2f))\n"
                          "  mesh=%s\n",
                          skel->loaded ? 1 : 0, skel->jointCount,

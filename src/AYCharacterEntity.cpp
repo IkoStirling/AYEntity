@@ -57,7 +57,7 @@ Entity* spawnCharacterFromPaths(const std::string& meshPath,
     // empty materialPath used to flip skinned=false → RenderSystem, which
     // then skipped the draw (no .aymat) and the character vanished while
     // Transparent glass still drew. SkinnedMesh owns its own lit material;
-    // jointCount > bones[128] falls back to rigid bind-pose there.
+    // cooked sections provide draw-local palettes for large skeletons.
     mesh->skinned      = true;
 
     auto* skel = entity->addComponent<SkeletonComponent>();

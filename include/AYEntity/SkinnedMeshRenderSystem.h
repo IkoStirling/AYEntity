@@ -59,6 +59,8 @@ private:
         // DrawItems, so every imported submesh needs its own spatial key;
         // using only the entity origin leaves all character layers tied.
         ayt::math::FVector3 localCenter{0.0f, 0.0f, 0.0f};
+        // Draw-local slot -> SkeletonComponent::skinMatrices index.
+        std::vector<uint32_t> bonePalette;
     };
     struct CachedMeshSubmission {
         ayt::render::MeshHandle mesh;
