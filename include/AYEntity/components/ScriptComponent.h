@@ -2,6 +2,7 @@
 // AYEntity/components/AYEntity/components/AYEntity/components/AYEntity/components/ScriptComponent.h - 脚本组件
 
 #include <AYEntity/IEntity.h>
+#include <memory>
 #include <string>
 
 namespace ayt::entity
@@ -59,7 +60,21 @@ public:
     Entity* getEntity() const { return _entity; }
 
     // ===== 桥接设置 =====
-    void setBridge(IScriptBridge* bridge) { _bridge = bridge; }
+    // Legacy non-owning binding. Callers must keep `bridge` alive for the
+    // component lifetime. Production script hosts should prefer the shared
+    // overload below so subsystem teardown cannot leave a dangling pointer.
+    void setBridge(IScriptBridge* bridge) {
+        _ownedBridge.reset();
+        _bridge = bridge;
+    }
+
+    // Owning binding used by AYScript. The adapter implementation may outlive
+    // ScriptSubSystem, while the adapter itself is detached from the runtime
+    // during shutdown and becomes a safe no-op.
+    void setBridge(std::shared_ptr<IScriptBridge> bridge) {
+        _ownedBridge = std::move(bridge);
+        _bridge = _ownedBridge.get();
+    }
     IScriptBridge* getBridge() const { return _bridge; }
 
     // ===== 脚本方法调用 =====
@@ -71,6 +86,7 @@ public:
 private:
     std::string _scriptName;
     Entity* _entity = nullptr;
+    std::shared_ptr<IScriptBridge> _ownedBridge;
     IScriptBridge* _bridge = nullptr;
 };
 
