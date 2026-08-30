@@ -1,7 +1,7 @@
 #pragma once
 // AYEntity/OrthoCameraUpdateSystem.h — CM-3 (2026-08-11): 2D ortho camera
 // driver. Priority 405 — registers BEFORE RenderSystem (500) so its
-// scene-builder callback runs first in the setSceneBuilder chain and
+// World-owned scene-builder callback runs first and
 // overwrites the default perspective camera with the primary
 // OrthoCameraComponent's ortho view/projection before the 2D/3D
 // render systems submit.

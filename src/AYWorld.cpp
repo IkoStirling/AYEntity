@@ -2,6 +2,7 @@
 
 #include <AYEntity/World.h>
 #include <AYEntity/EntityImpl.h>
+#include <AYRenderer/RendererSubSystem.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -60,6 +61,13 @@ bool World::initialize() {
 
 void World::shutdown() {
     if (!_initialized) return;
+
+    // Render systems register callbacks that capture their `this` pointers.
+    // Remove the complete World-owned group before `_systems.clear()` so a
+    // later Editor composite cannot call systems from a destroyed Play World.
+    if (auto* renderer = ayt::render::RendererSubSystem::findRegistered()) {
+        renderer->clearSceneBuildersForOwner(this);
+    }
 
     // F7 — call removeAllComponents BEFORE onDetachFromWorld so each
     // entity's per-type storages can drop the (id → T*) entry. After

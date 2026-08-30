@@ -72,7 +72,7 @@ struct OrthoCameraComponent : public IComponent {
     }
 
     // Mirror of ayt::ay2d::OrthographicCamera::viewMatrix()
-    // (AY2D/OrthographicCamera.h:116-149). Translate by -position,
+    // (AY2D/OrthographicCamera.h:116-152). Translate by -position,
     // rotate by -rotationRadians about +z, scale by 1/zoom. Y axis
     // is bottom-up — no Y flip here (the projection matches).
     //
@@ -88,10 +88,13 @@ struct OrthoCameraComponent : public IComponent {
         // uniform (s,s,s) and diverge at row[2][2]; tests
         // checkMatrixEq-compare against AY2D's reference.
         const float s = 1.0f / zoom;
-        return math::translate(-positionX, -positionY, 0.0f)
-             * math::rotate(math::FVector3(0.0f, 0.0f, 1.0f),
+        // Inverse camera transform for column vectors. Translation is
+        // composed on the right so the camera position is transformed by
+        // the inverse rotation/scale and always maps to the view origin.
+        return math::rotate(math::FVector3(0.0f, 0.0f, 1.0f),
                             -rotationRadians)
-             * math::scale(s, s, 1.0f);
+             * math::scale(s, s, 1.0f)
+             * math::translate(-positionX, -positionY, 0.0f);
     }
 
     // Mirror of ayt::ay2d::OrthographicCamera::projectionMatrix()

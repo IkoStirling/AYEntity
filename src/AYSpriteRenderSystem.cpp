@@ -42,11 +42,13 @@ void SpriteRenderSystem::onStart()
                      "sprite draws will not be submitted.\n");
         return;
     }
-    rss->setSceneBuilder([this](ayt::render::RenderScene& scene) {
-        buildRenderScene(scene);
-    });
+    World* owner = &World::instance();
+    rss->addSceneBuilderForOwner(
+        owner, [this, owner](ayt::render::RenderScene& scene) {
+            if (&World::instance() == owner) buildRenderScene(scene);
+        });
     _started = true;
-    std::fprintf(stderr, "[SpriteRenderSystem] scene builder registered\n");
+    std::fprintf(stderr, "[SpriteRenderSystem] world-owned scene builder registered\n");
 }
 
 void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)

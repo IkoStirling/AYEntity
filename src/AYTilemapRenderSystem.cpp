@@ -69,11 +69,13 @@ void TilemapRenderSystem::onStart()
                      "tilemap draws will not be submitted.\n");
         return;
     }
-    rss->setSceneBuilder([this](ayt::render::RenderScene& scene) {
-        buildRenderScene(scene);
-    });
+    World* owner = &World::instance();
+    rss->addSceneBuilderForOwner(
+        owner, [this, owner](ayt::render::RenderScene& scene) {
+            if (&World::instance() == owner) buildRenderScene(scene);
+        });
     _started = true;
-    std::fprintf(stderr, "[TilemapRenderSystem] scene builder registered\n");
+    std::fprintf(stderr, "[TilemapRenderSystem] world-owned scene builder registered\n");
 }
 
 void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)

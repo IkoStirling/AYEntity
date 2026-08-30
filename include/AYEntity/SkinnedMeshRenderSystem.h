@@ -1,8 +1,8 @@
 #pragma once
 // AYEntity/SkinnedMeshRenderSystem.h — Phase 1 E-04: scene-builder callback
 // that submits skinned-mesh draws (entities with MeshComponent::skinned
-// == true AND a SkeletonComponent). Coexists with RenderSystem via
-// RendererSubSystem::setSceneBuilder's append-to-chain behavior.
+// == true AND a SkeletonComponent). Coexists with RenderSystem in the
+// active World's owner-scoped scene-builder group.
 
 #include <AYEntity/IEntity.h>
 #include <AYMath/MathTypes.h>

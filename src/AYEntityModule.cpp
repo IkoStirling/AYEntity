@@ -57,10 +57,10 @@ void bootstrapModule()
     // Phase 1 AN-03: AnimationSystem (priority 450) ticks before any
     // render system so per-bone skin matrices are fresh when the
     // renderer reads them. Both render systems share priority 500;
-    // scene-builder chain order = registration order, so registering
-    // SkinnedMeshRenderSystem before RenderSystem makes it run
-    // first (the order is semantically irrelevant — both consume
-    // different entities — but logging the order helps debugging).
+    // World-owned scene-builder order = registration order, so registering
+    // SkinnedMeshRenderSystem before RenderSystem makes it run first (the
+    // order is semantically irrelevant — both consume different entities —
+    // but logging the order helps debugging).
     if (!hasSystemNamed(world, "AnimationSystem")) {
         registerAnimationSystem();
     }
@@ -76,8 +76,8 @@ void bootstrapModule()
         registerRenderSystem();
     }
     // CM-3 (2026-08-11): 2D lane. Registration order here IS the
-    // scene-builder chain order (setSceneBuilder appends): the camera
-    // builder (405) must run before the render builders (510) so the
+    // World-owned scene-builder order: the camera builder (405) must run
+    // before the render builders (510) so the
     // ortho view/proj is set when the 2D systems submit. The 430/460
     // shells keep the §3.3 priority table authoritative.
     register2DSystems();

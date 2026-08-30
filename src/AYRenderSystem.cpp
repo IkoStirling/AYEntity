@@ -109,13 +109,15 @@ void RenderSystem::onStart()
 
 
 
-    rendererSubSystem->setSceneBuilder(
-
-        [this](ayt::render::RenderScene& scene) { buildRenderScene(scene); });
+    World* owner = &World::instance();
+    rendererSubSystem->addSceneBuilderForOwner(
+        owner, [this, owner](ayt::render::RenderScene& scene) {
+            if (&World::instance() == owner) buildRenderScene(scene);
+        });
 
     _started = true;
 
-    std::fprintf(stderr, "[RenderSystem] scene builder registered\n");
+    std::fprintf(stderr, "[RenderSystem] world-owned scene builder registered\n");
 
 }
 

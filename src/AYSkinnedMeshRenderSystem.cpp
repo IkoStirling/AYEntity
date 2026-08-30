@@ -1,8 +1,8 @@
 // AYSkinnedMeshRenderSystem.cpp — Phase 1 E-04 implementation.
 //
 // Submits draws for entities with MeshComponent::skinned == true
-// AND a SkeletonComponent. Coexists with RenderSystem via
-// RendererSubSystem::setSceneBuilder's append-to-chain behavior.
+// AND a SkeletonComponent. Coexists with RenderSystem in the active
+// World's owner-scoped scene-builder group.
 //
 // Cooked meshes carry one local-to-global bone palette per render section.
 // DrawItems borrow the complete runtime pose and the section remap; every
@@ -183,13 +183,15 @@ void SkinnedMeshRenderSystem::onStart()
         return;
     }
 
-    rss->setSceneBuilder([this](ayt::render::RenderScene& scene) {
-        buildSkinnedScene(scene);
-    });
+    World* owner = &World::instance();
+    rss->addSceneBuilderForOwner(
+        owner, [this, owner](ayt::render::RenderScene& scene) {
+            if (&World::instance() == owner) buildSkinnedScene(scene);
+        });
 
     _started = true;
     std::fprintf(stderr,
-                 "[SkinnedMeshRenderSystem] scene-builder registered (chain mode)\n");
+                 "[SkinnedMeshRenderSystem] world-owned scene builder registered\n");
 }
 
 void SkinnedMeshRenderSystem::onUpdate(float /*dt*/)
@@ -468,6 +470,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
             item.firstIndex = submesh.firstIndex;
             item.indexCount = submesh.indexCount;
             item.world = worldM;
+            item.outlineHull = meshComp->outlineHull;
             item.sortKey = transparentDistanceSortKey(
                 submesh.localCenter, worldM, cameraPosition);
             if (skel->loaded && skel->skinMatrices != nullptr && skel->jointCount > 0u) {

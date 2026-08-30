@@ -23,11 +23,13 @@ void OrthoCameraUpdateSystem::onStart()
                      "2D camera will not drive the main camera.\n");
         return;
     }
-    rss->setSceneBuilder([this](ayt::render::RenderScene& scene) {
-        buildCamera(scene);
-    });
+    World* owner = &World::instance();
+    rss->addSceneBuilderForOwner(
+        owner, [this, owner](ayt::render::RenderScene& scene) {
+            if (&World::instance() == owner) buildCamera(scene);
+        });
     _started = true;
-    std::fprintf(stderr, "[OrthoCameraUpdateSystem] scene builder registered\n");
+    std::fprintf(stderr, "[OrthoCameraUpdateSystem] world-owned scene builder registered\n");
 }
 
 void OrthoCameraUpdateSystem::buildCamera(ayt::render::RenderScene& /*scene*/)
