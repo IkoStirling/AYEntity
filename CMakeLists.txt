@@ -37,6 +37,8 @@ set(SOURCES
     # sprite render (510). All five registered by bootstrapModule().
     src/AYOrthoCameraUpdateSystem.cpp
     src/AYTilemapStreamingSystem.cpp
+    src/AYTilemapVisibilityRuntime.cpp
+    src/AYTilemapChunkGeometry.cpp
     # CM-5 (2026-08-12) — per-path animation table mirror (tick + resolve
     # + resolve buffer). Driven by TilemapAnimationTickSystem (460),
     # consumed by TilemapRenderSystem (510).
@@ -65,6 +67,11 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
+
+# AtlasGridDesc is a public value type used by inline UV helpers. Keep an
+# explicit layout version in the consumer command line so incremental MSVC
+# builds cannot retain a stale COMDAT after the descriptor grows.
+target_compile_definitions(${PROJECT_NAME} PUBLIC AYENTITY_2D_ATLAS_LAYOUT_VERSION=2)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
     AYCore

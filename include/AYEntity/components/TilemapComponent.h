@@ -47,6 +47,18 @@ struct TilemapComponent : public IComponent {
     // .ayatlas asset. See design.md §3.2.
     AY_PROPERTY(int32_t, atlasTilesPerRow, kAttrSerialize)
     AY_PROPERTY(int32_t, atlasTilesPerColumn, kAttrSerialize)
+    // Optional formal atlas metadata asset. When set, `.ayatlas` supplies the
+    // texture path/grid/filter and supersedes the legacy fields above. Keeping
+    // the legacy fields preserves existing scenes and raw-texture workflows.
+    AY_PROPERTY(std::string, atlasPath, kAttrSerialize)
+    // Chunk/residency controls. The renderer clamps chunk dimensions to 1..64
+    // so uint16 indexed meshes remain valid. residentChunkLimit <= 0 uses 256.
+    AY_PROPERTY(int32_t, chunkColumns, kAttrSerialize)
+    AY_PROPERTY(int32_t, chunkRows, kAttrSerialize)
+    AY_PROPERTY(int32_t, residentChunkLimit, kAttrSerialize)
+    AY_PROPERTY(int32_t, prefetchMarginChunks, kAttrSerialize)
+    // 0=Nearest, 1=Linear, 2=4-tap, 3=9-tap. Unknown values clamp to Linear.
+    AY_PROPERTY(int32_t, samplingQuality, kAttrSerialize)
     // 2D draw ordering: layer (high byte of packedSortKey) wins, then
     // sortingKey (low 24 bits). See design.md §7.4 / DrawPayload2D.
     AY_PROPERTY(int32_t, layer, kAttrSerialize)
@@ -60,12 +72,19 @@ struct TilemapComponent : public IComponent {
         // explicit ctor assignment is required (AYEntity/components/AYEntity/components/AYEntity/components/MeshComponent.h:52-57).
         atlasTilesPerRow    = 1;
         atlasTilesPerColumn = 1;
+        chunkColumns        = 16;
+        chunkRows           = 16;
+        residentChunkLimit  = 256;
+        prefetchMarginChunks = 1;
+        samplingQuality     = 1;
         layer               = 0;
         sortingKey          = 0;
     }
 
     explicit TilemapComponent(const char* path)
-        : tilemapPath(path ? path : "") {}
+        : TilemapComponent() {
+        tilemapPath = path ? path : "";
+    }
 
     void setTilemap(const char* path) { tilemapPath = path ? path : ""; }
     void setAtlasTexture(const char* path) { atlasTexturePath = path ? path : ""; }

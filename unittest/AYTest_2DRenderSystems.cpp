@@ -5,8 +5,8 @@
 //     (TilemapRenderSystem registered before SpriteRenderSystem —
 //     registration order IS the scene-builder chain order).
 //   - tilemap closed loop: sticky-Noop RendererSubSystem + real
-//     .aytilemap/.aytex assets → buildRenderScene → item count ==
-//     cols*rows, per-item payload UV == tileUvQuad(defaultTileId),
+//     .aytilemap/.aytex assets → buildRenderScene → one item per chunk,
+//     tile UVs baked in the chunk mesh,
 //     mesh/material valid, 3D-only entities excluded, full
 //     beginFrame/render/endFrame → drawCalls == item count.
 //   - sprite sorted submission + camera AABB cull (screen-out sprite
@@ -291,23 +291,33 @@ TEST_CASE(cm3_tilemap_render_closed_loop)
     ayt::render::RenderScene scene;
     system.buildRenderScene(scene);
 
-    // 2 cols x 3 rows => exactly 6 items; decoy excluded.
-    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 6);
+    // 2 cols x 3 rows fit in the default 16x16 chunk: one item; decoy excluded.
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
 
     for (const ayt::render::DrawItem& item : scene.items()) {
         CHECK_NOT_NULL(item.payload);
         CHECK_TRUE(item.mesh.isValid());
         CHECK_TRUE(item.material.isValid());
         CHECK(item.payload->packedSortKey == ayt::entity::drawSortKey(2, 10));
-        checkPayloadUvIsTile5(*item.payload);
+        CHECK_FLOAT_EQ(item.payload->sourceRectMin.x, 0.0f, 1e-6f);
+        CHECK_FLOAT_EQ(item.payload->sourceRectMin.y, 0.0f, 1e-6f);
+        CHECK_FLOAT_EQ(item.payload->sourceRectMax.x, 1.0f, 1e-6f);
+        CHECK_FLOAT_EQ(item.payload->sourceRectMax.y, 1.0f, 1e-6f);
+        CHECK_FLOAT_EQ(item.payload->atlasTexelSize.x, 1.0f / 256.0f, 1e-6f);
+        CHECK_FLOAT_EQ(item.payload->atlasTexelSize.y, 1.0f / 128.0f, 1e-6f);
     }
 
     // Full pipeline: beginFrame/render/endFrame must submit exactly
-    // the 6 2D items (no double-submit — Opaque blend lane only).
+    // the one chunk item (no double-submit — Opaque blend lane only).
     rss->renderer().beginFrame({});
     rss->renderer().render(scene);
     rss->renderer().endFrame();
-    CHECK(rss->renderer().getFrameStats().drawCalls == 6u);
+    CHECK(rss->renderer().getFrameStats().drawCalls == 1u);
+    CHECK_INT_EQ(system.lastFrameStats().cellsVisited, 6u);
+    CHECK_INT_EQ(system.lastFrameStats().visibleChunks, 1u);
+    CHECK_INT_EQ(system.lastFrameStats().drawItemsEmitted, 1u);
+    CHECK_INT_EQ(system.lastFrameStats().chunkMeshesBuilt, 1u);
+    CHECK_INT_EQ(system.lastFrameStats().residentChunkMeshes, 1u);
 
     rss->shutdown();
     unregisterTestRenderer();

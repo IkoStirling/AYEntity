@@ -98,15 +98,19 @@ TilemapAnimationRuntimeEntry* TilemapAnimationRuntime::find(
 void TilemapAnimationRuntime::tick(TilemapAnimationRuntimeEntry& e,
                                    int64_t nowUs)
 {
+    bool resolvedChanged = false;
     // First tick: stash the baseline, refresh the resolve buffer, no
     // advance (mirror of the AY2D first-call contract).
     if (!e.hasBeenTicked) {
         e.lastTickUs    = nowUs;
         e.hasBeenTicked = true;
         for (size_t i = 0; i < e.table.size(); ++i) {
-            e.resolved[i] = resolvedFrameId(e.table, e.currentFrameIdx,
-                                            static_cast<uint32_t>(i));
+            const uint32_t next = resolvedFrameId(
+                e.table, e.currentFrameIdx, static_cast<uint32_t>(i));
+            resolvedChanged = resolvedChanged || e.resolved[i] != next;
+            e.resolved[i] = next;
         }
+        if (resolvedChanged) ++e.revision;
         return;
     }
 
@@ -152,9 +156,12 @@ void TilemapAnimationRuntime::tick(TilemapAnimationRuntimeEntry& e,
                      % static_cast<uint32_t>(frames.size());
         }
 
-        e.resolved[i] = resolvedFrameId(e.table, e.currentFrameIdx,
-                                        static_cast<uint32_t>(i));
+        const uint32_t next = resolvedFrameId(
+            e.table, e.currentFrameIdx, static_cast<uint32_t>(i));
+        resolvedChanged = resolvedChanged || e.resolved[i] != next;
+        e.resolved[i] = next;
     }
+    if (resolvedChanged) ++e.revision;
 }
 
 uint32_t TilemapAnimationRuntime::resolve(

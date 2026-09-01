@@ -34,6 +34,7 @@ set(SOURCES
     # real ayt::ay2d tick/resolve on a shared deterministic case + the
     # sticky-Noop render closed loop (animated tile payload flips frame).
     AYTest_TilemapAnimationRuntime.cpp
+    AYTest_TilemapChunkGeometry.cpp
     # Collider (2026-08-19) — EntityPhysicsBridge integration tests
     # (body creation params + collider create/rebuild/destroy against a
     # live PhysicsManager with Mock/Null backends).

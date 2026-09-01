@@ -483,28 +483,25 @@ TEST_CASE(cm5_tilemap_render_animation_closed_loop)
     ayt::entity::TilemapRenderSystem system;
     system.onStart();
 
-    // t0: baseline tick — frame A (tile id 10) must render.
+    // t0: baseline tick — frame A is baked into one chunk mesh.
     rt.tick(*entry, 100000);
     {
         ayt::render::RenderScene scene;
         system.buildRenderScene(scene);
-        CHECK_INT_EQ(static_cast<int>(scene.items().size()), 6);
-        for (const ayt::render::DrawItem& item : scene.items()) {
-            CHECK_NOT_NULL(item.payload);
-            checkPayloadUvIsTileN(10u, *item.payload);
-        }
+        CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+        CHECK_INT_EQ(TilemapAnimationRuntime::resolve(*entry, 2u), 10u);
+        CHECK_INT_EQ(system.lastFrameStats().chunkMeshesBuilt, 1u);
+        CHECK_INT_EQ(system.lastFrameStats().cellsVisited, 6u);
     }
 
-    // t0 + 70ms: frame B (tile id 11) must render.
+    // t0 + 70ms: frame B changes the revision and rebuilds the chunk.
     rt.tick(*entry, 170000);
     {
         ayt::render::RenderScene scene;
         system.buildRenderScene(scene);
-        CHECK_INT_EQ(static_cast<int>(scene.items().size()), 6);
-        for (const ayt::render::DrawItem& item : scene.items()) {
-            CHECK_NOT_NULL(item.payload);
-            checkPayloadUvIsTileN(11u, *item.payload);
-        }
+        CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+        CHECK_INT_EQ(TilemapAnimationRuntime::resolve(*entry, 2u), 11u);
+        CHECK_INT_EQ(system.lastFrameStats().chunkMeshesBuilt, 1u);
     }
 
     // t0 + 70ms + 60ms: wraps back to frame A (mod loop).
@@ -512,11 +509,9 @@ TEST_CASE(cm5_tilemap_render_animation_closed_loop)
     {
         ayt::render::RenderScene scene;
         system.buildRenderScene(scene);
-        CHECK_INT_EQ(static_cast<int>(scene.items().size()), 6);
-        for (const ayt::render::DrawItem& item : scene.items()) {
-            CHECK_NOT_NULL(item.payload);
-            checkPayloadUvIsTileN(10u, *item.payload);
-        }
+        CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+        CHECK_INT_EQ(TilemapAnimationRuntime::resolve(*entry, 2u), 10u);
+        CHECK_INT_EQ(system.lastFrameStats().chunkMeshesBuilt, 1u);
     }
 
     rss->shutdown();

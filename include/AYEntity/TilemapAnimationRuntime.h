@@ -59,6 +59,9 @@ struct TilemapAnimationRuntimeEntry {
     // by every tick() call (including the first baseline call), so the
     // render path reads it with no hash and no table traversal.
     std::vector<uint32_t> resolved;
+    // Monotonic visible-frame revision. Chunk meshes cache this value and only
+    // rebuild when an animated source tile actually resolves to another id.
+    uint64_t revision = 1;
     int64_t lastTickUs    = 0;
     bool    hasBeenTicked = false;
 };

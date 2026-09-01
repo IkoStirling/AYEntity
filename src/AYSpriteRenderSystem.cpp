@@ -111,12 +111,14 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             continue;
         }
 
-        // AABB cull: sprite half-extent from |scale| (rotation ignored
-        // — a conservative approximation for small sprites; exact
-        // rotated AABBs are a Phase 6 budget item).
+        // Exact AABB of a rotated/scaled centered unit quad.
         if (haveCamera) {
-            const float halfW = std::fabs(sprite->scaleX) * 0.5f;
-            const float halfH = std::fabs(sprite->scaleY) * 0.5f;
+            const float c = std::fabs(std::cos(sprite->rotationZ));
+            const float s = std::fabs(std::sin(sprite->rotationZ));
+            const float sx = std::fabs(sprite->scaleX);
+            const float sy = std::fabs(sprite->scaleY);
+            const float halfW = 0.5f * (c * sx + s * sy);
+            const float halfH = 0.5f * (s * sx + c * sy);
             if (std::fabs(sprite->position.x - camCx) > camHalfW + halfW
                 || std::fabs(sprite->position.y - camCy) > camHalfH + halfH) {
                 continue;

@@ -1,5 +1,12 @@
 # AYEntity Design
 
+> **2026-09-01 — AY2D production ECS path**: `AYEntity` is the sole
+> production owner of engine-scene 2D placement. The priority chain is camera
+> 405 → visibility streaming 430 → tile animation 460 → tile/sprite render 510.
+> Tilemaps submit visible indexed chunk meshes, and `TilemapRenderStats` exposes
+> draw reduction and residency. `ayt::ay2d::World2D` remains a standalone
+> CPU/tool path; a logical tilemap must not be live in both ownership paths.
+
 > **变更记录（2026-07）**：引擎集成、`bootstrapModule`、`SparseSet` 指针语义 — 见 [§15](#15-引擎集成与模块引导2026-07)。  
 > **变更记录（2026-07-09）**：Simulation / Presentation 分轨（`SystemLane`）— 见 [§14](#14-simulation-vs-presentation-systemlane)；总览见 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../ENGINE-DETERMINISM-ARCHITECTURE.md)。
 

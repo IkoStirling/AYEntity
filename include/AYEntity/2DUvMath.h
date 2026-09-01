@@ -16,14 +16,18 @@
 namespace ayt::entity
 {
 
-// Dense-atlas grid descriptor. atlasWidthTexels is implied:
-// tileWidthTexels * tilesPerRow (dense packing, gutter = 0) — mirror
-// of the AY2D dense-atlas convention (AY2D/TileSamplerUV.h).
+// Atlas grid descriptor. Legacy callers may leave atlas dimensions at zero;
+// they are then derived as tile-size * grid-count. Formal `.ayatlas` callers
+// provide the explicit dimensions and gutter so this remains a strict mirror
+// of AY2D/TileSamplerUV.h.
 struct AtlasGridDesc {
     uint32_t tilesPerRow     = 0;
     uint32_t tilesPerColumn  = 0;
     uint32_t tileWidthTexels = 0;
     uint32_t tileHeightTexels = 0;
+    uint32_t atlasWidthTexels = 0;
+    uint32_t atlasHeightTexels = 0;
+    uint32_t gutter = 0;
 };
 
 struct TileUvQuad {
@@ -33,8 +37,8 @@ struct TileUvQuad {
     float vMax = 0.0f;
 };
 
-// Mirror of ayt::ay2d::tileUV (AY2D/TileSamplerUV.h:56-87) with gutter=0
-// (dense atlas) and the half-texel center convention. UV space is
+// Mirror of ayt::ay2d::tileUV (AY2D/TileSamplerUV.h:56-87), including
+// gutter and the half-texel center convention. UV space is
 // atlas-normalized 0..1, origin-bottom-left (tile-id 0 sits at the
 // bottom-left; row 0 = bottom). Out-of-range tile ids / degenerate
 // descs yield all-zeros.
@@ -44,9 +48,15 @@ inline TileUvQuad tileUvQuad(uint32_t tileId, const AtlasGridDesc& d) noexcept
     if (d.tilesPerRow == 0 || d.tilesPerColumn == 0) return uv;
     if (d.tileWidthTexels == 0 || d.tileHeightTexels == 0) return uv;
 
-    const uint32_t atlasW = d.tileWidthTexels * d.tilesPerRow;
-    const uint32_t atlasH = d.tileHeightTexels * d.tilesPerColumn;
+    if (tileId / d.tilesPerRow >= d.tilesPerColumn) return uv;
+    const uint32_t atlasW = d.atlasWidthTexels != 0u
+        ? d.atlasWidthTexels : d.tileWidthTexels * d.tilesPerRow;
+    const uint32_t atlasH = d.atlasHeightTexels != 0u
+        ? d.atlasHeightTexels : d.tileHeightTexels * d.tilesPerColumn;
     if (atlasW == 0 || atlasH == 0) return uv;
+    const uint32_t minTile = d.tileWidthTexels < d.tileHeightTexels
+        ? d.tileWidthTexels : d.tileHeightTexels;
+    if (d.gutter >= minTile / 2u) return uv;
 
     const uint32_t col = tileId % d.tilesPerRow;
     const uint32_t row = tileId / d.tilesPerRow;
@@ -55,11 +65,13 @@ inline TileUvQuad tileUvQuad(uint32_t tileId, const AtlasGridDesc& d) noexcept
     const float ah = static_cast<float>(atlasH);
     const float half_px = 0.5f / aw;  // half-texel in U (design.md §5.1)
     const float half_py = 0.5f / ah;  // half-texel in V
+    const float gutterU = static_cast<float>(d.gutter) / aw;
+    const float gutterV = static_cast<float>(d.gutter) / ah;
 
-    const float tileLeft   = static_cast<float>(col)      * static_cast<float>(d.tileWidthTexels)  / aw;
-    const float tileRight  = static_cast<float>(col + 1u) * static_cast<float>(d.tileWidthTexels)  / aw;
-    const float tileBottom = static_cast<float>(row)      * static_cast<float>(d.tileHeightTexels) / ah;
-    const float tileTop    = static_cast<float>(row + 1u) * static_cast<float>(d.tileHeightTexels) / ah;
+    const float tileLeft   = static_cast<float>(col)      * static_cast<float>(d.tileWidthTexels)  / aw + gutterU;
+    const float tileRight  = static_cast<float>(col + 1u) * static_cast<float>(d.tileWidthTexels)  / aw - gutterU;
+    const float tileBottom = static_cast<float>(row)      * static_cast<float>(d.tileHeightTexels) / ah + gutterV;
+    const float tileTop    = static_cast<float>(row + 1u) * static_cast<float>(d.tileHeightTexels) / ah - gutterV;
 
     uv.uMin = tileLeft   + half_px;
     uv.uMax = tileRight  - half_px;

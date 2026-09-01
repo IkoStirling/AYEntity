@@ -1,9 +1,8 @@
 #pragma once
 // AYEntity/TilemapRenderSystem.h — CM-3 (2026-08-11): 2D tilemap draw
-// submission. Priority 510 (after OrthoCameraUpdateSystem@405 and the
-// streaming/animation shells @430/@460). One draw per tile — the
-// Forward2DOpaquePass lane (payload != nullptr items) owns them; the
-// unit quad + kTilemapPhoskiaSource material are the only GPU assets.
+// submission. Priority 510 (after camera/streaming/animation @405/430/460).
+// One indexed mesh and DrawItem are emitted per visible chunk; static meshes
+// remain resident under a component-configured LRU cap.
 //
 // Lazy-load contract (L-16): tile data is loaded on first use via
 // AYResourceManager::load<IAYTilemap>(tilemapPath); load failure
@@ -12,15 +11,11 @@
 // path-keyed; the material is created once from the embedded
 // kTilemapPhoskiaSource and the texture bound to "albedoMap".
 //
-// Culling note: chunked visibility culling belongs to
-// TilemapStreamingSystem (empty shell today) — this system submits
-// every tile of every visible, valid entity. A 60x60 map costs ~3600
-// draws; batching is a Phase 6 budget item.
-
 #include <AYEntity/IEntity.h>
 
 #include <AYRenderer/RenderScene.h>
 
+#include <array>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -29,6 +24,7 @@
 namespace ayt::resource
 {
 class ITilemap;
+class IAtlas;
 }
 
 namespace ayt::entity
@@ -36,6 +32,16 @@ namespace ayt::entity
 
 class TilemapRenderSystem : public ISystem {
 public:
+    struct FrameStats {
+        uint64_t cellsVisited = 0;
+        uint32_t visibleChunks = 0;
+        uint32_t drawItemsEmitted = 0;
+        uint32_t chunkMeshesBuilt = 0;
+        uint32_t residentChunkMeshes = 0;
+        uint32_t chunkMeshesEvicted = 0;
+    };
+
+    ~TilemapRenderSystem() override = default;
     const char* getName() const override { return "TilemapRenderSystem"; }
     void onStart() override;
     void onUpdate(float /*dt*/) override {}
@@ -44,12 +50,23 @@ public:
 
     // Exposed for tests / debug only. Not part of the ISystem contract.
     void buildRenderScene(ayt::render::RenderScene& scene);
+    [[nodiscard]] const FrameStats& lastFrameStats() const noexcept {
+        return _lastStats;
+    }
 
 private:
+    struct CachedChunkMesh {
+        ayt::render::MeshHandle mesh;
+        uint64_t animationRevision = 0;
+        uint64_t lastUsedFrame = 0;
+    };
+
     struct CachedTilemapResources {
         std::shared_ptr<ayt::resource::ITilemap> tilemap;  // null = not loaded / failed
+        std::shared_ptr<ayt::resource::IAtlas> atlas;
         ayt::render::TextureHandle  texture;               // invalid = not loaded / failed
-        ayt::render::MaterialHandle material;              // invalid = not created / failed
+        std::array<ayt::render::MaterialHandle, 4> materials{};
+        std::unordered_map<uint64_t, CachedChunkMesh> chunks;
     };
     std::unordered_map<std::string, CachedTilemapResources> _cache;
 
@@ -59,11 +76,8 @@ private:
     // before filling so &_payloads.back() is stable).
     std::vector<ayt::render::DrawPayload2D> _payloads;
 
-    // Shared unit quad, created once on first build. Created per frame
-    // used to leak one GpuMesh (2 bgfx buffers) every frame until the
-    // device ran out of resources mid-session.
-    ayt::render::MeshHandle _quad;
-
+    FrameStats _lastStats{};
+    uint64_t _frameIndex = 0;
     bool _started = false;
 };
 
