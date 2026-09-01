@@ -10,6 +10,8 @@ option(AY_ENTITY_PRECOMPILE_COMPONENTS "Precompile common components" ON)
 set(SOURCES
     src/AYWorld.cpp
     src/AYEntity.cpp
+    src/AYComponentRegistry.cpp
+    src/AYEntityComponentModule.cpp
     src/AYEntitySubSystem.cpp
     # Collider bridge (2026-08-19) — body creation + collider sync +
     # destroy lifecycle extracted out of AYEntitySubSystem for testability.
@@ -74,6 +76,7 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 target_compile_definitions(${PROJECT_NAME} PUBLIC AYENTITY_2D_ATLAS_LAYOUT_VERSION=2)
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
+    AY::Module
     AYCore
     AYGameLoop
     AYReflect

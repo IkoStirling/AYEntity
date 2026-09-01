@@ -1,5 +1,7 @@
 #pragma once
 
+#include <AYEntity/ComponentRegistry.h>
+
 namespace ayt::entity
 {
 
@@ -16,6 +18,8 @@ void bootstrapModule();
 
 void registerEntitySubSystem();
 void registerRenderSystem();
+[[nodiscard]] ComponentRegistryResult registerEntityComponents(
+    ComponentRegistry& registry);
 void registerEntityComponents();
 
 // Phase 1 AN-03 + E-04: animation tick + skinned draw submission.

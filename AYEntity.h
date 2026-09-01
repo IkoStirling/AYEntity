@@ -6,6 +6,7 @@
 #include <AYEntity/EntityHandle.h>
 #include <AYEntity/EntityImpl.h>
 #include <AYEntity/World.h>
+#include <AYEntity/ComponentRegistry.h>
 #include <AYEntity/components/TransformComponent.h>
 #include <AYEntity/components/HealthComponent.h>
 #include <AYEntity/components/MeshComponent.h>
@@ -137,17 +138,22 @@ T* Entity::addComponent(Args&&... args) {
     size_t typeHash = typeid(T).hash_code();
     if (hasComponent<T>()) return getComponent<T>();
 
-    T* component = new T(std::forward<Args>(args)...);
-    component->onAttach(this);
-
     IComponentStorage* storage = world->getStorageBase<T>();
     if (!storage) {
-        World::registerComponentType<T>(typeid(T).name());
+        // Explicit startup registration is checked only on the slow path:
+        // once per component type for each World, when its storage is first
+        // created. Normal add/get/query calls do not pay a registry lookup.
+        if (!World::isComponentTypeRegistered<T>()) {
+            return nullptr;
+        }
         auto newStorage = SparseSetFactory::create<T>();
         size_t newHash = typeid(T).hash_code();
         world->_componentStorages[newHash] = std::move(newStorage);
         storage = world->_componentStorages[newHash].get();
     }
+
+    T* component = new T(std::forward<Args>(args)...);
+    component->onAttach(this);
 
     storage->add(_id, component);
     _componentTypeHashes.push_back(typeHash);

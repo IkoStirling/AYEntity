@@ -6,6 +6,7 @@ set(SOURCES
     TestMain.cpp
     EntityTest.cpp
     ComponentTest.cpp
+    ComponentRegistryTest.cpp
     SparseSetTest.cpp
     WorldTest.cpp
     EntityHandleTest.cpp
@@ -106,3 +107,24 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 )
 
 ay_add_test(${PROJECT_NAME})
+
+# Registration-only IModule pilot. It runs in a dedicated process because the
+# process ComponentRegistry is deliberately sealed for the remainder of its
+# lifetime after ModuleManager::registerTypes().
+add_executable(AYEntityComponentModuleTest
+    EntityComponentModuleTestMain.cpp
+    EntityComponentModuleTest.cpp
+)
+
+target_link_libraries(AYEntityComponentModuleTest PRIVATE
+    AYEntity
+    AY::Module
+    AYTest
+)
+
+target_compile_options(AYEntityComponentModuleTest PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>: /W4 /wd4200>
+    $<$<CXX_COMPILER_ID:GNU,Clang>: -Wall -Wextra -Wpedantic>
+)
+
+ay_add_test(AYEntityComponentModuleTest)

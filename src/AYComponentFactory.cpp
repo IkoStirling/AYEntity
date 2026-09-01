@@ -1,162 +1,114 @@
-// AYComponentFactory.cpp — P4-B scene component factory + reflect dispatch.
+// AYComponentFactory.cpp - registry-backed component/editor/scene dispatch.
 
-#include "AYEntity/ComponentFactory.h"
-#include "AYEntity/EntityImpl.h"
-
-#include <AYEntity/components/AnimationComponent.h>
-#include <AYEntity/components/ColliderComponent.h>
-#include <AYEntity/components/HealthComponent.h>
-#include <AYEntity/components/MeshComponent.h>
-#include <AYEntity/components/OrthoCameraComponent.h>
-#include <AYEntity/components/SkeletonComponent.h>
-#include <AYEntity/components/SpriteComponent.h>
-#include <AYEntity/components/TilemapComponent.h>
-#include <AYEntity/components/TransformComponent.h>
-
-#include <AYSerializer.h>
-#include <AYSerializer/SerializerForReflect.h>
-#include <AYReflect.h>
-
-#include <cstring>
-
-using ayt::serializer::SerializerForReflect;
+#include <AYEntity/ComponentFactory.h>
+#include <AYEntity/ComponentRegistry.h>
+#include <AYEntity/EntityImpl.h>
 
 namespace ayt::entity
 {
 namespace
 {
 
-using SerializeFn = void (*)(ayt::serializer::ISerializer&, IComponent&);
-using DeserializeFn = void (*)(ayt::serializer::ISerializer&, IComponent&);
-
-struct ComponentWireEntry {
-    const char* typeName;
-    IComponent* (*add)(Entity&);
-    IComponent* (*get)(Entity&);
-    bool (*has)(const Entity&);
-    SerializeFn serialize;
-    DeserializeFn deserialize;
-};
-
-template<typename T>
-IComponent* addTyped(Entity& entity) {
-    return entity.addComponent<T>();
-}
-
-template<typename T>
-IComponent* getTyped(Entity& entity) {
-    return entity.getComponent<T>();
-}
-
-template<typename T>
-bool hasTyped(const Entity& entity) {
-    return entity.hasComponent<T>();
-}
-
-// Scene envelope already opened a component object and wrote "$type".
-// Write Serialize fields inline via SerializerForReflect::applyFields (P4-E).
-template<typename T>
-void serializeTyped(ayt::serializer::ISerializer& s, IComponent& component) {
-    SerializerForReflect<T>::applyFields(s, static_cast<T&>(component));
-}
-
-template<typename T>
-void deserializeTyped(ayt::serializer::ISerializer& s, IComponent& component) {
-    SerializerForReflect<T>::applyReadFields(s, static_cast<T&>(component));
-}
-
-const ComponentWireEntry* findEntry(const char* typeName) {
+const ComponentDescriptor* findEntry(const char* typeName) noexcept
+{
     if (typeName == nullptr || typeName[0] == '\0') {
         return nullptr;
     }
-
-    static const ComponentWireEntry kEntries[] = {
-        {"Transform",
-         addTyped<Transform>, getTyped<Transform>, hasTyped<Transform>,
-         serializeTyped<Transform>, deserializeTyped<Transform>},
-        {"MeshComponent",
-         addTyped<MeshComponent>, getTyped<MeshComponent>, hasTyped<MeshComponent>,
-         serializeTyped<MeshComponent>, deserializeTyped<MeshComponent>},
-        {"SkeletonComponent",
-         addTyped<SkeletonComponent>, getTyped<SkeletonComponent>, hasTyped<SkeletonComponent>,
-         serializeTyped<SkeletonComponent>, deserializeTyped<SkeletonComponent>},
-        {"AnimationComponent",
-         addTyped<AnimationComponent>, getTyped<AnimationComponent>, hasTyped<AnimationComponent>,
-         serializeTyped<AnimationComponent>, deserializeTyped<AnimationComponent>},
-        {"HealthComponent",
-         addTyped<HealthComponent>, getTyped<HealthComponent>, hasTyped<HealthComponent>,
-         serializeTyped<HealthComponent>, deserializeTyped<HealthComponent>},
-        // Collider (2026-08-19) — .ayscene wire type. getName() returns
-        // "ColliderComponent" to match this key (writeSceneEnvelope resolves
-        // by getName(); readSceneEnvelope by $type).
-        {"ColliderComponent",
-         addTyped<ColliderComponent>, getTyped<ColliderComponent>, hasTyped<ColliderComponent>,
-         serializeTyped<ColliderComponent>, deserializeTyped<ColliderComponent>},
-        // CM-3 (2026-08-11) — 2D lane components (.ayscene wire types).
-        {"TilemapComponent",
-         addTyped<TilemapComponent>, getTyped<TilemapComponent>, hasTyped<TilemapComponent>,
-         serializeTyped<TilemapComponent>, deserializeTyped<TilemapComponent>},
-        {"SpriteComponent",
-         addTyped<SpriteComponent>, getTyped<SpriteComponent>, hasTyped<SpriteComponent>,
-         serializeTyped<SpriteComponent>, deserializeTyped<SpriteComponent>},
-        {"OrthoCameraComponent",
-         addTyped<OrthoCameraComponent>, getTyped<OrthoCameraComponent>, hasTyped<OrthoCameraComponent>,
-         serializeTyped<OrthoCameraComponent>, deserializeTyped<OrthoCameraComponent>},
-    };
-
-    for (const ComponentWireEntry& entry : kEntries) {
-        if (std::strcmp(entry.typeName, typeName) == 0) {
-            return &entry;
-        }
-    }
-    return nullptr;
+    return ComponentRegistry::instance().find(typeName);
 }
 
 } // namespace
 
-IComponent* ComponentFactory::addComponent(Entity& entity, const char* typeName) {
-    const ComponentWireEntry* entry = findEntry(typeName);
-    if (entry == nullptr) {
-        return nullptr;
-    }
-    return entry->add(entity);
+IComponent* ComponentFactory::addComponent(
+    Entity& entity,
+    const char* typeName)
+{
+    const ComponentDescriptor* entry = findEntry(typeName);
+    return entry != nullptr && entry->add != nullptr
+        ? entry->add(entity)
+        : nullptr;
 }
 
-IComponent* ComponentFactory::getComponent(Entity& entity, const char* typeName) {
-    const ComponentWireEntry* entry = findEntry(typeName);
-    if (entry == nullptr) {
-        return nullptr;
-    }
-    return entry->get(entity);
+IComponent* ComponentFactory::getComponent(
+    Entity& entity,
+    const char* typeName)
+{
+    const ComponentDescriptor* entry = findEntry(typeName);
+    return entry != nullptr && entry->get != nullptr
+        ? entry->get(entity)
+        : nullptr;
 }
 
-bool ComponentFactory::hasComponent(const Entity& entity, const char* typeName) {
-    const ComponentWireEntry* entry = findEntry(typeName);
-    if (entry == nullptr) {
+bool ComponentFactory::hasComponent(
+    const Entity& entity,
+    const char* typeName)
+{
+    const ComponentDescriptor* entry = findEntry(typeName);
+    return entry != nullptr
+        && entry->has != nullptr
+        && entry->has(entity);
+}
+
+bool ComponentFactory::removeComponent(
+    Entity& entity,
+    const char* typeName)
+{
+    const ComponentDescriptor* entry = findEntry(typeName);
+    if (entry == nullptr
+        || entry->has == nullptr
+        || entry->remove == nullptr
+        || !entry->has(entity)) {
         return false;
     }
-    return entry->has(entity);
+    entry->remove(entity);
+    return true;
 }
 
-bool ComponentFactory::isSceneSerializable(const char* typeName) {
-    return findEntry(typeName) != nullptr;
+const char* ComponentFactory::registeredTypeName(
+    const IComponent& component)
+{
+    const ComponentDescriptor* entry =
+        ComponentRegistry::instance().find(component);
+    return entry != nullptr ? entry->name.c_str() : nullptr;
 }
 
-void ComponentFactory::serializeComponent(ayt::serializer::ISerializer& s, const IComponent& component) {
-    const ComponentWireEntry* entry = findEntry(component.getName());
-    if (entry == nullptr) {
-        return;
+bool ComponentFactory::isSceneSerializable(const char* typeName)
+{
+    const ComponentDescriptor* entry = findEntry(typeName);
+    return entry != nullptr
+        && entry->sceneSerializable
+        && entry->serialize != nullptr
+        && entry->deserialize != nullptr;
+}
+
+void ComponentFactory::serializeComponent(
+    ayt::serializer::ISerializer& serializer,
+    const IComponent& component)
+{
+    const ComponentDescriptor* entry =
+        ComponentRegistry::instance().find(component);
+    if (entry != nullptr
+        && entry->sceneSerializable
+        && entry->serialize != nullptr) {
+        entry->serialize(serializer, component);
     }
-    entry->serialize(s, const_cast<IComponent&>(component));
 }
 
-bool ComponentFactory::deserializeComponent(ayt::serializer::ISerializer& s, const char* typeName,
-                                          IComponent& component) {
-    const ComponentWireEntry* entry = findEntry(typeName);
-    if (entry == nullptr) {
+bool ComponentFactory::deserializeComponent(
+    ayt::serializer::ISerializer& serializer,
+    const char* typeName,
+    IComponent& component)
+{
+    const ComponentDescriptor* entry = findEntry(typeName);
+    const ComponentDescriptor* componentEntry =
+        ComponentRegistry::instance().find(component);
+    if (entry == nullptr
+        || componentEntry != entry
+        || !entry->sceneSerializable
+        || entry->deserialize == nullptr) {
         return false;
     }
-    entry->deserialize(s, component);
+    entry->deserialize(serializer, component);
     return true;
 }
 

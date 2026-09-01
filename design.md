@@ -1123,6 +1123,29 @@ mass / friction / restitution / velocity 字段是死字段。本次补齐 creat
   空 shapes 零 collider、实体销毁连带 body+collider 销毁、外部句柄收养不销毁、2D 路径。
 - `AYTest_SceneSerializer.cpp`：ColliderComponent `.ayscene` round-trip（vector-of-struct + enum 序列化首例）。
 
+### 15.9 ComponentRegistry 与首个 IModule 试点（2026-09-01）
+
+组件类型改为启动期显式注册：`ComponentRegistry` 以稳定名称保存 C++ 类型、
+编辑器分类、动态增删回调和可选 `.ayscene` 序列化回调。注册表在所有
+`IModule::registerTypes()` 完成后由 Host 调用 `seal()`；封存后拒绝新增或
+修改描述符，编辑器可以安全枚举并持有描述符指针。
+
+`Entity::addComponent<T>()` 不再按需注册。每个 World 首次创建 T 的
+SparseSet 时验证一次 T 已注册，之后 add/get/query 继续直接访问存储。这样既
+保留未注册类型的 fail-fast 行为，也不把注册判断放进常规组件访问热路径。
+
+`ComponentFactory` 和场景序列化不再维护第二张硬编码表，而是统一查询
+`ComponentRegistry`。场景写入使用注册表中的规范名称，不再依赖实例
+`getName()`；因此 `HealthComponent` 的运行时名称 `Health` 也会稳定写成
+线缆名 `HealthComponent`。场景保存和读取本身不执行注册，避免在运行期
+重新打开类型集合；Host 必须在进入场景生命周期前完成注册和封存。
+
+首个迁移切片是 `EntityComponentModule`：它只在 `registerTypes()` 中注册
+AYEntity 内建组件，不接管 EntitySubSystem、World 或表现系统所有权。旧的
+`registerEntityComponents()`、`bootstrapEntityCore()` 与
+`bootstrapModule()` 继续可用并复用同一注册表；子系统迁移留到关闭顺序和
+GameLoop 所有权契约明确之后。
+
 ---
 
 ## 16. 参考

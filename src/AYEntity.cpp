@@ -92,7 +92,7 @@ bool Entity::hasComponentByName(const char* typeName) const {
 }
 
 void Entity::removeComponentByName(const char* typeName) {
-    (void)typeName;
+    (void)ComponentFactory::removeComponent(*this, typeName);
 }
 
 std::vector<IComponent*> Entity::getComponents() const {

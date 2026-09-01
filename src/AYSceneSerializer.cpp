@@ -2,7 +2,6 @@
 
 #include "AYEntity/SceneSerializer.h"
 #include "AYEntity/ComponentFactory.h"
-#include "AYEntity/EntityModule.h"
 #include "AYEntity/EntityImpl.h"
 #include "AYEntity/World.h"
 
@@ -84,13 +83,18 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world)
 
         s.beginArray("components");
         for (IComponent* component : entity->getComponents()) {
-            if (component == nullptr
-                || !ComponentFactory::isSceneSerializable(component->getName())) {
+            if (component == nullptr) {
+                continue;
+            }
+            const char* registeredTypeName =
+                ComponentFactory::registeredTypeName(*component);
+            if (registeredTypeName == nullptr
+                || !ComponentFactory::isSceneSerializable(registeredTypeName)) {
                 continue;
             }
 
             s.beginObject(nullptr);
-            std::string typeName = component->getName();
+            std::string typeName = registeredTypeName;
             s.field(kTypeField, typeName);
             ComponentFactory::serializeComponent(s, *component);
             s.endObject();
@@ -107,8 +111,6 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world)
 bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                        ayt::serializer::SerializeError* outError)
 {
-    registerEntityComponents();
-
     s.beginObject(nullptr);
 
     Int32 wireVersion = 0;
@@ -273,8 +275,6 @@ bool migrateSceneSchemaToCurrent(uint32_t loadedVersion)
 
 bool saveScene(const World& world, const std::string& path, ayt::serializer::Format format)
 {
-    registerEntityComponents();
-
     auto serializer = ayt::serializer::createSerializer(format, true);
     if (!serializer) {
         return false;

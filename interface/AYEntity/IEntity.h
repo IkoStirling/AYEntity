@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <type_traits>
 #include <unordered_map>
 
 namespace ayt::entity
@@ -91,19 +92,12 @@ public:
 // =============================================================================
 // Macros
 // =============================================================================
+// Declaration marker only. Component registration is deliberately explicit:
+// call registerComponent<T>() or registerSceneComponent<T>() from an
+// IModule::registerTypes() implementation before ComponentRegistry::seal().
 #define AY_COMPONENT(T) \
-    static_assert(std::is_base_of_v<::ayt::entity::IComponent, T>, #T " must inherit IComponent"); \
-    namespace { \
-        struct AYT_ComponentRegistrar_##T { \
-            AYT_ComponentRegistrar_##T() { \
-                if (::ayt::entity::World::isComponentTypeRegistered<T>()) { \
-                    return; \
-                } \
-                ::ayt::entity::World::registerComponentType<T>(#T); \
-            } \
-        }; \
-        static AYT_ComponentRegistrar_##T AYT_g_component_registrar_##T; \
-    }
+    static_assert(std::is_base_of_v<::ayt::entity::IComponent, T>, \
+                  #T " must inherit IComponent")
 
 #define AY_SYSTEM(T, priority) \
     static_assert(std::is_base_of_v<::ayt::entity::ISystem, T>, #T " must inherit ISystem"); \

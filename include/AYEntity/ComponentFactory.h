@@ -15,6 +15,8 @@ public:
     static IComponent* addComponent(Entity& entity, const char* typeName);
     static IComponent* getComponent(Entity& entity, const char* typeName);
     static bool hasComponent(const Entity& entity, const char* typeName);
+    static bool removeComponent(Entity& entity, const char* typeName);
+    static const char* registeredTypeName(const IComponent& component);
     static bool isSceneSerializable(const char* typeName);
 
     static void serializeComponent(ayt::serializer::ISerializer& s, const IComponent& component);

@@ -2,6 +2,7 @@
 // AYEntity/World.h - World class (non-template parts)
 
 #include <AYEntity/IEntity.h>
+#include <AYEntity/ComponentRegistry.h>
 #include <AYEntity/SparseSet.h>
 #include <AYEntity/EntityHandle.h>
 #include <unordered_map>
@@ -91,8 +92,7 @@ public:
 
     template<typename T>
     static bool isComponentTypeRegistered() {
-        const size_t typeHash = typeid(T).hash_code();
-        return getComponentTypeNames().find(typeHash) != getComponentTypeNames().end();
+        return ComponentRegistry::instance().find<T>() != nullptr;
     }
 
     Entity* getEntityByHandle(const EntityHandle& handle);
@@ -115,11 +115,6 @@ private:
     uint32_t _nextEntityId = 1;
     bool _initialized = false;
     bool _systemsStarted = false;
-
-    static std::unordered_map<size_t, std::string>& getComponentTypeNames() {
-        static std::unordered_map<size_t, std::string> s_names;
-        return s_names;
-    }
 
     friend class Entity;
     // AYScene PR-1: Scene::Impl owns independent World instances to avoid
@@ -148,8 +143,8 @@ void World::registerSystem(int32_t priority) {
 
 template<typename T>
 void World::registerComponentType(const char* name) {
-    size_t typeHash = typeid(T).hash_code();
-    getComponentTypeNames()[typeHash] = name;
+    (void)ComponentRegistry::instance().registerType<T>(
+        name != nullptr ? name : "");
 }
 
 template<typename T>
