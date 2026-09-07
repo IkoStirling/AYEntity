@@ -62,6 +62,20 @@ std::string assetKey(const std::string& meshPath, const std::string& materialPat
 
 }
 
+uint64_t temporalObjectIdentity(World& world, Entity& entity) noexcept
+{
+    // Entity ids restart in a different Edit/Play World. Mix world identity
+    // and handle generation so a scene switch or recycled id cannot inherit
+    // another object's transform history.
+    const EntityHandle handle = world.getEntityHandle(entity.getId());
+    uint64_t value = static_cast<uint64_t>(
+        reinterpret_cast<uintptr_t>(&world));
+    value ^= static_cast<uint64_t>(handle.id) + 0x9e3779b97f4a7c15ull
+          + (value << 6u) + (value >> 2u);
+    value ^= static_cast<uint64_t>(handle.version) << 32u;
+    return value != 0u ? value : 1u;
+}
+
 
 
 void logBuildSceneSummary(uint32_t frameIndex, uint32_t matched, uint32_t skippedInvalid,
@@ -265,6 +279,8 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         item.mesh         = resources.mesh;
         item.material     = resources.material;
         item.world        = transformToWorldMatrix(*transform);
+        // Temporal passes match this rigid draw to its previous transform.
+        item.motionObjectId = temporalObjectIdentity(world, *entity);
         item.shadowFlags  = ayt::render::makeShadowFlags(meshComp->castShadow,
                                                          meshComp->receiveShadow);
         item.outlineHull  = meshComp->outlineHull;

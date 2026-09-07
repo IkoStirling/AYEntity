@@ -114,6 +114,17 @@ int32_t transparentDistanceSortKey(
         static_cast<double>(std::numeric_limits<int32_t>::max())));
 }
 
+uint64_t temporalObjectIdentity(World& world, Entity& entity) noexcept
+{
+    const EntityHandle handle = world.getEntityHandle(entity.getId());
+    uint64_t value = static_cast<uint64_t>(
+        reinterpret_cast<uintptr_t>(&world));
+    value ^= static_cast<uint64_t>(handle.id) + 0x9e3779b97f4a7c15ull
+          + (value << 6u) + (value >> 2u);
+    value ^= static_cast<uint64_t>(handle.version) << 32u;
+    return value != 0u ? value : 1u;
+}
+
 const char* kSkinnedLitFragmentSc = R"(
 $input v_normal, v_texcoord0
 
@@ -470,6 +481,10 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
             item.firstIndex = submesh.firstIndex;
             item.indexCount = submesh.indexCount;
             item.world = worldM;
+            // All sections share one entity identity. MotionVectorPass adds
+            // mesh identity internally, then snapshots the complete skeleton
+            // once all sections have consumed the previous pose.
+            item.motionObjectId = temporalObjectIdentity(world, *e);
             item.outlineHull = meshComp->outlineHull;
             item.sortKey = transparentDistanceSortKey(
                 submesh.localCenter, worldM, cameraPosition);
@@ -513,7 +528,12 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
         }
 
         if (!submittedSubmesh) {
-            scene.add(meshSubmission->mesh, fallbackMat, worldM);
+            ayt::render::DrawItem item;
+            item.mesh = meshSubmission->mesh;
+            item.material = fallbackMat;
+            item.world = worldM;
+            item.motionObjectId = temporalObjectIdentity(world, *e);
+            scene.add(item);
             ++submitted;
         }
 

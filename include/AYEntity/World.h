@@ -47,7 +47,12 @@ public:
     bool initialize();
     void shutdown();
     bool isInitialized() const { return _initialized; }
+    /// Backward-compatible presentation update. Bridge alpha defaults to 1.
     void update(float dt);
+    /// Run one deterministic simulation step. Only SystemLane::Sim runs.
+    void fixedUpdate(float fixedDt);
+    /// Run Bridge(alpha) before Present(dt), then component presentation ticks.
+    void updatePresentation(float dt, float interpolationAlpha);
 
     Entity* createEntity();
     void destroyEntity(Entity* e);
@@ -63,7 +68,8 @@ public:
     std::vector<Entity*> queryByNames(const std::vector<const char*>& componentNames);
 
     template<typename T>
-    void registerSystem(int32_t priority = 0);
+    void registerSystem(int32_t priority = 0,
+                        SystemLane lane = SystemLane::Present);
 
     // GL-01: introspection helpers for tick-order tests / diagnostics.
     // Returns systems sorted by priority ascending (the same order the
@@ -73,6 +79,7 @@ public:
     size_t systemCount() const { return _systems.size(); }
     int32_t getSystemPriorityAt(size_t index) const;
     const char* getSystemNameAt(size_t index) const;
+    SystemLane getSystemLaneAt(size_t index) const;
 
     // LG-04 (S3.1): lookup a system by its getName() string. Returns
     // nullptr if no system with that name is registered. Linear scan
@@ -106,6 +113,7 @@ private:
 
     Entity* createEntityInternal();
     void destroyEntityInternal(Entity* e);
+    void updateLane(SystemLane lane, float timeValue);
 
     std::vector<EntityHandle> _entityPool;
     std::vector<std::unique_ptr<ISystem>> _systems;
@@ -114,7 +122,6 @@ private:
     std::unordered_map<std::string, uint32_t> _entityNameMap;
     uint32_t _nextEntityId = 1;
     bool _initialized = false;
-    bool _systemsStarted = false;
 
     friend class Entity;
     // AYScene PR-1: Scene::Impl owns independent World instances to avoid
@@ -130,12 +137,13 @@ private:
 // World template implementations
 // =============================================================================
 template<typename T>
-void World::registerSystem(int32_t priority) {
+void World::registerSystem(int32_t priority, SystemLane lane) {
     static_assert(std::is_base_of_v<ISystem, T>, "T must inherit ISystem");
     auto system = std::make_unique<T>();
     system->setPriority(priority);
+    system->setLane(lane);
     _systems.push_back(std::move(system));
-    std::sort(_systems.begin(), _systems.end(),
+    std::stable_sort(_systems.begin(), _systems.end(),
         [](const std::unique_ptr<ISystem>& a, const std::unique_ptr<ISystem>& b) {
             return a->getPriority() < b->getPriority();
         });

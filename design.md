@@ -1,5 +1,11 @@
 # AYEntity Design
 
+> **2026-09-02 — Core / Integration split**: `AYEntityCore` no longer links
+> Renderer, Animation, Physics, Script, Network, Resource or EventSystem.
+> Feature components, systems and the physics bridge live in explicit
+> `AYEntity*Integration` targets. `AYEntity` remains a full compatibility
+> facade only; new composition roots must select integrations individually.
+
 > **2026-09-01 — AY2D production ECS path**: `AYEntity` is the sole
 > production owner of engine-scene 2D placement. The priority chain is camera
 > 405 → visibility streaming 430 → tile animation 460 → tile/sprite render 510.
@@ -7,8 +13,13 @@
 > draw reduction and residency. `ayt::ay2d::World2D` remains a standalone
 > CPU/tool path; a logical tilemap must not be live in both ownership paths.
 
+> **2026-09-01 — DET-04 shipped**: code-level `SystemLane` metadata now splits
+> fixed Sim, interpolation Bridge and variable-rate Present execution.
+> `SimTransformComponent` plus `SimToPresentBridgeSystem` closes the fixed
+> translation → float presentation path and is driven by `EntitySubSystem`.
+
 > **变更记录（2026-07）**：引擎集成、`bootstrapModule`、`SparseSet` 指针语义 — 见 [§15](#15-引擎集成与模块引导2026-07)。  
-> **变更记录（2026-07-09）**：Simulation / Presentation 分轨（`SystemLane`）— 见 [§14](#14-simulation-vs-presentation-systemlane)；总览见 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../ENGINE-DETERMINISM-ARCHITECTURE.md)。
+> **变更记录（2026-07-09）**：Simulation / Presentation 分轨（`SystemLane`）— 见 [§14](#14-simulation-vs-presentation-systemlane)；总览见 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../AYDocs/ENGINE-DETERMINISM-ARCHITECTURE.md)。
 
 ## 1. 概述
 
@@ -65,12 +76,24 @@ AYEntity 是 AY Engine 的**实体组件系统（Entity-Component-System, ECS）
 | 模块 | 关系 | 集成方式 |
 |------|------|----------|
 | **AYGameLoop** | 驱动方 | EntitySubSystem 在 GameLoop 中 update |
-| **AYScript** | 使用方 | ScriptComponent 桥接脚本到 Entity |
-| **AYNetwork** | 使用方 | 通过 IReplicable 接口复制组件状态 |
-| **AYResource** | 使用方 | 实体持有关卡/资产引用 |
-| **AYRenderer** | 使用方 | `RenderSystem` 查询 Transform + MeshComponent，提交 `RenderScene` |
-| **AYPhysics** | 使用方 | 查询 Transform + RigidBody 组件物理模拟（Jolt 路径，见 AYPhysics §8.3） |
+| **AYScript** | 独立运行时 | `AYEntityScriptIntegration` 注册 ScriptComponent；Core 不链接 AYScript |
+| **AYNetwork** | 独立运行时 | `AYEntityNetworkIntegration` 注册 NetworkComponent；Core 不链接 AYNetwork |
+| **AYResource** | Integration 依赖 | Animation/Render/2D integration 持有资产引用；Core 不链接 AYResource |
+| **AYRenderer** | Integration 依赖 | `AYEntityRenderIntegration` / `AYEntity2DIntegration` 提交表现数据 |
+| **AYPhysics** | Integration 依赖 | `AYEntityPhysicsIntegration` 持有固定步 ECS ↔ Physics 桥 |
 | **Determinism** | 架构约束 | `SystemLane` 分轨；DET-04 落地 `SimTransformComponent` — 见 [§14](#14-simulation-vs-presentation-systemlane) |
+
+### 1.4 编译目标边界
+
+`AYEntityCore` 是所有场景与 headless Host 的最小依赖，只包含 World、Entity、
+Core component registry、序列化、Entity SubSystem 和确定性 Sim/Bridge。
+动画、渲染、2D、物理、脚本、网络分别由独立 integration target 追加组件类型、
+System 或 SubSystem。`AYEntity` 目标仅聚合当前启用的全部 integration，供旧代码
+兼容；它不能作为新底层模块的默认依赖。
+
+World 销毁前的跨模块清理通过 `WorldLifecycle` 回调扩展点完成。Core 只保存函数
+回调，不包含 Renderer 头文件；Render/2D integration 自行释放对应 World 的
+scene builder。
 
 ---
 
@@ -840,11 +863,11 @@ endif()
 - [ ] 与 AYNetwork ReplicationManager 配合
 
 ### Phase 6: 确定性 Sim 轨（按需，DET-04）
-- [ ] `SystemLane` 元数据（Present / Sim / Bridge）
-- [ ] `SimTransformComponent` + `SimToPresentBridge`
-- [ ] Sim 系统稳定遍历顺序文档化
+- [x] `SystemLane` 元数据（Present / Sim / Bridge）
+- [x] `SimTransformComponent` + `SimToPresentBridgeSystem`
+- [x] Sim 系统稳定遍历顺序文档化（使用 `getAllEntities()` / 显式 ID 排序）
 
-> 不阻塞 Phase 0–2。触发条件与 DET 工作包见 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../ENGINE-DETERMINISM-ARCHITECTURE.md) §7–§9。
+> DET-04 于 2026-09-01 完成。后续网络输入、Replay/rollback 与通用确定性碰撞仍分别属于 DET-05–07。工作包见 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../AYDocs/ENGINE-DETERMINISM-ARCHITECTURE.md) §7–§9。
 
 ---
 
@@ -864,8 +887,9 @@ endif()
 
 ## 14. Simulation vs Presentation (`SystemLane`)
 
-> **权威文档**：[`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../ENGINE-DETERMINISM-ARCHITECTURE.md)  
-> 本节定义 ECS 侧的**分轨契约**；不要求当前代码立即实现 `SystemLane` 枚举。
+> **权威文档**：[`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../AYDocs/ENGINE-DETERMINISM-ARCHITECTURE.md)
+> 本节定义 ECS 侧已经落地的**分轨契约**；公开枚举位于
+> `interface/AYEntity/IEntity.h`，调度入口位于 `World.h`。
 
 ### 14.1 动机
 
@@ -887,14 +911,15 @@ enum class SystemLane : uint8_t {
 | 轨道 | 现有 System 示例 | 时间源 | 可写组件（当前 / 未来） |
 |------|------------------|--------|-------------------------|
 | **Present** | `AnimationSystem`, `RenderSystem`, `SkinnedMeshRenderSystem` | `update(dt)` | `TransformComponent` (float), `MeshComponent`, … |
-| **Sim** | （未来）movement、det 碰撞、Gameplay `System` host | `fixedUpdate(fixedDt)` + `simFrame` | `SimTransformComponent` (DET-04), 玩法状态 |
-| **Bridge** | （未来）`SimToPresentBridge` | 每 presentation 帧 | 只写 float `TransformComponent` |
+| **Sim** | movement、det 碰撞、Gameplay `System` host | `fixedUpdate(fixedDt)` + GameLoop `simTick` | `SimTransformComponent`, 玩法状态 |
+| **Bridge** | `SimToPresentBridgeSystem` | 每 presentation 帧的 `interpolationAlpha` | 只写 float `TransformComponent` |
 
-**调度**：Sim 轨由 `AYGameLoop::fixedUpdate` 驱动（见 [`AYGameLoop/design.md`](../AYGameLoop/design.md)）；Present 轨由 `update` + `FrameInterpolator` 驱动。
+**调度**：`EntitySubSystem` 在 `FixedPrePhysics` 调用 `World::fixedUpdate`，只串行执行 Sim；在 `World` 阶段调用 `World::updatePresentation(dt, alpha)`，先执行 Bridge、再执行 Present。旧 `World::update(dt)` 保留并等价于 `updatePresentation(dt, 1)`。
 
 ### 14.3 新增 System 时的审查清单
 
-在 code review / design 中声明 `SystemLane`（可先写在 `design.md` 或 PR 描述，代码元数据 DET-04 再补）：
+新增 System 必须在 `registerSystem<T>(priority, lane)` 或
+`AY_SYSTEM_IN_LANE` 中声明 `SystemLane`；省略时为兼容旧系统默认 Present：
 
 1. 该逻辑是否参与**跨端一致的仿真**？→ **Sim**
 2. 是否只影响画面 / 编辑器 / 音频？→ **Present**
@@ -909,15 +934,23 @@ enum class SystemLane : uint8_t {
 - 从 `AYTask` 并行写同一实体的 Sim 组件
 - 调用 **Jolt**（`AYPhysics`）或 GPU readback 作为玩法依据
 
-### 14.5 组件命名约定（未来）
+Sim 系统由 `World` 串行执行。同一 lane 内按 priority 排序，同优先级保持
+注册顺序。需要遍历实体时使用按单调实体 ID 返回的 `getAllEntities()`，或先
+显式按 ID 排序；不得以 SparseSet swap-remove 后的 `Query` 顺序决定玩法结果。
+
+### 14.5 组件与 Bridge 契约
 
 | 组件 | 数值空间 | 消费者 |
 |------|----------|--------|
 | `TransformComponent` | `Float32` | Render、Editor、非 lockstep 网络复制 |
-| `SimTransformComponent` | `FixedVec3`（DET-01） | Sim 系统、lockstep checksum |
+| `SimTransformComponent` | Q16.16 `FixedVec3` 平移 | Sim 系统、lockstep checksum |
 | 玩法 hitbox / 受击判定 | Sim 代理体 | **不要**在 lockstep 中采样蒙皮后的骨骼矩阵 |
 
-命中判定应使用 Sim 代理（胶囊 / AABB），由动画在 Present 轨驱动视觉，与 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../ENGINE-DETERMINISM-ARCHITECTURE.md) §5.3 一致。
+`World::fixedUpdate` 在每个固定步执行 Sim 系统前保存所有 SimTransform 的
+`previousPosition`。Bridge 对前后位置按表现帧 alpha 插值，并保留
+`Transform` 的 rotation/scale；固定点旋转与缩放不在 DET-04 范围内。
+
+命中判定应使用 Sim 代理（胶囊 / AABB），由动画在 Present 轨驱动视觉，与 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../AYDocs/ENGINE-DETERMINISM-ARCHITECTURE.md) §5.3 一致。
 
 ### 14.6 与网络 / 回放的关系
 
@@ -1095,9 +1128,11 @@ mass / friction / restitution / velocity 字段是死字段。本次补齐 creat
   `revision`（与 `Transform::revision` 同语义：mutator（addShape/removeShape/clearShapes）自增；直接改 vector 绕过 →
   桥接层 deep-compare 兜底）。
 
-**桥**（`include/AYEntity/EntityPhysicsBridge.h` + `src/AYEntityPhysicsBridge.cpp`）：
+**桥**（由 `AYEntityPhysicsIntegration` 目标实现）：
 
-- 从 `EntitySubSystem` 抽出的可测类；`EntitySubSystem` 退化为薄胶水层。测试用 `setPhysicsManager()` 注入，生产走 `PhysicsSubSystem::findRegistered()`。
+- `EntitySubSystem` 只推进 World；独立的 `EntityPhysicsBridge` SubSystem 持有桥，
+  并声明 FixedPrePhysics / FixedPostPhysics 阶段。测试用 `setPhysicsManager()`
+  注入，生产走 `PhysicsSubSystem::findRegistered()`。
 - **FixedPrePhysics `syncEntityToPhysics()`**：
   1. body 无效且 `SyncMode != None` → 用组件字段构造 `RigidbodyDesc`（type 由 static/kinematic 映射、mass、velocity、friction/restitution、pose）→ `createRigidbody` → `setBodyHandle` 写回。失败保持 binding 下 tick 重试。
   2. collider 同步：`revision` 变更或 deep-compare 不等 → destroy 旧 collider 句柄 → 按 `shapes[]` 顺序重建。
@@ -1107,11 +1142,12 @@ mass / friction / restitution / velocity 字段是死字段。本次补齐 creat
 - **所有权规则**：桥创建的 body（`ownsBody`）在 sweep / manager 切换时销毁；外部预置句柄（场景作者）只收养不销毁。
   `shutdown()` 只清表不销毁（PhysicsManager 自身 shutdown 会销毁后端 world 的全部 body，避免子系统关停顺序导致悬垂）。
 
-**注册点**（全部接线完毕）：
+**注册点**（全部位于 Physics integration）：
 
-- `AYEntityReflection.cpp`：`AY_FINALIZE_REGISTRATION_METADATA(ColliderShapeSpec)` **先于** `ColliderComponent`（vector-of-struct 注册顺序硬约束）；`registerComponentType<ColliderComponent>("ColliderComponent")`。
-- `AYComponentFactory.cpp`：`ColliderComponent` wire entry — `.ayscene` 序列化必须；**`getName()` 返回 "ColliderComponent" 以匹配 factory key**（save 按 getName() 解析，load 按 $type）。
-- `AYEntity.h` umbrella + `AYEntityPrecompile.cpp` 显式实例化（LNK2019 防护）。
+- `EntityPhysicsIntegrationModule::registerTypes()` 注册 RigidBody 与 Collider；
+  `AY_FINALIZE_REGISTRATION_METADATA(ColliderShapeSpec)` 必须先于 ColliderComponent。
+- `ComponentRegistry` 的 scene callbacks 提供 `.ayscene` factory 与序列化入口，
+  Core 不再维护 Collider 的硬编码 wire entry。
 - 编译期注意：bridge 实现 TU 必须自行 include `<AYPhysics/PhysicsManager.h>` 等实体头 —— `EntityPhysicsBridge.h` 只做前置声明。
 
 **测试**（1132/1132 PASS）：
@@ -1123,7 +1159,7 @@ mass / friction / restitution / velocity 字段是死字段。本次补齐 creat
   空 shapes 零 collider、实体销毁连带 body+collider 销毁、外部句柄收养不销毁、2D 路径。
 - `AYTest_SceneSerializer.cpp`：ColliderComponent `.ayscene` round-trip（vector-of-struct + enum 序列化首例）。
 
-### 15.9 ComponentRegistry 与首个 IModule 试点（2026-09-01）
+### 15.9 ComponentRegistry、IModule 与 Core/Integration 拆分（2026-09-02）
 
 组件类型改为启动期显式注册：`ComponentRegistry` 以稳定名称保存 C++ 类型、
 编辑器分类、动态增删回调和可选 `.ayscene` 序列化回调。注册表在所有
@@ -1140,17 +1176,22 @@ SparseSet 时验证一次 T 已注册，之后 add/get/query 继续直接访问�
 线缆名 `HealthComponent`。场景保存和读取本身不执行注册，避免在运行期
 重新打开类型集合；Host 必须在进入场景生命周期前完成注册和封存。
 
-首个迁移切片是 `EntityComponentModule`：它只在 `registerTypes()` 中注册
-AYEntity 内建组件，不接管 EntitySubSystem、World 或表现系统所有权。旧的
-`registerEntityComponents()`、`bootstrapEntityCore()` 与
-`bootstrapModule()` 继续可用并复用同一注册表；子系统迁移留到关闭顺序和
-GameLoop 所有权契约明确之后。
+`EntityComponentModule` 只注册 Transform、SimTransform、Health 等 Core 类型；
+`EntityRuntimeModule` 只接管 Entity SubSystem 与 Core systems。Animation、
+Render、2D、Physics、Script、Network 的类型和行为由对应
+`Entity*IntegrationModule` 注册，因此未选择某项能力时既没有模块节点，也没有
+静态库依赖。
+
+旧的 `registerEntityComponents()`、`bootstrapEntityCore()` 与
+`bootstrapModule()` 继续复用同一注册表，其中 `bootstrapModule()` 属于完整 facade
+兼容路径。生产 Host 在所有模块 `registerTypes()` 后封存上下文中的同一注册表，
+类型模块不得在模块路径中自行回退到另一份进程单例。
 
 ---
 
 ## 16. 参考
 
-- [Engine determinism architecture](../../ENGINE-DETERMINISM-ARCHITECTURE.md) — dual-layer Sim/Present, DET-01..08
+- [Engine determinism architecture](../../AYDocs/ENGINE-DETERMINISM-ARCHITECTURE.md) — dual-layer Sim/Present, DET-01..08
 - [Flecs ECS](https://github.com/SanderMertens/flecs)
 - [Entt ECS](https://github.com/skypjack/entt)
 - [Unity Entity Component System](https://docs.unity3d.com/Packages/com.unity.entities@latest/)

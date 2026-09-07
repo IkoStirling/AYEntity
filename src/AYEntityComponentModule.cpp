@@ -4,10 +4,9 @@
 namespace ayt::entity
 {
 
-EntityComponentModule::EntityComponentModule(ComponentRegistry& registry)
-    : _registry(registry),
-      _descriptor{
-          .id = "AYEntity.Components",
+EntityComponentModule::EntityComponentModule()
+    : _descriptor{
+          .id = std::string(kEntityComponentModuleId),
           .displayName = "AYEntity Components",
           .version = "0.1.0",
           .dependencies = {}}
@@ -23,8 +22,15 @@ const ayt::module::ModuleDescriptor& EntityComponentModule::descriptor()
 ayt::module::ModuleResult EntityComponentModule::registerTypes(
     ayt::module::IModuleContext& context)
 {
-    (void)context;
-    ComponentRegistryResult result = registerEntityComponents(_registry);
+    auto* registry = context.findServiceAs<ComponentRegistry>(
+        kComponentRegistryModuleService);
+    if (registry == nullptr) {
+        return ayt::module::ModuleResult::failure(
+            ayt::module::ModuleErrorCode::TypeRegistrationFailed,
+            "ComponentRegistry service is unavailable for AYEntity.Components");
+    }
+
+    ComponentRegistryResult result = registerEntityCoreComponents(*registry);
     if (!result) {
         return ayt::module::ModuleResult::failure(
             ayt::module::ModuleErrorCode::TypeRegistrationFailed,

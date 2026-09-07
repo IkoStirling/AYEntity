@@ -84,6 +84,15 @@ TEST_CASE(registration_is_explicit_idempotent_and_sealable)
 
     registry.seal();
     CHECK_TRUE(registry.isSealed());
+    ComponentRegistryResult sameAfterSeal =
+        registerComponent<RegistryProbeComponent>(
+            registry,
+            "test.RegistryProbe",
+            "Registry Probe",
+            "Tests");
+    CHECK_TRUE(sameAfterSeal.succeeded());
+    CHECK(registry.size() == 1);
+
     ComponentRegistryResult afterSeal = registerComponent<RegistryOtherComponent>(
         registry,
         "test.RegistryOther");

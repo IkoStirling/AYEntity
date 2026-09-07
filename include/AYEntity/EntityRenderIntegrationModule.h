@@ -1,0 +1,35 @@
+#pragma once
+
+#include <AYEntity/ComponentRegistry.h>
+#include <AYModule/IModule.h>
+
+#include <string_view>
+
+namespace ayt::entity
+{
+
+inline constexpr std::string_view kEntityRenderIntegrationModuleId =
+    "AYEntity.RenderIntegration";
+
+class EntityRenderIntegrationModule final : public ayt::module::IModule
+{
+public:
+    EntityRenderIntegrationModule();
+
+    [[nodiscard]] const ayt::module::ModuleDescriptor& descriptor()
+        const noexcept override;
+    [[nodiscard]] ayt::module::ModuleResult registerTypes(
+        ayt::module::IModuleContext& context) override;
+    [[nodiscard]] ayt::module::ModuleResult install(
+        ayt::module::IModuleContext& context) override;
+    void shutdown(ayt::module::IModuleContext& context) noexcept override;
+
+private:
+    ayt::module::ModuleDescriptor _descriptor;
+};
+
+[[nodiscard]] ComponentRegistryResult registerEntityRenderComponents(
+    ComponentRegistry& registry);
+void registerEntityRenderSystems();
+
+} // namespace ayt::entity

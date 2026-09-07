@@ -298,6 +298,9 @@ TEST_CASE(cm3_tilemap_render_closed_loop)
         CHECK_NOT_NULL(item.payload);
         CHECK_TRUE(item.mesh.isValid());
         CHECK_TRUE(item.material.isValid());
+        if (item.payload == nullptr) {
+            continue;
+        }
         CHECK(item.payload->packedSortKey == ayt::entity::drawSortKey(2, 10));
         CHECK_FLOAT_EQ(item.payload->sourceRectMin.x, 0.0f, 1e-6f);
         CHECK_FLOAT_EQ(item.payload->sourceRectMin.y, 0.0f, 1e-6f);

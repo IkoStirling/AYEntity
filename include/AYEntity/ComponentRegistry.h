@@ -16,6 +16,9 @@ class ISerializer;
 namespace ayt::entity
 {
 
+inline constexpr std::string_view kComponentRegistryModuleService =
+    "ayt.entity.ComponentRegistry";
+
 class Entity;
 class IComponent;
 

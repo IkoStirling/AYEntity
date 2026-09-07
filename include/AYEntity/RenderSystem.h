@@ -18,4 +18,6 @@ private:
     bool _started = false;
 };
 
+void registerRenderSystem();
+
 } // namespace ayt::entity

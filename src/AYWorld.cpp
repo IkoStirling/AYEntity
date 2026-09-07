@@ -2,7 +2,8 @@
 
 #include <AYEntity/World.h>
 #include <AYEntity/EntityImpl.h>
-#include <AYRenderer/RendererSubSystem.h>
+#include <AYEntity/WorldLifecycle.h>
+#include <AYEntity/components/SimTransformComponent.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -62,12 +63,10 @@ bool World::initialize() {
 void World::shutdown() {
     if (!_initialized) return;
 
-    // Render systems register callbacks that capture their `this` pointers.
-    // Remove the complete World-owned group before `_systems.clear()` so a
-    // later Editor composite cannot call systems from a destroyed Play World.
-    if (auto* renderer = ayt::render::RendererSubSystem::findRegistered()) {
-        renderer->clearSceneBuildersForOwner(this);
-    }
+    // Integrations release World-owned state before systems disappear. The
+    // callback registry belongs to AYEntityCore and therefore keeps World
+    // independent of renderer, physics, scripting, and networking libraries.
+    notifyWorldBeforeShutdown(*this);
 
     // F7 — call removeAllComponents BEFORE onDetachFromWorld so each
     // entity's per-type storages can drop the (id → T*) entry. After
@@ -87,7 +86,6 @@ void World::shutdown() {
     _systems.clear();
     _nextEntityId = 1;
     _initialized = false;
-    _systemsStarted = false;
 
     // Shared EntityHandlePool must not be wiped by Scene-owned Worlds —
     // another World (fallback or Edit) may still hold live handles (LM-1).
@@ -99,22 +97,42 @@ void World::shutdown() {
 }
 
 void World::update(float dt) {
-    // onStart() 仅在首次更新时调用一次
-    if (!_systemsStarted) {
-        for (auto& system : _systems) {
-            system->onStart();
+    updatePresentation(dt, 1.0f);
+}
+
+void World::fixedUpdate(float fixedDt) {
+    // Snapshot once per fixed tick, before any Sim system writes. This makes
+    // interpolation independent of how many Sim systems touch the component.
+    if (auto* storage = getStorage<SimTransformComponent>()) {
+        for (SimTransformComponent* transform : storage->getDense()) {
+            if (transform != nullptr) transform->beginSimulationStep();
         }
-        _systemsStarted = true;
     }
 
-    for (auto& system : _systems) {
-        system->onUpdate(dt);
-    }
+    updateLane(SystemLane::Sim, fixedDt);
+}
+
+void World::updatePresentation(float dt, float interpolationAlpha) {
+    if (interpolationAlpha < 0.0f) interpolationAlpha = 0.0f;
+    if (interpolationAlpha > 1.0f) interpolationAlpha = 1.0f;
+
+    // Bridge must publish float transforms before presentation systems submit
+    // render work for this frame.
+    updateLane(SystemLane::Bridge, interpolationAlpha);
+    updateLane(SystemLane::Present, dt);
 
     for (auto& entity : _entities) {
         if (entity && entity->isValid()) {
             entity->onUpdate(dt);
         }
+    }
+}
+
+void World::updateLane(SystemLane lane, float timeValue) {
+    for (auto& system : _systems) {
+        if (system->getLane() != lane) continue;
+        system->startOnce();
+        system->onUpdate(timeValue);
     }
 }
 
@@ -229,6 +247,12 @@ const char* World::getSystemNameAt(size_t index) const
 {
     if (index >= _systems.size()) return "";
     return _systems[index]->getName();
+}
+
+SystemLane World::getSystemLaneAt(size_t index) const
+{
+    if (index >= _systems.size()) return SystemLane::Present;
+    return _systems[index]->getLane();
 }
 
 ISystem* World::findSystemByName(const char* name) const

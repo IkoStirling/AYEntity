@@ -4,6 +4,7 @@
 #include <AYEntity/ComponentRegistry.h>
 #include <AYEntity/EntityComponentModule.h>
 #include <AYEntity/components/HealthComponent.h>
+#include <AYEntity/components/SimTransformComponent.h>
 #include <AYEntity/components/TransformComponent.h>
 #include <AYModule/ModuleContext.h>
 #include <AYModule/ModuleManager.h>
@@ -32,15 +33,24 @@ TEST_CASE(module_registers_types_before_the_host_seals_the_registry)
     CHECK_FALSE(registry.isSealed());
 
     ayt::module::ModuleContext context;
+    CHECK_TRUE(context.bindService(
+        std::string(kComponentRegistryModuleService),
+        &registry));
     ayt::module::ModuleManager modules;
-    CHECK_TRUE(modules.emplace<EntityComponentModule>(registry).succeeded());
+    CHECK_TRUE(modules.emplace<EntityComponentModule>().succeeded());
     CHECK_TRUE(modules.resolve().succeeded());
     CHECK_TRUE(modules.registerTypes(context).succeeded());
     CHECK(modules.phase()
         == ayt::module::ModuleManagerPhase::TypesRegistered);
 
     CHECK_NOT_NULL(registry.find<Transform>());
-    CHECK_NOT_NULL(registry.find("BlendSpaceComponent"));
+    const ComponentDescriptor* simTransform =
+        registry.find<SimTransformComponent>();
+    CHECK_NOT_NULL(simTransform);
+    CHECK_FALSE(simTransform->sceneSerializable);
+    // Feature components are no longer registered by AYEntityCore. Their
+    // explicit integration modules participate in the same prepare phase.
+    CHECK(registry.find("BlendSpaceComponent") == nullptr);
     const ComponentDescriptor* health = registry.find<HealthComponent>();
     CHECK_NOT_NULL(health);
     CHECK(health->name == "HealthComponent");

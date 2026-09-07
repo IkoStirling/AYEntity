@@ -1,127 +1,218 @@
 cmake_minimum_required(VERSION 3.20)
 
 project(AYEntity
-    VERSION 0.1.0
-    DESCRIPTION "AYEntity — ECS + Network binding + World scene save/load"
+    VERSION 0.2.0
+    DESCRIPTION "AYEntity — dependency-light ECS core plus opt-in integrations"
 )
 
 option(AY_ENTITY_PRECOMPILE_COMPONENTS "Precompile common components" ON)
 
-set(SOURCES
-    src/AYWorld.cpp
-    src/AYEntity.cpp
-    src/AYComponentRegistry.cpp
-    src/AYEntityComponentModule.cpp
-    src/AYEntitySubSystem.cpp
-    # Collider bridge (2026-08-19) — body creation + collider sync +
-    # destroy lifecycle extracted out of AYEntitySubSystem for testability.
-    src/AYEntityPhysicsBridge.cpp
-    src/AYRenderSystem.cpp
-    src/AYEntityReflection.cpp
-    src/AYEntityModule.cpp
-    src/AYAnimationSystem.cpp
-    src/AYSkinnedMeshRenderSystem.cpp
-    src/AYCharacterEntity.cpp
-    src/AYComponentFactory.cpp
-    src/AYSceneSerializer.cpp
-    src/AYSkeletonComponent.cpp
-    # P2.1 (2026-07-27) — BlendSpace 1D/2D BlendTree driver. Priority
-    # 430 (before AnimationSystem@450). Writes
-    # SkeletonComponent::skinMatricesBlendSpace; AnimationSystem
-    # memcpy picks it as the authoritative base when non-null.
-    src/AYBlendSpaceSystem.cpp
-    # P3.1 (2026-08-06) — L1 state machine driver system. Priority 460
-    # (after AnimationSystem@450); transitions decide which clip plays
-    # next frame; AnimStateChangedEvent emitted on transition.
-    src/AYStateMachineSystem.cpp
-    # CM-3 (2026-08-11) — 2D lane: ortho camera driver (405), streaming
-    # shell (430), animation-tick shell (460), tilemap render (510),
-    # sprite render (510). All five registered by bootstrapModule().
-    src/AYOrthoCameraUpdateSystem.cpp
-    src/AYTilemapStreamingSystem.cpp
-    src/AYTilemapVisibilityRuntime.cpp
-    src/AYTilemapChunkGeometry.cpp
-    # CM-5 (2026-08-12) — per-path animation table mirror (tick + resolve
-    # + resolve buffer). Driven by TilemapAnimationTickSystem (460),
-    # consumed by TilemapRenderSystem (510).
-    src/AYTilemapAnimationRuntime.cpp
-    src/AYTilemapAnimationTickSystem.cpp
-    src/AYTilemapRenderSystem.cpp
-    src/AYSpriteRenderSystem.cpp
-    src/AYNetworkComponent.cpp
-    # Cross-module precompile barrel — explicit template instantiation
-    # declarations for Entity::addComponent<T>/getComponent<T>/hasComponent<T>
-    # over the AY_ENTITY_PRECOMPILE_COMPONENTS set. Without this TU,
-    # any downstream consumer that statically links AYEntity.lib without
-    # itself referencing those members directly hits LNK2019. See
-    # `src/detail/AYEntityPrecompile.cpp` for the full rationale.
-    #
-    # Note: this TU exists to close the AYScene PR-1 follow-up landmine
-    # (Test_EntityLinkGlue.cpp can be removed after this lands + AYScene
-    # submodule consumes the new AYEntity precompile barrel).
-    src/detail/AYEntityPrecompile.cpp
-)
+# These defaults also allow AYEntity to be configured as a standalone
+# subproject. The engine root exposes the same cache options to product builds.
+foreach(_feature ANIMATION RENDERER PHYSICS SCRIPT NETWORK)
+    if(NOT DEFINED AY_ENABLE_${_feature})
+        set(AY_ENABLE_${_feature} ON)
+    endif()
+endforeach()
+if(NOT DEFINED AY_ENABLE_AY2D)
+    set(AY_ENABLE_AY2D ON)
+endif()
 
-add_library(${PROJECT_NAME} STATIC ${SOURCES} ${HEADERS})
-
-target_include_directories(${PROJECT_NAME} PUBLIC
+set(AYENTITY_PUBLIC_INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/interface
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-# AtlasGridDesc is a public value type used by inline UV helpers. Keep an
-# explicit layout version in the consumer command line so incremental MSVC
-# builds cannot retain a stale COMDAT after the descriptor grows.
-target_compile_definitions(${PROJECT_NAME} PUBLIC AYENTITY_2D_ATLAS_LAYOUT_VERSION=2)
+function(ay_configure_entity_target target)
+    target_include_directories(${target} PUBLIC
+        ${AYENTITY_PUBLIC_INCLUDE_DIRS}
+    )
+    target_compile_options(${target} PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
+    )
+endfunction()
 
-target_link_libraries(${PROJECT_NAME} PUBLIC
+# ---------------------------------------------------------------------------
+# Core: World/Entity/serialization/registry and deterministic ECS lanes only.
+# This target must stay free of Renderer, Animation, Physics, Script, Network,
+# Resource, and EventSystem link dependencies.
+# ---------------------------------------------------------------------------
+add_library(AYEntityCore STATIC
+    src/AYWorld.cpp
+    src/AYWorldLifecycle.cpp
+    src/AYEntity.cpp
+    src/AYComponentRegistry.cpp
+    src/AYEntityReflection.cpp
+    src/AYEntityCoreModule.cpp
+    src/AYEntityComponentModule.cpp
+    src/AYEntityRuntimeModule.cpp
+    src/AYEntitySubSystem.cpp
+    src/AYSimToPresentBridgeSystem.cpp
+    src/AYComponentFactory.cpp
+    src/AYSceneSerializer.cpp
+    src/detail/AYEntityPrecompile.cpp
+)
+add_library(AYEntity::Core ALIAS AYEntityCore)
+ay_configure_entity_target(AYEntityCore)
+target_link_libraries(AYEntityCore PUBLIC
     AY::Module
     AYCore
     AYGameLoop
     AYReflect
     AYSerializer
-    AYRenderer
     AYMath
-    AYAnimation
-    AYResource
-    # Phase 1.5: AnimNotify bridge — AnimationSystem::onUpdate emits
-    # AnimNotifyEvent via the engine EventBus; this link makes the type
-    # definition available to subscribers inside this module's tests
-    # too.
-    AYEventSystem
 )
-
-# Entity's fixed pre/post bridge binds ECS rigid-body components to the latest
-# AYPhysics snapshot. The component itself keeps only an opaque uint32 handle.
-target_link_libraries(${PROJECT_NAME} PRIVATE AYPhysics AYLog)
-
+target_compile_definitions(AYEntityCore PUBLIC
+    AYENTITY_2D_ATLAS_LAYOUT_VERSION=2
+)
 if(AY_ENTITY_PRECOMPILE_COMPONENTS)
-    target_compile_definitions(${PROJECT_NAME} PUBLIC AY_ENTITY_PRECOMPILE_COMPONENTS)
+    target_compile_definitions(AYEntityCore PUBLIC
+        AY_ENTITY_PRECOMPILE_COMPONENTS)
 endif()
 
-enable_testing()
-add_subdirectory(unittest)
+set(_ay_entity_integrations)
 
-# ----------------------------------------------------------------------------
-# M4 (lh-rh-split-entity audit 2026-08-24): public-header bgfx-leak guard.
-# AYEntity is a downstream consumer of AYRenderer; mirrors AY2D / AYScene
-# (audit F-5, design.md §11.2). Public headers under include/AYEntity/**
-# MUST NOT include <bgfx/*.h> or <bx/*.h>; such includes belong in
-# src/detail/* or private header paths only. Re-running the guard:
-#   cmake --build . --target ayentity_check_no_bgfx_in_public_headers
-# ----------------------------------------------------------------------------
+if(AY_ENABLE_ANIMATION)
+    add_library(AYEntityAnimationIntegration STATIC
+        src/AYEntityAnimationIntegrationModule.cpp
+        src/AYAnimationSystem.cpp
+        src/AYBlendSpaceSystem.cpp
+        src/AYStateMachineSystem.cpp
+        src/AYSkeletonComponent.cpp
+    )
+    add_library(AYEntity::AnimationIntegration ALIAS
+        AYEntityAnimationIntegration)
+    ay_configure_entity_target(AYEntityAnimationIntegration)
+    target_link_libraries(AYEntityAnimationIntegration PUBLIC
+        AYEntityCore
+        AYAnimation
+        AYResource
+        AYEventSystem
+    )
+    list(APPEND _ay_entity_integrations AYEntityAnimationIntegration)
+endif()
+
+if(AY_ENABLE_RENDERER)
+    if(NOT AY_ENABLE_ANIMATION)
+        message(FATAL_ERROR
+            "AY_ENABLE_RENDERER requires AY_ENABLE_ANIMATION for skinned ECS rendering")
+    endif()
+    add_library(AYEntityRenderIntegration STATIC
+        src/AYEntityRenderIntegrationModule.cpp
+        src/AYRenderSystem.cpp
+        src/AYSkinnedMeshRenderSystem.cpp
+        src/AYCharacterEntity.cpp
+    )
+    add_library(AYEntity::RenderIntegration ALIAS AYEntityRenderIntegration)
+    ay_configure_entity_target(AYEntityRenderIntegration)
+    target_link_libraries(AYEntityRenderIntegration PUBLIC
+        AYEntityCore
+        AYEntityAnimationIntegration
+        AYRenderer
+        AYResource
+        AYMath
+    )
+    list(APPEND _ay_entity_integrations AYEntityRenderIntegration)
+
+    if(AY_ENABLE_AY2D)
+        add_library(AYEntity2DIntegration STATIC
+            src/AYEntity2DIntegrationModule.cpp
+            src/AYOrthoCameraUpdateSystem.cpp
+            src/AYTilemapStreamingSystem.cpp
+            src/AYTilemapVisibilityRuntime.cpp
+            src/AYTilemapChunkGeometry.cpp
+            src/AYTilemapAnimationRuntime.cpp
+            src/AYTilemapAnimationTickSystem.cpp
+            src/AYTilemapRenderSystem.cpp
+            src/AYSpriteRenderSystem.cpp
+        )
+        add_library(AYEntity::TwoDIntegration ALIAS AYEntity2DIntegration)
+        ay_configure_entity_target(AYEntity2DIntegration)
+        target_link_libraries(AYEntity2DIntegration PUBLIC
+            AYEntityCore
+            AYRenderer
+            AYResource
+            AYMath
+        )
+        list(APPEND _ay_entity_integrations AYEntity2DIntegration)
+    endif()
+endif()
+
+if(AY_ENABLE_PHYSICS)
+    add_library(AYEntityPhysicsIntegration STATIC
+        src/AYEntityPhysicsIntegrationModule.cpp
+        src/AYEntityPhysicsBridge.cpp
+    )
+    add_library(AYEntity::PhysicsIntegration ALIAS
+        AYEntityPhysicsIntegration)
+    ay_configure_entity_target(AYEntityPhysicsIntegration)
+    target_link_libraries(AYEntityPhysicsIntegration PUBLIC
+        AYEntityCore
+        AYPhysics
+    )
+    target_link_libraries(AYEntityPhysicsIntegration PRIVATE AYLog)
+    list(APPEND _ay_entity_integrations AYEntityPhysicsIntegration)
+endif()
+
+if(AY_ENABLE_SCRIPT)
+    add_library(AYEntityScriptIntegration STATIC
+        src/AYEntityScriptIntegrationModule.cpp
+    )
+    add_library(AYEntity::ScriptIntegration ALIAS AYEntityScriptIntegration)
+    ay_configure_entity_target(AYEntityScriptIntegration)
+    target_link_libraries(AYEntityScriptIntegration PUBLIC AYEntityCore)
+    list(APPEND _ay_entity_integrations AYEntityScriptIntegration)
+endif()
+
+if(AY_ENABLE_NETWORK)
+    add_library(AYEntityNetworkIntegration STATIC
+        src/AYEntityNetworkIntegrationModule.cpp
+        src/AYNetworkComponent.cpp
+    )
+    add_library(AYEntity::NetworkIntegration ALIAS
+        AYEntityNetworkIntegration)
+    ay_configure_entity_target(AYEntityNetworkIntegration)
+    target_link_libraries(AYEntityNetworkIntegration PUBLIC AYEntityCore)
+    list(APPEND _ay_entity_integrations AYEntityNetworkIntegration)
+endif()
+
+# Compatibility facade. Existing consumers that link AYEntity keep the full
+# default feature surface; new hosts should link AYEntityCore and only the
+# integration targets they assemble.
+add_library(AYEntity STATIC src/AYEntityModule.cpp)
+add_library(AYEntity::All ALIAS AYEntity)
+ay_configure_entity_target(AYEntity)
+target_link_libraries(AYEntity PUBLIC
+    AYEntityCore
+    ${_ay_entity_integrations}
+)
+target_compile_definitions(AYEntity PRIVATE
+    AY_ENTITY_HAS_ANIMATION_INTEGRATION=$<BOOL:${AY_ENABLE_ANIMATION}>
+    AY_ENTITY_HAS_RENDER_INTEGRATION=$<BOOL:${AY_ENABLE_RENDERER}>
+    AY_ENTITY_HAS_2D_INTEGRATION=$<AND:$<BOOL:${AY_ENABLE_RENDERER}>,$<BOOL:${AY_ENABLE_AY2D}>>
+    AY_ENTITY_HAS_PHYSICS_INTEGRATION=$<BOOL:${AY_ENABLE_PHYSICS}>
+    AY_ENTITY_HAS_SCRIPT_INTEGRATION=$<BOOL:${AY_ENABLE_SCRIPT}>
+    AY_ENTITY_HAS_NETWORK_INTEGRATION=$<BOOL:${AY_ENABLE_NETWORK}>
+)
+
+if(BUILD_TESTING)
+    enable_testing()
+    add_subdirectory(unittest)
+endif()
+
 set(AYENTITY_PUBLIC_HEADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
-
 add_custom_target(ayentity_check_no_bgfx_in_public_headers
     COMMAND ${CMAKE_COMMAND}
         -DAYTGT_PUBLIC_HEADER_DIR="${AYENTITY_PUBLIC_HEADER_DIR}"
         -DAYTGT_MODULE_NAME="${PROJECT_NAME}"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CheckNoBgfxInPublicHeaders.cmake"
-    COMMENT "AYEntity public-header bgfx/bx leak guard (audit F-5 / M4)"
+    COMMENT "AYEntity public-header bgfx/bx leak guard"
     VERBATIM
 )
+add_dependencies(AYEntityCore ayentity_check_no_bgfx_in_public_headers)
+add_dependencies(AYEntity ayentity_check_no_bgfx_in_public_headers)
 
-add_dependencies(${PROJECT_NAME} ayentity_check_no_bgfx_in_public_headers)
-
-message(STATUS "AYEntity v0.1.0 (P2.1 BlendSpace + NetworkComponent + P4-B .ayscene save) — see ${CMAKE_CURRENT_SOURCE_DIR}/design.md")
+message(STATUS
+    "AYEntity v0.2.0 (Core + explicit Animation/Render/2D/Physics/Script/Network integrations)")

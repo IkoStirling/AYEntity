@@ -78,11 +78,6 @@ ComponentRegistry& ComponentRegistry::instance()
 ComponentRegistryResult ComponentRegistry::registerComponent(
     ComponentDescriptor descriptor)
 {
-    if (_sealed) {
-        return ComponentRegistryResult::failure(
-            ComponentRegistryError::Sealed,
-            "ComponentRegistry is sealed; component registration is closed");
-    }
     if (descriptor.name.empty()
         || descriptor.type == std::type_index(typeid(void))
         || descriptor.size == 0
@@ -131,6 +126,16 @@ ComponentRegistryResult ComponentRegistry::registerComponent(
                     + "' was registered again with different metadata");
         }
         return ComponentRegistryResult::success();
+    }
+
+    // Sealing prevents additions and metadata changes, but an equivalent
+    // registration remains a valid no-op. This lets a second Host assemble
+    // the same explicit module graph in one process without reopening the
+    // registry or making module code branch on global startup history.
+    if (_sealed) {
+        return ComponentRegistryResult::failure(
+            ComponentRegistryError::Sealed,
+            "ComponentRegistry is sealed; component registration is closed");
     }
 
     if (const ComponentDescriptor* sameType = find(descriptor.type)) {

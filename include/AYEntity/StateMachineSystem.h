@@ -50,4 +50,6 @@ private:
     std::unordered_map<Entity*, std::unique_ptr<ayt::anim::StateMachine>> _machines;
 };
 
+void registerStateMachineSystem();
+
 } // namespace ayt::entity

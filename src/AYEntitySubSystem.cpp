@@ -1,16 +1,15 @@
 // AYEntitySubSystem.cpp - AYEntity 子系统实现
 //
-// Thin GameLoop adapter over EntityPhysicsBridge (the binding tables + sync
-// logic live in AYEntityPhysicsBridge.cpp). Also owns the World
-// process/Scene redirect (World::instance()).
+// Thin GameLoop adapter that owns the World process/Scene redirect. Physics
+// synchronization lives in AYEntityPhysicsIntegration so the ECS core has no
+// dependency on a concrete physics backend.
 
 #include "AYEntity.h"
 #include "AYEntity/EntityModule.h"
-#include "AYEntity/EntityPhysicsBridge.h"
-#include <AYEntity/components/RigidBodyComponent.h>
-#include <AYEntity/components/TransformComponent.h>
 #include <AYGameLoop.h>
+#include <AYGameLoop/SubSystemRegistry.h>
 #include <cstdio>
+#include <memory>
 
 namespace ayt::entity
 {
@@ -29,12 +28,11 @@ public:
             .basePriority = 0,
             .timeType = ayt::game::SubSystemDescriptor::TimeType::Scaled,
             .phases = ayt::game::phaseBit(ayt::game::FramePhase::FixedPrePhysics)
-                    | ayt::game::phaseBit(ayt::game::FramePhase::FixedPostPhysics)
                     | ayt::game::phaseBit(ayt::game::FramePhase::World),
             .clock = ayt::game::ClockDomain::Game,
             .phasePriority = 0,
-            .reads = {"Simulation.World", "Physics.Snapshot"},
-            .writes = {"Simulation.World", "Physics.Commands"}
+            .reads = {"Simulation.World"},
+            .writes = {"Simulation.World"}
         };
         return desc;
     }
@@ -49,7 +47,6 @@ public:
     }
 
     void shutdown() override {
-        _bridge.shutdown();
         // Drop Scene redirect, then shut down the process fallback only.
         // Scene RAII owns Scene World teardown.
         World::setActiveWorld(nullptr);
@@ -63,37 +60,38 @@ public:
     }
 
     void fixedUpdate(float fixedDeltaTime) override {
-        (void)fixedDeltaTime;
-        _bridge.syncPhysicsToEntity();
+        World::instance().fixedUpdate(fixedDeltaTime);
     }
 
     void tick(ayt::game::FramePhase phase,
               const ayt::game::FrameContext& context) override {
         if (phase == ayt::game::FramePhase::FixedPrePhysics) {
-            _bridge.syncEntityToPhysics();
-        } else if (phase == ayt::game::FramePhase::FixedPostPhysics) {
-            _bridge.syncPhysicsToEntity();
+            World::instance().fixedUpdate(context.fixedDeltaTime);
         } else if (phase == ayt::game::FramePhase::World) {
-            update(context.deltaTime);
+            World::instance().updatePresentation(
+                context.deltaTime,
+                context.interpolationAlpha);
         }
     }
-
-private:
-    EntityPhysicsBridge _bridge;
 };
 
 // =============================================================================
 // Registration (called from bootstrapModule)
 // =============================================================================
 
+std::unique_ptr<ayt::game::ISubSystem> createEntitySubSystem()
+{
+    return std::make_unique<EntitySubSystem>();
+}
+
 void registerEntitySubSystem()
 {
-    static bool registered = false;
-    if (registered) {
+    if (ayt::game::SubSystemRegistry::instance().findSubSystem("Entity")
+        != nullptr) {
         return;
     }
-    registered = true;
-    ::ayt::game::IGameLoop::instance().registerSubSystem(new EntitySubSystem());
+    auto system = createEntitySubSystem();
+    ::ayt::game::IGameLoop::instance().registerSubSystem(system.release());
 }
 
 } // namespace ayt::entity

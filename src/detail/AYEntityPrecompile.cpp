@@ -10,7 +10,7 @@
 // 是 caller；但纯 import lib 不读 component 的下游 100% 撞 LNK2019
 // unresolved）—— 参见 ay-scene.md "PR-1 实修 LNK2019" 段。
 //
-// 本 TU 是 AYEntity 自己把缺失的 12 个 template instance 显式生出来。
+// 本 TU 由 AYEntity 自己为常用组件显式生成这些 template instance。
 // 加进 AYEntity CMakeLists.txt SOURCES 之后，AYScene 的
 // `Test_EntityLinkGlue.cpp`（PR-1 临时 cross-module glue）可删。
 //
@@ -21,14 +21,8 @@
 #include <AYEntity/ComponentFactory.h>
 
 #include <AYEntity/components/HealthComponent.h>
-#include <AYEntity/components/MeshComponent.h>
-#include <AYEntity/components/OrthoCameraComponent.h>
-#include <AYEntity/components/ColliderComponent.h>
-#include <AYEntity/components/SkeletonComponent.h>
-#include <AYEntity/components/AnimationComponent.h>
-#include <AYEntity/components/SpriteComponent.h>
-#include <AYEntity/components/TilemapComponent.h>
 #include <AYEntity/components/TransformComponent.h>
+#include <AYEntity/components/SimTransformComponent.h>
 
 namespace ayt::entity
 {
@@ -47,21 +41,6 @@ template HealthComponent* Entity::addComponent<HealthComponent>();
 template HealthComponent* Entity::getComponent<HealthComponent>();
 template bool Entity::hasComponent<HealthComponent>() const;
 
-// --- MeshComponent -----------------------------------------------------------
-template MeshComponent* Entity::addComponent<MeshComponent>();
-template MeshComponent* Entity::getComponent<MeshComponent>();
-template bool Entity::hasComponent<MeshComponent>() const;
-
-// --- SkeletonComponent -------------------------------------------------------
-template SkeletonComponent* Entity::addComponent<SkeletonComponent>();
-template SkeletonComponent* Entity::getComponent<SkeletonComponent>();
-template bool Entity::hasComponent<SkeletonComponent>() const;
-
-// --- AnimationComponent ------------------------------------------------------
-template AnimationComponent* Entity::addComponent<AnimationComponent>();
-template AnimationComponent* Entity::getComponent<AnimationComponent>();
-template bool Entity::hasComponent<AnimationComponent>() const;
-
 // --- Transform (NOT TransformComponent) --------------------------------------
 // Note: class `Transform` lives in <components/AYEntity/components/AYEntity/components/AYEntity/components/AYEntity/components/TransformComponent.h>; the
 // C++ name does NOT carry a "Component" suffix. Pre-include guard above
@@ -70,24 +49,9 @@ template Transform* Entity::addComponent<Transform>();
 template Transform* Entity::getComponent<Transform>();
 template bool Entity::hasComponent<Transform>() const;
 
-// --- TilemapComponent (CM-3, 2026-08-11) ------------------------------------
-template TilemapComponent* Entity::addComponent<TilemapComponent>();
-template TilemapComponent* Entity::getComponent<TilemapComponent>();
-template bool Entity::hasComponent<TilemapComponent>() const;
-
-// --- SpriteComponent (CM-3, 2026-08-11) --------------------------------------
-template SpriteComponent* Entity::addComponent<SpriteComponent>();
-template SpriteComponent* Entity::getComponent<SpriteComponent>();
-template bool Entity::hasComponent<SpriteComponent>() const;
-
-// --- OrthoCameraComponent (CM-3, 2026-08-11) ---------------------------------
-template OrthoCameraComponent* Entity::addComponent<OrthoCameraComponent>();
-template OrthoCameraComponent* Entity::getComponent<OrthoCameraComponent>();
-template bool Entity::hasComponent<OrthoCameraComponent>() const;
-
-// --- ColliderComponent (2026-08-19) ------------------------------------------
-template ColliderComponent* Entity::addComponent<ColliderComponent>();
-template ColliderComponent* Entity::getComponent<ColliderComponent>();
-template bool Entity::hasComponent<ColliderComponent>() const;
+// --- SimTransformComponent (DET-04) -----------------------------------------
+template SimTransformComponent* Entity::addComponent<SimTransformComponent>();
+template SimTransformComponent* Entity::getComponent<SimTransformComponent>();
+template bool Entity::hasComponent<SimTransformComponent>() const;
 
 } // namespace ayt::entity

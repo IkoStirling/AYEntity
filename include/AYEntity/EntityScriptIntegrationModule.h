@@ -8,16 +8,13 @@
 namespace ayt::entity
 {
 
-inline constexpr std::string_view kEntityComponentModuleId =
-    "AYEntity.Components";
+inline constexpr std::string_view kEntityScriptIntegrationModuleId =
+    "AYEntity.ScriptIntegration";
 
-// Registration-phase module for component metadata. Runtime subsystem and
-// system installation are handled separately by EntityRuntimeModule so the
-// Host can seal ComponentRegistry between prepare() and install().
-class EntityComponentModule final : public ayt::module::IModule
+class EntityScriptIntegrationModule final : public ayt::module::IModule
 {
 public:
-    EntityComponentModule();
+    EntityScriptIntegrationModule();
 
     [[nodiscard]] const ayt::module::ModuleDescriptor& descriptor()
         const noexcept override;
@@ -27,5 +24,8 @@ public:
 private:
     ayt::module::ModuleDescriptor _descriptor;
 };
+
+[[nodiscard]] ComponentRegistryResult registerEntityScriptComponents(
+    ComponentRegistry& registry);
 
 } // namespace ayt::entity

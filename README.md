@@ -1,6 +1,8 @@
 # AYEntity
 
-AYEntity 是 AY Engine 的实体组件系统，负责 Entity/Component 存储、System 调度、场景序列化以及动画、渲染和网络绑定。
+AYEntity 是 AY Engine 的实体组件系统。`AYEntityCore` 负责 Entity/Component
+存储、System 调度与场景序列化；动画、渲染、2D、物理、脚本和网络绑定均为
+显式选择的 integration target，不再成为 Core 的反向依赖。
 
 ## 公开接口
 
@@ -11,18 +13,52 @@ AYEntity 是 AY Engine 的实体组件系统，负责 Entity/Component 存储、
 #include <AYEntity/ComponentRegistration.h>
 #include <AYEntity/EntityComponentModule.h>
 #include <AYEntity/EntityModule.h>
+#include <AYEntity/EntityRuntimeModule.h>
+#include <AYEntity/EntityRenderIntegrationModule.h>
+#include <AYEntity/EntityPhysicsIntegrationModule.h>
 #include <AYEntity/components/TransformComponent.h>
 ```
 
 入口头文件位于模块根目录；抽象接口位于 `interface/AYEntity/`，其余公开头位于 `include/AYEntity/`。
 
-## 依赖
+## CMake 目标与依赖边界
 
-- AYCore、AYGameLoop、AYReflect、AYSerializer
-- AYRenderer、AYMath、AYAnimation、AYResource、AYEventSystem
-- AYTest（仅测试）
+| 目标 | 内容 | 额外依赖 |
+|---|---|---|
+| `AYEntityCore` / `AYEntity::Core` | World、Entity、注册表、序列化、Entity SubSystem、Sim/Bridge | AYModule、AYCore、AYGameLoop、AYReflect、AYSerializer、AYMath |
+| `AYEntityAnimationIntegration` | 动画组件与系统 | AYAnimation、AYResource、AYEventSystem |
+| `AYEntityRenderIntegration` | Mesh/SkinnedMesh 表现系统 | AYRenderer、Animation integration、AYResource |
+| `AYEntity2DIntegration` | Tilemap/Sprite/OrthoCamera 表现系统 | AYRenderer、AYResource |
+| `AYEntityPhysicsIntegration` | 物理组件与固定步双向桥 | AYPhysics |
+| `AYEntityScriptIntegration` | ScriptComponent 类型注册 | 无具体脚本运行时依赖 |
+| `AYEntityNetworkIntegration` | NetworkComponent 类型注册 | 无具体网络运行时依赖 |
+| `AYEntity` / `AYEntity::All` | 旧调用方的完整兼容 facade | 当前构建中启用的全部 integration |
+
+新模块应链接 `AYEntityCore` 和自己确实使用的 integration；只有旧 Demo 或明确
+需要完整表面的产品才链接 `AYEntity`。
 
 ECS 结构、Simulation/Presentation 分轨和引导流程见 [design.md](design.md)。
+
+## 确定性 Simulation / Presentation 分轨
+
+DET-04 已提供三类系统通道：`SystemLane::Sim` 只由固定步进入口驱动，
+`SystemLane::Bridge` 在每个表现帧接收插值系数，现有系统默认属于
+`SystemLane::Present` 并继续接收可变 `dt`：
+
+```cpp
+world.registerSystem<MovementSystem>(100, SystemLane::Sim);
+world.fixedUpdate(fixedDt);
+world.updatePresentation(frameDt, interpolationAlpha);
+```
+
+为实体同时添加 `SimTransformComponent` 与 `Transform` 后，内置
+`SimToPresentBridgeSystem` 会把相邻固定帧的 Q16.16 位置插值为表现层浮点
+位置。`World` 会在每次 Sim 步开始前统一保存 `previousPosition`，所以同一
+步内多个 Sim 系统写位置不会破坏插值起点。
+
+当前 `SimTransformComponent` 只权威管理平移；确定性旋转/缩放需要等待
+AYMath 的固定点旋转契约。Sim 系统需要按实体 ID 稳定遍历：可使用
+`World::getAllEntities()`，不要依赖 SparseSet swap-remove 后的 `Query` 顺序。
 
 ## 显式组件注册
 
@@ -34,15 +70,18 @@ ECS 结构、Simulation/Presentation 分轨和引导流程见 [design.md](design
 #include <AYApplication/EngineModuleRuntime.h>
 
 ayt::app::EngineModuleRuntime runtime(host);
-auto& registry = ayt::entity::ComponentRegistry::instance();
 
 if (auto result = runtime.modules().emplace<
-        ayt::entity::EntityComponentModule>(registry); !result) {
+        ayt::entity::EntityComponentModule>(); !result) {
+    // report result.message()
+}
+if (auto result = runtime.modules().emplace<
+        ayt::entity::EntityRuntimeModule>(); !result) {
     // report result.message()
 }
 
 if (auto result = runtime.prepare(); result) {
-    registry.seal();
+    runtime.context().componentRegistry().seal();
     result = runtime.install();
 }
 ```
@@ -50,5 +89,8 @@ if (auto result = runtime.prepare(); result) {
 `Entity::addComponent<T>()` 不再隐式注册类型；它只在每个 World 第一次为
 该类型创建存储时验证注册状态，因此普通 add/get/query 不增加注册分支。
 场景保存和读取也不会触发隐式注册，Host 必须先完成上述启动阶段。
-当前 `EntityComponentModule` 只迁移组件元数据注册，GameLoop SubSystem 和
-表现系统仍使用既有 `bootstrapEntityCore()` / `bootstrapModule()`。
+`EntityComponentModule` 从当前 `IModuleContext` 获取 Host 选定的注册表，只注册
+Core 组件；`EntityRuntimeModule` 只安装 Entity SubSystem 与 Core systems。
+Presentation、Physics、Script 和 Network 必须由对应的
+`Entity*IntegrationModule` 节点显式加入。`bootstrapEntityCore()` /
+`bootstrapModule()` 继续作为旧调用方和新建 Scene World 的兼容入口。

@@ -1,115 +1,92 @@
-#include "AYEntity/EntityModule.h"
-#include "AYEntity/AnimationSystem.h"
-#include "AYEntity/OrthoCameraUpdateSystem.h"
-#include "AYEntity/SkinnedMeshRenderSystem.h"
-#include "AYEntity/SpriteRenderSystem.h"
-#include "AYEntity/StateMachineSystem.h"
-#include "AYEntity/TilemapAnimationTickSystem.h"
-#include "AYEntity/TilemapRenderSystem.h"
-#include "AYEntity/TilemapStreamingSystem.h"
-#include "AYEntity/World.h"
+#include <AYEntity/EntityModule.h>
+
+#if AY_ENTITY_HAS_ANIMATION_INTEGRATION
+#include <AYEntity/EntityAnimationIntegrationModule.h>
+#endif
+#if AY_ENTITY_HAS_RENDER_INTEGRATION
+#include <AYEntity/EntityRenderIntegrationModule.h>
+#endif
+#if AY_ENTITY_HAS_2D_INTEGRATION
+#include <AYEntity/Entity2DIntegrationModule.h>
+#endif
+#if AY_ENTITY_HAS_PHYSICS_INTEGRATION
+#include <AYEntity/EntityPhysicsIntegrationModule.h>
+#endif
+#if AY_ENTITY_HAS_SCRIPT_INTEGRATION
+#include <AYEntity/EntityScriptIntegrationModule.h>
+#endif
+#if AY_ENTITY_HAS_NETWORK_INTEGRATION
+#include <AYEntity/EntityNetworkIntegrationModule.h>
+#endif
 
 #include <cstdio>
-#include <cstring>
 
 namespace ayt::entity
 {
 
-namespace
+ComponentRegistryResult registerEntityComponents(ComponentRegistry& registry)
 {
+    ComponentRegistryResult result = registerEntityCoreComponents(registry);
+    if (!result) return result;
 
-// GL-01: idempotent re-registration helper. The original
-// `static bool bootstrapped` guard could only fire once per process,
-// but World::shutdown() clears _systems and a subsequent bootstrap
-// would see an empty world and re-register cleanly. The complication
-// is that test TUs (SystemTest.cpp) use the AY_SYSTEM() macro to
-// register helper systems (CounterSystem, HealthProcessSystem) via
-// file-scope static initializers — those are NOT cleared by
-// World::shutdown. Looking at systemCount() alone is therefore
-// wrong (it counts the test helpers too), and looking at a static
-// flag is wrong (it never resets). The right check is "is the
-// specific system I am about to register already present?" — if
-// so skip, otherwise register. The register* functions themselves
-// are also idempotent now (no internal static guards).
-bool hasSystemNamed(const World& world, const char* name)
-{
-    for (size_t i = 0; i < world.systemCount(); ++i) {
-        const char* existing = world.getSystemNameAt(i);
-        if (existing != nullptr && std::strcmp(existing, name) == 0) {
-            return true;
-        }
-    }
-    return false;
+#if AY_ENTITY_HAS_ANIMATION_INTEGRATION
+    result = registerEntityAnimationComponents(registry);
+    if (!result) return result;
+#endif
+#if AY_ENTITY_HAS_RENDER_INTEGRATION
+    result = registerEntityRenderComponents(registry);
+    if (!result) return result;
+#endif
+#if AY_ENTITY_HAS_2D_INTEGRATION
+    result = registerEntity2DComponents(registry);
+    if (!result) return result;
+#endif
+#if AY_ENTITY_HAS_PHYSICS_INTEGRATION
+    result = registerEntityPhysicsComponents(registry);
+    if (!result) return result;
+#endif
+#if AY_ENTITY_HAS_SCRIPT_INTEGRATION
+    result = registerEntityScriptComponents(registry);
+    if (!result) return result;
+#endif
+#if AY_ENTITY_HAS_NETWORK_INTEGRATION
+    result = registerEntityNetworkComponents(registry);
+    if (!result) return result;
+#endif
+    return ComponentRegistryResult::success();
 }
 
-} // namespace
-
-void bootstrapEntityCore()
+void registerEntityComponents()
 {
-    registerEntitySubSystem();
-    registerEntityComponents();
+    (void)registerEntityComponents(ComponentRegistry::instance());
+}
+
+void registerEntityPresentationSystems()
+{
+#if AY_ENTITY_HAS_ANIMATION_INTEGRATION
+    registerEntityAnimationSystems();
+#endif
+#if AY_ENTITY_HAS_RENDER_INTEGRATION
+    registerEntityRenderSystems();
+#endif
+#if AY_ENTITY_HAS_2D_INTEGRATION
+    registerEntity2DSystems();
+#endif
 }
 
 void bootstrapModule()
 {
-    World& world = World::instance();
-
-    // Phase 1 AN-03: AnimationSystem (priority 450) ticks before any
-    // render system so per-bone skin matrices are fresh when the
-    // renderer reads them. Both render systems share priority 500;
-    // World-owned scene-builder order = registration order, so registering
-    // SkinnedMeshRenderSystem before RenderSystem makes it run first (the
-    // order is semantically irrelevant — both consume different entities —
-    // but logging the order helps debugging).
-    if (!hasSystemNamed(world, "AnimationSystem")) {
-        registerAnimationSystem();
-    }
-    // P3.1 (2026-08-06) — StateMachineSystem (priority 460) ticks AFTER
-    // AnimationSystem (450); transitions decide which clip plays next frame.
-    if (!hasSystemNamed(world, "StateMachineSystem")) {
-        registerStateMachineSystem();
-    }
-    if (!hasSystemNamed(world, "SkinnedMeshRenderSystem")) {
-        registerSkinnedMeshRenderSystem();
-    }
-    if (!hasSystemNamed(world, "RenderSystem")) {
-        registerRenderSystem();
-    }
-    // CM-3 (2026-08-11): 2D lane. Registration order here IS the
-    // World-owned scene-builder order: the camera builder (405) must run
-    // before the render builders (510) so the
-    // ortho view/proj is set when the 2D systems submit. The 430/460
-    // shells keep the §3.3 priority table authoritative.
-    register2DSystems();
-    bootstrapEntityCore();
+    registerEntitySubSystem();
+    registerEntityComponents();
+    registerEntityCoreSystems();
+    registerEntityPresentationSystems();
 
     static bool loggedOnce = false;
     if (!loggedOnce) {
-        std::fprintf(stderr, "[AYEntity] module bootstrap complete\n");
+        std::fprintf(
+            stderr,
+            "[AYEntity] compatibility facade bootstrap complete\n");
         loggedOnce = true;
-    }
-}
-
-void register2DSystems()
-{
-    World& world = World::instance();
-    // GL-01: same idempotent guard style as bootstrapModule() — each
-    // register* is also individually idempotent (no internal guards,
-    // the caller decides).
-    if (!hasSystemNamed(world, "OrthoCameraUpdateSystem")) {
-        registerOrthoCameraUpdateSystem();
-    }
-    if (!hasSystemNamed(world, "TilemapStreamingSystem")) {
-        registerTilemapStreamingSystem();
-    }
-    if (!hasSystemNamed(world, "TilemapAnimationTickSystem")) {
-        registerTilemapAnimationTickSystem();
-    }
-    if (!hasSystemNamed(world, "TilemapRenderSystem")) {
-        registerTilemapRenderSystem();
-    }
-    if (!hasSystemNamed(world, "SpriteRenderSystem")) {
-        registerSpriteRenderSystem();
     }
 }
 

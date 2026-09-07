@@ -39,6 +39,16 @@ struct EntityHandle;
 constexpr uint32_t INVALID_ID = 0;
 constexpr uint32_t INVALID_INDEX = UINT32_MAX;
 
+// Systems declare one execution lane. Present receives variable frame dt,
+// Sim receives fixed dt only, and Bridge receives presentation interpolation
+// alpha. Keeping the time contracts distinct prevents deterministic gameplay
+// from accidentally entering the variable-rate presentation path.
+enum class SystemLane : uint8_t {
+    Present,
+    Sim,
+    Bridge,
+};
+
 // =============================================================================
 // IComponent - Component base class
 // =============================================================================
@@ -67,9 +77,21 @@ public:
 
     int32_t getPriority() const { return _priority; }
     void setPriority(int32_t priority) { _priority = priority; }
+    SystemLane getLane() const { return _lane; }
+    void setLane(SystemLane lane) { _lane = lane; }
+
+    void startOnce() {
+        if (_started) return;
+        onStart();
+        _started = true;
+    }
 
 protected:
     int32_t _priority = 0;
+
+private:
+    SystemLane _lane = SystemLane::Present;
+    bool _started = false;
 };
 
 // =============================================================================
@@ -99,15 +121,18 @@ public:
     static_assert(std::is_base_of_v<::ayt::entity::IComponent, T>, \
                   #T " must inherit IComponent")
 
-#define AY_SYSTEM(T, priority) \
+#define AY_SYSTEM_IN_LANE(T, priority, lane) \
     static_assert(std::is_base_of_v<::ayt::entity::ISystem, T>, #T " must inherit ISystem"); \
     namespace { \
         struct AYT_SystemRegistrar_##T { \
             AYT_SystemRegistrar_##T() { \
-                ::ayt::entity::World::instance().registerSystem<T>(priority); \
+                ::ayt::entity::World::instance().registerSystem<T>(priority, lane); \
             } \
         }; \
         static AYT_SystemRegistrar_##T AYT_g_system_registrar_##T; \
     }
+
+#define AY_SYSTEM(T, priority) \
+    AY_SYSTEM_IN_LANE(T, priority, ::ayt::entity::SystemLane::Present)
 
 } // namespace ayt::entity

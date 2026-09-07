@@ -2,12 +2,19 @@
 
 #include <AYEntity/ComponentRegistry.h>
 
+#include <memory>
+
+namespace ayt::game
+{
+class ISubSystem;
+}
+
 namespace ayt::entity
 {
 
-// Headless / server / AYApplication hosts: EntitySubSystem + component
-// types only. Does not register render ECS systems or RendererSubSystem.
-// Safe when the executable links AYEntity but not AYRenderer.
+// Headless/server hosts: EntitySubSystem + core component types only. The
+// implementation lives in AYEntityCore and has no renderer/animation/physics
+// dependency.
 void bootstrapEntityCore();
 
 // Full ECS render-pipeline hosts (Editor, integration demos): animation +
@@ -16,8 +23,22 @@ void bootstrapEntityCore();
 // ayt::render::RendererSubSystem::registerSubSystem() separately.
 void bootstrapModule();
 
+// Module-first assembly primitives. The factory leaves ownership with the
+// caller until it is published through GameLoop. System registration is split
+// from subsystem creation so EntityRuntimeModule can keep type registration,
+// install, and presentation policy in distinct startup phases.
+[[nodiscard]] std::unique_ptr<ayt::game::ISubSystem>
+createEntitySubSystem();
+void registerEntityCoreSystems();
+void registerEntityPresentationSystems();
+
 void registerEntitySubSystem();
 void registerRenderSystem();
+void registerSimToPresentBridgeSystem();
+[[nodiscard]] ComponentRegistryResult registerEntityCoreComponents(
+    ComponentRegistry& registry);
+// Legacy full-facade registration. New module graphs should add explicit
+// Entity*IntegrationModule nodes instead.
 [[nodiscard]] ComponentRegistryResult registerEntityComponents(
     ComponentRegistry& registry);
 void registerEntityComponents();
