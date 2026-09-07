@@ -197,9 +197,12 @@ target_compile_definitions(AYEntity PRIVATE
     AY_ENTITY_HAS_NETWORK_INTEGRATION=$<BOOL:${AY_ENABLE_NETWORK}>
 )
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND AY_ENABLE_AY2D AND AY_ENABLE_PHYSICS)
     enable_testing()
     add_subdirectory(unittest)
+elseif(BUILD_TESTING)
+    message(STATUS
+        "AYEntity full integration tests skipped for this feature profile")
 endif()
 
 set(AYENTITY_PUBLIC_HEADER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
