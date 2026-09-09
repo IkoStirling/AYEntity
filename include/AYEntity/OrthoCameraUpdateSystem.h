@@ -1,16 +1,9 @@
 #pragma once
 // AYEntity/OrthoCameraUpdateSystem.h — CM-3 (2026-08-11): 2D ortho camera
 // driver. Priority 405 — registers BEFORE RenderSystem (500) so its
-// World-owned scene-builder callback runs first and
-// overwrites the default perspective camera with the primary
-// OrthoCameraComponent's ortho view/projection before the 2D/3D
-// render systems submit.
-//
-// Known mixed-3D caveat: RendererSubSystem::renderScenePass sets the
-// default perspective camera before running the builder chain, so a
-// primary 2D camera REPLACES it for the whole frame — 3D Transparent
-// sortKey keeps using mainCameraPosition() (last look-at eye), a
-// documented limitation of mixed 2D/3D scenes in one frame.
+// World-owned scene-builder callback records the primary
+// OrthoCameraComponent as RenderScene's independent 2D overlay camera.
+// The Renderer main perspective camera remains available to every 3D pass.
 
 #include <AYEntity/IEntity.h>
 

@@ -20,7 +20,7 @@ void OrthoCameraUpdateSystem::onStart()
     if (rss == nullptr) {
         std::fprintf(stderr,
                      "[OrthoCameraUpdateSystem] RendererSubSystem not registered; "
-                     "2D camera will not drive the main camera.\n");
+                     "2D overlay camera builder was not registered.\n");
         return;
     }
     World* owner = &World::instance();
@@ -32,16 +32,8 @@ void OrthoCameraUpdateSystem::onStart()
     std::fprintf(stderr, "[OrthoCameraUpdateSystem] world-owned scene builder registered\n");
 }
 
-void OrthoCameraUpdateSystem::buildCamera(ayt::render::RenderScene& /*scene*/)
+void OrthoCameraUpdateSystem::buildCamera(ayt::render::RenderScene& scene)
 {
-    ayt::render::RendererSubSystem* rss =
-        ayt::render::RendererSubSystem::findRegistered();
-    if (rss == nullptr) {
-        return;
-    }
-
-    // The builder chain runs AFTER renderScenePass's default
-    // perspective camera setup, so setMainCamera here wins the frame.
     World& world = World::instance();
     for (Entity* entity : world.query<OrthoCameraComponent>()) {
         if (entity == nullptr) {
@@ -51,7 +43,8 @@ void OrthoCameraUpdateSystem::buildCamera(ayt::render::RenderScene& /*scene*/)
         if (cam == nullptr || !cam->isPrimary) {
             continue;
         }
-        rss->renderer().setMainCamera(cam->viewMatrix(), cam->projectionMatrix());
+        scene.setOverlayCamera2D(cam->viewMatrix(), cam->projectionMatrix(),
+                                 cam->layerMask);
         return;  // first primary camera wins
     }
 }

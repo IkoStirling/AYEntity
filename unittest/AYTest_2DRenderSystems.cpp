@@ -248,6 +248,43 @@ TEST_CASE(cm3_2d_systems_priority_wiring)
     world.shutdown();
 }
 
+TEST_CASE(ortho_camera_is_recorded_as_an_independent_scene_overlay)
+{
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+
+    Entity* entity = world.createEntity();
+    CHECK_NOT_NULL(entity);
+    OrthoCameraComponent* camera = entity->addComponent<OrthoCameraComponent>();
+    CHECK_NOT_NULL(camera);
+    camera->positionX = 17.0f;
+    camera->positionY = -9.0f;
+    camera->viewSize = 24.0f;
+    camera->viewportAspect = 4.0f / 3.0f;
+    camera->layerMask = 0x0000002Du;
+    camera->isPrimary = true;
+
+    const auto expectedView = camera->viewMatrix();
+    const auto expectedProjection = camera->projectionMatrix();
+    ayt::render::RenderScene scene;
+    ayt::entity::OrthoCameraUpdateSystem system;
+    system.buildCamera(scene);
+
+    CHECK(scene.hasOverlayCamera2D());
+    CHECK(scene.overlayCamera2D().layerMask == 0x0000002Du);
+    CHECK_FLOAT_EQ(scene.overlayCamera2D().view.row[0].w,
+                   expectedView.row[0].w, 1e-6f);
+    CHECK_FLOAT_EQ(scene.overlayCamera2D().view.row[1].w,
+                   expectedView.row[1].w, 1e-6f);
+    CHECK_FLOAT_EQ(scene.overlayCamera2D().projection.row[0].x,
+                   expectedProjection.row[0].x, 1e-6f);
+    CHECK_FLOAT_EQ(scene.overlayCamera2D().projection.row[1].y,
+                   expectedProjection.row[1].y, 1e-6f);
+
+    world.shutdown();
+}
+
 // ─── #2 — tilemap render closed loop (sticky-Noop). ───────────────
 TEST_CASE(cm3_tilemap_render_closed_loop)
 {

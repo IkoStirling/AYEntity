@@ -15,10 +15,14 @@
 
 
 #include "AYMath/MathTransform.h"
+#include <AYResource/AssetPath.h>
+#include <AYResource/ResourceManager.h>
+#include <AYResource/assetsDefs/IMesh.h>
 
 #include <algorithm>
 #include <cstdio>
 #include <unordered_map>
+#include <vector>
 
 
 
@@ -37,6 +41,15 @@ struct CachedDrawResources {
     ayt::render::MeshHandle     mesh;
 
     ayt::render::MaterialHandle material;
+
+    struct Section {
+        uint32_t firstIndex = 0;
+        uint32_t indexCount = 0;
+        std::string materialPath;
+        ayt::render::MaterialHandle material;
+    };
+    std::vector<Section> sections;
+    std::string firstSlotPath;
 
 };
 
@@ -227,13 +240,40 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         }
 
 
-        const std::string key = assetKey(meshComp->meshPath, meshComp->materialPath);
+        const std::string meshPath = ayt::resource::resolveAssetPath({}, meshComp->meshPath);
+        const std::string materialPath = ayt::resource::resolveAssetPath({}, meshComp->materialPath);
+        const std::string key = assetKey(meshPath, materialPath);
 
         CachedDrawResources& resources = cache[key];
 
         if (!resources.mesh.isValid()) {
 
-            resources.mesh = renderer.loadMesh(meshComp->meshPath);
+            resources.mesh = renderer.loadMesh(meshPath);
+            if (resources.mesh.isValid()) {
+                const auto source = ayt::resource::ResourceManager::instance()
+                    .load<ayt::resource::IMesh>(meshPath);
+                if (source && source->getSubmeshCount() > 1) {
+                    const char* first = source->getMaterialSlotCount() > 0
+                        ? source->getMaterialSlot(0) : nullptr;
+                    resources.firstSlotPath = first && first[0]
+                        ? ayt::resource::resolveAssetPath(meshPath, first) : std::string{};
+                    const auto* sections = source->getSubmeshes();
+                    for (uint32_t i = 0; sections && i < source->getSubmeshCount(); ++i) {
+                        const auto& section = sections[i];
+                        if (section.indexCount == 0 ||
+                            uint64_t(section.indexOffset) + section.indexCount > source->getIndexCount()) {
+                            continue;
+                        }
+                        const char* slot = section.materialIndex < source->getMaterialSlotCount()
+                            ? source->getMaterialSlot(section.materialIndex) : nullptr;
+                        CachedDrawResources::Section draw;
+                        draw.firstIndex = section.indexOffset;
+                        draw.indexCount = section.indexCount;
+                        if (slot && slot[0]) draw.materialPath = ayt::resource::resolveAssetPath(meshPath, slot);
+                        resources.sections.push_back(std::move(draw));
+                    }
+                }
+            }
 
             if (!resources.mesh.isValid() && frameIndex < 5) {
 
@@ -261,7 +301,9 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
 
 
-        if (!resources.mesh.isValid() || !resources.material.isValid()) {
+        const bool useSections = !meshComp->outlineHull && !resources.sections.empty()
+            && (materialPath.empty() || materialPath == resources.firstSlotPath);
+        if (!resources.mesh.isValid() || (!resources.material.isValid() && !useSections)) {
 
             ++skippedLoad;
 
@@ -317,9 +359,28 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 std::min(scaled, 2.0e9f));
         }
 
-        scene.add(item);
-
-        ++submitted;
+        if (useSections) {
+            // The editor initializes materialPath to slot zero. This is a
+            // fallback, not an instruction to paint every section with it.
+            // A different explicit material (including selection outlines)
+            // retains the legacy whole-mesh override behavior.
+            for (auto& section : resources.sections) {
+                if (!section.material.isValid() && !section.materialPath.empty())
+                    section.material = renderer.loadMaterial(section.materialPath);
+                auto draw = item;
+                draw.firstIndex = section.firstIndex;
+                draw.indexCount = section.indexCount;
+                draw.material = section.material.isValid() ? section.material : resources.material;
+                if (!draw.material.isValid()) { ++skippedLoad; continue; }
+                if (meshComp->alphaBlend)
+                    renderer.setMaterialBlendMode(draw.material, ayt::render::BlendMode::Alpha);
+                scene.add(draw);
+                ++submitted;
+            }
+        } else {
+            scene.add(item);
+            ++submitted;
+        }
 
     }
 
