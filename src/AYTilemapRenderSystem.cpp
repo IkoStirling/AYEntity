@@ -138,6 +138,10 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         ayt::render::RendererSubSystem::findRegistered();
     if (rss == nullptr) return;
     ayt::render::Renderer& renderer = rss->renderer();
+    ayt::math::Float4x4 mainCameraView;
+    ayt::math::Float4x4 mainCameraProjection;
+    const bool haveMainCamera = renderer.mainCameraMatrices(
+        mainCameraView, mainCameraProjection);
 
     struct ChunkDraw {
         ayt::render::DrawItem item;
@@ -160,6 +164,9 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             renderDomainOf(*component);
         const bool worldLit =
             renderDomain == ayt::render::RenderDomain2D::WorldLit;
+        const ayt::math::Float4x4 worldMatrix =
+            ayt::math::Transform::getMatrix(
+                transform->position, transform->rotation, transform->scale);
         const uint32_t layer = static_cast<uint32_t>(component->layer) & 0x1Fu;
         if (!worldLit && visibility.valid
             && (visibility.layerMask & (1u << layer)) == 0u) {
@@ -293,11 +300,9 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         const float tileH = static_cast<float>(resources.tilemap->getTileHeight());
         if (cols == 0u || rows == 0u || tileW <= 0.0f || tileH <= 0.0f) continue;
 
-        // WorldLit geometry is viewed through the 3D main camera. Reusing the
-        // independent overlay-camera rectangle would incorrectly hide valid
-        // chunks, so this first tilemap cut deliberately fails open. A later
-        // cut can add main-camera frustum chunk streaming without changing the
-        // material/routing contract introduced here.
+        // Overlay uses its independent orthographic camera rectangle. WorldLit
+        // starts from the finite map and rejects individual chunks against the
+        // current perspective camera below; no authored main camera fails open.
         const TilemapCameraVisibility* cull =
             !worldLit && isAxisAlignedPositive(*transform)
                 ? &visibility : nullptr;
@@ -346,16 +351,31 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
              chunkY < range.maxChunkY; ++chunkY) {
             for (uint32_t chunkX = range.minChunkX;
                  chunkX < range.maxChunkX; ++chunkX) {
+                const uint32_t beginCol = chunkX * chunkCols;
+                const uint32_t beginRow = chunkY * chunkRows;
+                const uint32_t endCol = std::min(cols, beginCol + chunkCols);
+                const uint32_t endRow = std::min(rows, beginRow + chunkRows);
+                if (worldLit && haveMainCamera) {
+                    const float marginX = static_cast<float>(margin)
+                                        * static_cast<float>(chunkCols) * tileW;
+                    const float marginY = static_cast<float>(margin)
+                                        * static_cast<float>(chunkRows) * tileH;
+                    if (!tilemapChunkIntersectsFrustum(
+                            mainCameraView, mainCameraProjection, worldMatrix,
+                            static_cast<float>(beginCol) * tileW - marginX,
+                            static_cast<float>(beginRow) * tileH - marginY,
+                            static_cast<float>(endCol) * tileW + marginX,
+                            static_cast<float>(endRow) * tileH + marginY)) {
+                        continue;
+                    }
+                }
+
                 ++_lastStats.visibleChunks;
                 const uint64_t key = packChunkKey(chunkX, chunkY);
                 CachedChunkMesh& cached = resources.chunks[key];
                 if (!cached.mesh.isValid()
                     || cached.animationRevision != animationRevision) {
                     if (cached.mesh.isValid()) renderer.destroyMesh(cached.mesh);
-                    const uint32_t beginCol = chunkX * chunkCols;
-                    const uint32_t beginRow = chunkY * chunkRows;
-                    const uint32_t endCol = std::min(cols, beginCol + chunkCols);
-                    const uint32_t endRow = std::min(rows, beginRow + chunkRows);
                     TilemapChunkGeometry geometry = buildTilemapChunkGeometry(
                         *resources.tilemap, beginCol, beginRow, endCol, endRow,
                         atlasGrid, resolved);
@@ -389,8 +409,7 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                     static_cast<ayt::render::TilemapSamplingQuality>(quality);
                 draw.item.mesh = cached.mesh;
                 draw.item.material = material;
-                draw.item.world = ayt::math::Transform::getMatrix(
-                    transform->position, transform->rotation, transform->scale);
+                draw.item.world = worldMatrix;
                 draws.push_back(draw);
             }
         }

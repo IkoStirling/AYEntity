@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 
 namespace ayt::entity
@@ -39,6 +40,18 @@ uint32_t tileIdAt(const ayt::resource::ITilemap& map,
     return ids == nullptr ? map.getDefaultTileId() : ids[index];
 }
 
+bool finiteMatrix(const ayt::math::Float4x4& matrix) noexcept
+{
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            if (!std::isfinite(matrix.row[row][column])) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 uint32_t clampFloorToChunk(float world, float origin, float tileSize,
                            uint32_t chunkSize, uint32_t chunkCount) noexcept
 {
@@ -52,6 +65,46 @@ uint32_t clampFloorToChunk(float world, float origin, float tileSize,
 }
 
 } // namespace
+
+bool tilemapChunkIntersectsFrustum(
+    const ayt::math::Float4x4& view,
+    const ayt::math::Float4x4& projection,
+    const ayt::math::Float4x4& world,
+    float localMinX, float localMinY,
+    float localMaxX, float localMaxY) noexcept
+{
+    if (!finiteMatrix(view) || !finiteMatrix(projection)
+        || !finiteMatrix(world)
+        || !std::isfinite(localMinX) || !std::isfinite(localMinY)
+        || !std::isfinite(localMaxX) || !std::isfinite(localMaxY)
+        || localMinX > localMaxX || localMinY > localMaxY) {
+        return true;
+    }
+
+    const ayt::math::Float4x4 mvp = projection * view * world;
+    const ayt::math::FVector4 clip[] = {
+        mvp * ayt::math::FVector4(localMinX, localMinY, 0.0f, 1.0f),
+        mvp * ayt::math::FVector4(localMaxX, localMinY, 0.0f, 1.0f),
+        mvp * ayt::math::FVector4(localMaxX, localMaxY, 0.0f, 1.0f),
+        mvp * ayt::math::FVector4(localMinX, localMaxY, 0.0f, 1.0f),
+    };
+    for (const ayt::math::FVector4& point : clip) {
+        if (!std::isfinite(point.x) || !std::isfinite(point.y)
+            || !std::isfinite(point.z) || !std::isfinite(point.w)) {
+            return true;
+        }
+    }
+
+    const auto allOutside = [&clip](const auto& predicate) noexcept {
+        return std::all_of(std::begin(clip), std::end(clip), predicate);
+    };
+    return !(allOutside([](const auto& p) { return p.x < -p.w; })
+          || allOutside([](const auto& p) { return p.x >  p.w; })
+          || allOutside([](const auto& p) { return p.y < -p.w; })
+          || allOutside([](const auto& p) { return p.y >  p.w; })
+          || allOutside([](const auto& p) { return p.z < 0.0f; })
+          || allOutside([](const auto& p) { return p.z > p.w; }));
+}
 
 TilemapChunkRect visibleTilemapChunks(
     const TilemapCameraVisibility* visibility,

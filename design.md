@@ -1,5 +1,14 @@
 # AYEntity Design
 
+> **2026-09-09 — WorldLit2D Tilemap 第三刀（Perspective visibility）**：
+> WorldLit Tilemap 不再全图 fail-open 提交。每个 chunk 使用主相机的未抖动
+> view/projection、Tilemap 完整 world transform 与引擎 LH `[0,1]` 六个齐次
+> 裁剪面做保守相交测试；prefetch margin 会扩张待测 chunk。屏外、相机后方及
+> far-plane 外的 chunk 不创建 mesh、不提交 DrawItem，并继续由既有 LRU 管理
+> 已驻留网格。相机尚未设置、矩阵/边界非有限时仍安全 fail-open。当前实现会
+> 线性扫描有限 chunk 网格；若超大地图需要更低 CPU 成本，可在此契约上追加
+> quadtree/row-range broad phase，无需再改材质或 Pass 路由。
+
 > **2026-09-09 — WorldLit2D Tilemap authoring 第二刀**：`TilemapComponent`
 > 现可显式选择 WorldLit，并序列化 normal/roughness/emissive 路径与
 > metallic/roughness/AO/emissive/alpha-cutoff 参数。Tilemap 保留 chunk mesh
@@ -7,7 +16,7 @@
 > 缓存与 chunk 几何缓存分离，Inspector 标量修改不会复制常驻网格。颜色贴图
 > 以 sRGB、数据贴图以 linear 加载，可选贴图失败时 fail-close；异常 atlas
 > filter 会钳制到 Linear，避免越界。WorldLit 不再套用 Ortho overlay 的层掩码
-> 与可见块剔除；3D 主相机下的 chunk frustum streaming 留待后续实现。
+> 与可见块剔除；该第二刀遗留的 3D chunk 可见性已由上方第三刀关闭。
 
 > **2026-09-09 — WorldLit2D Sprite authoring 第一刀**：`SpriteComponent`
 > 追加可序列化的 `renderDomain`、normal/roughness/emissive 路径与

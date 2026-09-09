@@ -1,7 +1,10 @@
 #include <AYEntity/TilemapChunkGeometry.h>
 #include <AYEntity/TilemapVisibilityRuntime.h>
 #include <AYResource/assetsImpl/TilemapAsset.h>
+#include <AYMath/MathUtils.h>
 #include <AYTest.h>
+
+#include <limits>
 
 using namespace ayt::entity;
 using namespace ayt::resource;
@@ -52,6 +55,41 @@ TEST_CASE(VisibilityOutsideFiniteMapIsEmpty)
     CHECK_TRUE(visibleTilemapChunks(
         &camera, 0.0f, 0.0f, 4u, 4u, 16.0f, 16.0f,
         2u, 2u, 1u).empty());
+}
+
+TEST_CASE(WorldLitChunkUsesConservativePerspectiveFrustum)
+{
+    const ayt::math::Float4x4 view = ayt::math::lh::lookAt(
+        ayt::math::FVector3(0.0f, 0.0f, -5.0f),
+        ayt::math::FVector3(0.0f, 0.0f, 0.0f),
+        ayt::math::FVector3(0.0f, 1.0f, 0.0f));
+    const ayt::math::Float4x4 projection = ayt::math::lh::perspective(
+        ayt::math::radians(60.0f), 16.0f / 9.0f, 0.1f, 100.0f);
+
+    CHECK_TRUE(tilemapChunkIntersectsFrustum(
+        view, projection, ayt::math::Float4x4::identity(),
+        -1.0f, -1.0f, 1.0f, 1.0f));
+
+    ayt::math::Float4x4 outside = ayt::math::Float4x4::identity();
+    outside.row[0].w = 1000.0f;
+    CHECK_FALSE(tilemapChunkIntersectsFrustum(
+        view, projection, outside, -1.0f, -1.0f, 1.0f, 1.0f));
+
+    ayt::math::Float4x4 behind = ayt::math::Float4x4::identity();
+    behind.row[2].w = -10.0f;
+    CHECK_FALSE(tilemapChunkIntersectsFrustum(
+        view, projection, behind, -1.0f, -1.0f, 1.0f, 1.0f));
+
+    ayt::math::Float4x4 beyondFar = ayt::math::Float4x4::identity();
+    beyondFar.row[2].w = 200.0f;
+    CHECK_FALSE(tilemapChunkIntersectsFrustum(
+        view, projection, beyondFar, -1.0f, -1.0f, 1.0f, 1.0f));
+
+    ayt::math::Float4x4 invalidView = view;
+    invalidView.row[0].x = std::numeric_limits<float>::quiet_NaN();
+    CHECK_TRUE(tilemapChunkIntersectsFrustum(
+        invalidView, projection, ayt::math::Float4x4::identity(),
+        -1.0f, -1.0f, 1.0f, 1.0f));
 }
 
 TEST_CASE(ChunkGeometryBatchesCellsAndBakesAtlasUv)

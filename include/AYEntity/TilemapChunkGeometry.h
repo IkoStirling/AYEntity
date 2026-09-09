@@ -37,6 +37,16 @@ struct TilemapChunkGeometry {
     uint32_t cells = 0;
 };
 
+// Conservative homogeneous-frustum test for one flat tilemap chunk. Camera
+// depth follows the engine LH [0,1] convention. Invalid/non-finite inputs fail
+// open so malformed host camera data cannot make world geometry disappear.
+[[nodiscard]] bool tilemapChunkIntersectsFrustum(
+    const ayt::math::Float4x4& view,
+    const ayt::math::Float4x4& projection,
+    const ayt::math::Float4x4& world,
+    float localMinX, float localMinY,
+    float localMaxX, float localMaxY) noexcept;
+
 // Convert a camera world rectangle to a clamped chunk range. `visibility ==
 // nullptr` or !valid returns the full finite map. max values are exclusive.
 [[nodiscard]] TilemapChunkRect visibleTilemapChunks(

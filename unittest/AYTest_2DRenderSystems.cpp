@@ -385,7 +385,8 @@ TEST_CASE(world_lit_tilemap_uses_baked_uv_and_deferred_route)
     World::instance().initialize();
     Entity* entity = World::instance().createEntity();
     CHECK_NOT_NULL(entity);
-    entity->addComponent<Transform>();
+    Transform* transform = entity->addComponent<Transform>();
+    CHECK_NOT_NULL(transform);
     TilemapComponent* tm = entity->addComponent<TilemapComponent>();
     CHECK_NOT_NULL(tm);
     tm->tilemapPath = mapPath;
@@ -430,6 +431,14 @@ TEST_CASE(world_lit_tilemap_uses_baked_uv_and_deferred_route)
     CHECK(rss->renderer().pipelineDesc().isDeferred());
     CHECK(rss->renderer().pipelineDesc().contains(
         ayt::render::RenderPassSlot::GBuffer));
+
+    // Perspective culling is evaluated in the tilemap's complete world
+    // transform, independently from the overlay camera rectangle.
+    transform->position.x = 10000.0f;
+    scene.clear();
+    system.buildRenderScene(scene);
+    CHECK_TRUE(scene.items().empty());
+    CHECK_INT_EQ(system.lastFrameStats().visibleChunks, 0u);
 
     rss->shutdown();
     unregisterTestRenderer();
