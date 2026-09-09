@@ -286,6 +286,9 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             ayt::math::FQuaternion::fromAxisAngle(
                 ayt::math::FVector3(0.0f, 0.0f, 1.0f), sprite->rotationZ),
             ayt::math::FVector3(sprite->scaleX, sprite->scaleY, 1.0f));
+        entry.item.shadowFlags = worldLit
+            ? ayt::render::makeShadowFlags(sprite->castShadow, /*receive=*/true)
+            : ayt::render::ShadowFlags::None;
         entries.push_back(entry);
     }
 

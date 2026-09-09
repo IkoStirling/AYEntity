@@ -76,6 +76,8 @@ struct TilemapComponent : public IComponent {
     AY_PROPERTY(float, emissiveStrength, kAttrSerialize)
     AY_PROPERTY(float, alphaCutoff, kAttrSerialize)
     AY_PROPERTY(bool, invertNormalY, kAttrSerialize)
+    // WorldLit-only caster control. SceneOverlay never enters ShadowPass.
+    AY_PROPERTY(bool, castShadow, kAttrSerialize)
 
     // Runtime-only (not serialized): render skip flag.
     bool visible = true;
@@ -99,6 +101,7 @@ struct TilemapComponent : public IComponent {
         emissiveStrength    = 0.0f;
         alphaCutoff         = 0.5f;
         invertNormalY       = false;
+        castShadow          = true;
     }
 
     explicit TilemapComponent(const char* path)

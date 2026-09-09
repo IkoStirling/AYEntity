@@ -47,6 +47,9 @@ struct SpriteComponent : public IComponent {
     AY_PROPERTY(float, emissiveStrength, kAttrSerialize)
     AY_PROPERTY(float, alphaCutoff, kAttrSerialize)
     AY_PROPERTY(bool, invertNormalY, kAttrSerialize)
+    // WorldLit-only caster control. SceneOverlay is never part of the world
+    // shadow domain regardless of this value.
+    AY_PROPERTY(bool, castShadow, kAttrSerialize)
 
     // Runtime-only (not serialized): render skip flag.
     bool visible = true;
@@ -68,6 +71,7 @@ struct SpriteComponent : public IComponent {
         emissiveStrength = 0.0f;
         alphaCutoff = 0.5f;
         invertNormalY = false;
+        castShadow = true;
     }
 
     explicit SpriteComponent(const char* path)

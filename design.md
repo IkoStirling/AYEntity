@@ -1,5 +1,13 @@
 # AYEntity Design
 
+> **2026-09-09 — WorldLit2D 第四刀（Shadow authoring）**：
+> `SpriteComponent` 与 `TilemapComponent` 新增可序列化 `castShadow`，
+> 默认开启以保持 WorldLit 的直觉行为。RenderSystem 显式生成
+> `ShadowFlags`：WorldLit 始终接收现有 Deferred shadow，是否投射
+> 由组件开关决定；SceneOverlay 固定为 `None`，不会进入世界阴影。
+> Tilemap chunk 的实际网格边界由 AYRenderer 上传阶段记录，因此大块
+> 地图不再被当成一个以原点为中心的单位立方体。
+
 > **2026-09-09 — WorldLit2D Tilemap 第三刀（Perspective visibility）**：
 > WorldLit Tilemap 不再全图 fail-open 提交。每个 chunk 使用主相机的未抖动
 > view/projection、Tilemap 完整 world transform 与引擎 LH `[0,1]` 六个齐次

@@ -410,6 +410,10 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 draw.item.mesh = cached.mesh;
                 draw.item.material = material;
                 draw.item.world = worldMatrix;
+                draw.item.shadowFlags = worldLit
+                    ? ayt::render::makeShadowFlags(
+                        component->castShadow, /*receive=*/true)
+                    : ayt::render::ShadowFlags::None;
                 draws.push_back(draw);
             }
         }

@@ -335,6 +335,7 @@ TEST_CASE(cm3_tilemap_render_closed_loop)
         CHECK_NOT_NULL(item.payload);
         CHECK_TRUE(item.mesh.isValid());
         CHECK_TRUE(item.material.isValid());
+        CHECK(item.shadowFlags == ayt::render::ShadowFlags::None);
         if (item.payload == nullptr) {
             continue;
         }
@@ -416,6 +417,16 @@ TEST_CASE(world_lit_tilemap_uses_baked_uv_and_deferred_route)
         CHECK(scene.items()[0].payload->samplingQuality
               == ayt::render::TilemapSamplingQuality::Tap9);
     }
+    CHECK(ayt::render::castsShadow(scene.items()[0].shadowFlags));
+    CHECK(ayt::render::receivesShadow(scene.items()[0].shadowFlags));
+
+    tm->castShadow = false;
+    scene.clear();
+    system.buildRenderScene(scene);
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+    CHECK_FALSE(ayt::render::castsShadow(scene.items()[0].shadowFlags));
+    CHECK(ayt::render::receivesShadow(scene.items()[0].shadowFlags));
+    tm->castShadow = true;
 
     // WorldLit is intentionally absent from the forward overlay lane.
     rss->renderer().beginFrame({});
@@ -517,7 +528,53 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     // for the two submitted items (no dangling pointers).
     for (const ayt::render::DrawItem& item : scene.items()) {
         CHECK_NOT_NULL(item.payload);
+        CHECK(item.shadowFlags == ayt::render::ShadowFlags::None);
     }
+
+    rss->shutdown();
+    unregisterTestRenderer();
+    World::instance().shutdown();
+    removeFile(texPath);
+    removeFile(mapPath);
+}
+
+TEST_CASE(world_lit_sprite_authors_shadow_cast_control)
+{
+    if (!shadercAvailable()) {
+        std::cerr << "[AYEntity test] SKIP: shaderc not available.\n";
+        return;
+    }
+
+    std::string texPath, mapPath;
+    CHECK(bakeAssets(texPath, mapPath));
+    auto* rss = registerTestRenderer();
+    CHECK_NOT_NULL(rss);
+    if (rss == nullptr) {
+        return;
+    }
+
+    World::instance().initialize();
+    Entity* entity = World::instance().createEntity();
+    CHECK_NOT_NULL(entity);
+    SpriteComponent* sprite = entity->addComponent<SpriteComponent>();
+    CHECK_NOT_NULL(sprite);
+    sprite->texturePath = texPath;
+    sprite->renderDomain = 1;
+
+    ayt::entity::SpriteRenderSystem system;
+    system.onStart();
+    ayt::render::RenderScene scene;
+    system.buildRenderScene(scene);
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+    CHECK(ayt::render::castsShadow(scene.items()[0].shadowFlags));
+    CHECK(ayt::render::receivesShadow(scene.items()[0].shadowFlags));
+
+    sprite->castShadow = false;
+    scene.clear();
+    system.buildRenderScene(scene);
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+    CHECK_FALSE(ayt::render::castsShadow(scene.items()[0].shadowFlags));
+    CHECK(ayt::render::receivesShadow(scene.items()[0].shadowFlags));
 
     rss->shutdown();
     unregisterTestRenderer();

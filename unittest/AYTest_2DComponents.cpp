@@ -82,6 +82,7 @@ TEST_CASE(cm3_tilemap_component_defaults)
     CHECK_FLOAT_EQ(c.emissiveStrength, 0.0f, 0.0f);
     CHECK_FLOAT_EQ(c.alphaCutoff, 0.5f, 0.0f);
     CHECK_FALSE(c.invertNormalY);
+    CHECK_TRUE(c.castShadow);
     CHECK_TRUE(c.visible);
     CHECK_TRUE(std::strcmp(c.getName(), "TilemapComponent") == 0);
 }
@@ -117,6 +118,7 @@ TEST_CASE(cm3_sprite_component_defaults)
     CHECK_FLOAT_EQ(c.emissiveStrength, 0.0f, 0.0f);
     CHECK_FLOAT_EQ(c.alphaCutoff, 0.5f, 0.0f);
     CHECK_FALSE(c.invertNormalY);
+    CHECK_TRUE(c.castShadow);
     CHECK_TRUE(c.visible);
 }
 
@@ -130,6 +132,7 @@ TEST_CASE(world_lit_sprite_path_constructor_keeps_all_defaults)
     CHECK_FLOAT_EQ(c.alphaCutoff, 0.5f, 0.0f);
     CHECK_INT_EQ(c.renderDomain, 0);
     CHECK_FALSE(c.isWorldLit());
+    CHECK_TRUE(c.castShadow);
 }
 
 // ─── #3 — OrthoCameraComponent ctor defaults. ─────────────────────
@@ -349,6 +352,7 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     tm->emissiveStrength = 2.0f;
     tm->alphaCutoff = 0.4f;
     tm->invertNormalY = true;
+    tm->castShadow = false;
 
     SpriteComponent* sp = original->addComponent<SpriteComponent>();
     sp->texturePath   = "textures/hero.aytex";
@@ -372,6 +376,7 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     sp->emissiveStrength = 1.5f;
     sp->alphaCutoff = 0.35f;
     sp->invertNormalY = true;
+    sp->castShadow = false;
 
     OrthoCameraComponent* cam = original->addComponent<OrthoCameraComponent>();
     cam->positionX       = 5.0f;
@@ -418,6 +423,7 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     CHECK_FLOAT_EQ(ltm->emissiveStrength, 2.0f, 1e-5f);
     CHECK_FLOAT_EQ(ltm->alphaCutoff, 0.4f, 1e-5f);
     CHECK_TRUE(ltm->invertNormalY);
+    CHECK_FALSE(ltm->castShadow);
 
     const SpriteComponent* lsp = loaded->getComponent<SpriteComponent>();
     CHECK_TRUE(lsp->texturePath == "textures/hero.aytex");
@@ -444,6 +450,7 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     CHECK_FLOAT_EQ(lsp->emissiveStrength, 1.5f, 1e-5f);
     CHECK_FLOAT_EQ(lsp->alphaCutoff, 0.35f, 1e-5f);
     CHECK_TRUE(lsp->invertNormalY);
+    CHECK_FALSE(lsp->castShadow);
 
     const OrthoCameraComponent* lcam = loaded->getComponent<OrthoCameraComponent>();
     CHECK_FLOAT_EQ(lcam->positionX, 5.0f, 1e-5f);
