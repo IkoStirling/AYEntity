@@ -1,5 +1,14 @@
 # AYEntity Design
 
+> **2026-09-09 — WorldLit2D Tilemap authoring 第二刀**：`TilemapComponent`
+> 现可显式选择 WorldLit，并序列化 normal/roughness/emissive 路径与
+> metallic/roughness/AO/emissive/alpha-cutoff 参数。Tilemap 保留 chunk mesh
+> 的 baked atlas UV，并把 Nearest/Linear/4-tap/9-tap 质量传给 GBuffer；材质
+> 缓存与 chunk 几何缓存分离，Inspector 标量修改不会复制常驻网格。颜色贴图
+> 以 sRGB、数据贴图以 linear 加载，可选贴图失败时 fail-close；异常 atlas
+> filter 会钳制到 Linear，避免越界。WorldLit 不再套用 Ortho overlay 的层掩码
+> 与可见块剔除；3D 主相机下的 chunk frustum streaming 留待后续实现。
+
 > **2026-09-09 — WorldLit2D Sprite authoring 第一刀**：`SpriteComponent`
 > 追加可序列化的 `renderDomain`、normal/roughness/emissive 路径与
 > metallic/roughness/AO/emissive/alpha-cutoff 参数。默认值仍为 Overlay；

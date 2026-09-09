@@ -31,6 +31,11 @@ struct TilemapComponent : public IComponent {
     // entry — keep these macro-only (see AYEntity/components/AYEntity/components/AYEntity/components/MeshComponent.h:6-8).
     AY_PROPERTY(std::string, tilemapPath, kAttrSerialize)
     AY_PROPERTY(std::string, atlasTexturePath, kAttrSerialize)
+    // Optional atlas-aligned WorldLit2D surface maps. Empty paths use the
+    // renderer's flat-normal/white fallbacks.
+    AY_PROPERTY(std::string, normalTexturePath, kAttrSerialize)
+    AY_PROPERTY(std::string, roughnessTexturePath, kAttrSerialize)
+    AY_PROPERTY(std::string, emissiveTexturePath, kAttrSerialize)
     // Atlas grid layout. The atlas texture is assumed to be a dense
     // grid of tiles of size (IAYTilemap::getTileWidth() x
     // getTileHeight()) with zero gutter — the AY2D dense-atlas
@@ -63,6 +68,14 @@ struct TilemapComponent : public IComponent {
     // sortingKey (low 24 bits). See design.md §7.4 / DrawPayload2D.
     AY_PROPERTY(int32_t, layer, kAttrSerialize)
     AY_PROPERTY(int32_t, sortingKey, kAttrSerialize)
+    // 0 = legacy SceneOverlay (default), 1 = deferred WorldLit2D.
+    AY_PROPERTY(int32_t, renderDomain, kAttrSerialize)
+    AY_PROPERTY(float, metallic, kAttrSerialize)
+    AY_PROPERTY(float, roughness, kAttrSerialize)
+    AY_PROPERTY(float, ambientOcclusion, kAttrSerialize)
+    AY_PROPERTY(float, emissiveStrength, kAttrSerialize)
+    AY_PROPERTY(float, alphaCutoff, kAttrSerialize)
+    AY_PROPERTY(bool, invertNormalY, kAttrSerialize)
 
     // Runtime-only (not serialized): render skip flag.
     bool visible = true;
@@ -79,6 +92,13 @@ struct TilemapComponent : public IComponent {
         samplingQuality     = 1;
         layer               = 0;
         sortingKey          = 0;
+        renderDomain        = 0;
+        metallic            = 0.0f;
+        roughness           = 0.75f;
+        ambientOcclusion    = 1.0f;
+        emissiveStrength    = 0.0f;
+        alphaCutoff         = 0.5f;
+        invertNormalY       = false;
     }
 
     explicit TilemapComponent(const char* path)
@@ -90,6 +110,7 @@ struct TilemapComponent : public IComponent {
     void setAtlasTexture(const char* path) { atlasTexturePath = path ? path : ""; }
 
     bool isValid() const { return !tilemapPath.empty(); }
+    bool isWorldLit() const noexcept { return renderDomain == 1; }
 };
 #undef AY_CURRENT_CLASS
 

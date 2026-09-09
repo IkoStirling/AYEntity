@@ -366,6 +366,78 @@ TEST_CASE(cm3_tilemap_render_closed_loop)
     removeFile(mapPath);
 }
 
+TEST_CASE(world_lit_tilemap_uses_baked_uv_and_deferred_route)
+{
+    if (!shadercAvailable()) {
+        std::cerr << "[AYEntity test] SKIP: shaderc not available.\n";
+        return;
+    }
+
+    std::string texPath, mapPath;
+    CHECK(bakeAssets(texPath, mapPath));
+
+    auto* rss = registerTestRenderer();
+    CHECK_NOT_NULL(rss);
+    if (rss == nullptr) {
+        return;
+    }
+
+    World::instance().initialize();
+    Entity* entity = World::instance().createEntity();
+    CHECK_NOT_NULL(entity);
+    entity->addComponent<Transform>();
+    TilemapComponent* tm = entity->addComponent<TilemapComponent>();
+    CHECK_NOT_NULL(tm);
+    tm->tilemapPath = mapPath;
+    tm->atlasTexturePath = texPath;
+    tm->normalTexturePath = texPath;
+    tm->roughnessTexturePath = texPath;
+    tm->emissiveTexturePath = texPath;
+    tm->atlasTilesPerRow = 8;
+    tm->atlasTilesPerColumn = 4;
+    tm->samplingQuality = 3;
+    tm->renderDomain = 1;
+    tm->roughness = 0.6f;
+    tm->alphaCutoff = 0.35f;
+
+    ayt::entity::TilemapRenderSystem system;
+    system.onStart();
+    ayt::render::RenderScene scene;
+    system.buildRenderScene(scene);
+
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+    CHECK_NOT_NULL(scene.items()[0].payload);
+    if (scene.items()[0].payload != nullptr) {
+        CHECK(scene.items()[0].payload->renderDomain
+              == ayt::render::RenderDomain2D::WorldLit);
+        CHECK(scene.items()[0].payload->uvMapping
+              == ayt::render::UvMapping2D::BakedAtlas);
+        CHECK(scene.items()[0].payload->samplingQuality
+              == ayt::render::TilemapSamplingQuality::Tap9);
+    }
+
+    // WorldLit is intentionally absent from the forward overlay lane.
+    rss->renderer().beginFrame({});
+    rss->renderer().render(scene);
+    rss->renderer().endFrame();
+    CHECK(rss->renderer().getFrameStats().drawCalls == 0u);
+
+    // The same scene item is routed to the GBuffer when Deferred is mounted;
+    // the Noop backend intentionally does not issue GBuffer GPU draws, so the
+    // pipeline contract is the observable assertion here.
+    rss->renderer().configurePipeline(
+        ayt::render::RenderPipelineDesc::makeDeferred());
+    CHECK(rss->renderer().pipelineDesc().isDeferred());
+    CHECK(rss->renderer().pipelineDesc().contains(
+        ayt::render::RenderPassSlot::GBuffer));
+
+    rss->shutdown();
+    unregisterTestRenderer();
+    World::instance().shutdown();
+    removeFile(texPath);
+    removeFile(mapPath);
+}
+
 // ─── #3 — sprite sorted submission + camera AABB cull. ────────────
 TEST_CASE(cm3_sprite_render_sorted_and_culled)
 {

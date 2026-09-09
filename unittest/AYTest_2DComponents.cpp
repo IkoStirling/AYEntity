@@ -67,10 +67,21 @@ TEST_CASE(cm3_tilemap_component_defaults)
     TilemapComponent c;
     CHECK_TRUE(c.tilemapPath.empty());
     CHECK_TRUE(c.atlasTexturePath.empty());
+    CHECK_TRUE(c.normalTexturePath.empty());
+    CHECK_TRUE(c.roughnessTexturePath.empty());
+    CHECK_TRUE(c.emissiveTexturePath.empty());
     CHECK_INT_EQ(c.atlasTilesPerRow, 1);
     CHECK_INT_EQ(c.atlasTilesPerColumn, 1);
     CHECK_INT_EQ(c.layer, 0);
     CHECK_INT_EQ(c.sortingKey, 0);
+    CHECK_INT_EQ(c.renderDomain, 0);
+    CHECK_FALSE(c.isWorldLit());
+    CHECK_FLOAT_EQ(c.metallic, 0.0f, 0.0f);
+    CHECK_FLOAT_EQ(c.roughness, 0.75f, 0.0f);
+    CHECK_FLOAT_EQ(c.ambientOcclusion, 1.0f, 0.0f);
+    CHECK_FLOAT_EQ(c.emissiveStrength, 0.0f, 0.0f);
+    CHECK_FLOAT_EQ(c.alphaCutoff, 0.5f, 0.0f);
+    CHECK_FALSE(c.invertNormalY);
     CHECK_TRUE(c.visible);
     CHECK_TRUE(std::strcmp(c.getName(), "TilemapComponent") == 0);
 }
@@ -324,10 +335,20 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     TilemapComponent* tm = original->addComponent<TilemapComponent>();
     tm->tilemapPath        = "tilemaps/ground.aytilemap";
     tm->atlasTexturePath   = "textures/terrain.aytex";
+    tm->normalTexturePath = "textures/terrain_n.aytex";
+    tm->roughnessTexturePath = "textures/terrain_r.aytex";
+    tm->emissiveTexturePath = "textures/terrain_e.aytex";
     tm->atlasTilesPerRow   = 8;
     tm->atlasTilesPerColumn = 4;
     tm->layer              = 2;
     tm->sortingKey         = 123;
+    tm->renderDomain = 1;
+    tm->metallic = 0.1f;
+    tm->roughness = 0.6f;
+    tm->ambientOcclusion = 0.7f;
+    tm->emissiveStrength = 2.0f;
+    tm->alphaCutoff = 0.4f;
+    tm->invertNormalY = true;
 
     SpriteComponent* sp = original->addComponent<SpriteComponent>();
     sp->texturePath   = "textures/hero.aytex";
@@ -382,10 +403,21 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     const TilemapComponent* ltm = loaded->getComponent<TilemapComponent>();
     CHECK_TRUE(ltm->tilemapPath == "tilemaps/ground.aytilemap");
     CHECK_TRUE(ltm->atlasTexturePath == "textures/terrain.aytex");
+    CHECK_TRUE(ltm->normalTexturePath == "textures/terrain_n.aytex");
+    CHECK_TRUE(ltm->roughnessTexturePath == "textures/terrain_r.aytex");
+    CHECK_TRUE(ltm->emissiveTexturePath == "textures/terrain_e.aytex");
     CHECK_INT_EQ(ltm->atlasTilesPerRow, 8);
     CHECK_INT_EQ(ltm->atlasTilesPerColumn, 4);
     CHECK_INT_EQ(ltm->layer, 2);
     CHECK_INT_EQ(ltm->sortingKey, 123);
+    CHECK_INT_EQ(ltm->renderDomain, 1);
+    CHECK_TRUE(ltm->isWorldLit());
+    CHECK_FLOAT_EQ(ltm->metallic, 0.1f, 1e-5f);
+    CHECK_FLOAT_EQ(ltm->roughness, 0.6f, 1e-5f);
+    CHECK_FLOAT_EQ(ltm->ambientOcclusion, 0.7f, 1e-5f);
+    CHECK_FLOAT_EQ(ltm->emissiveStrength, 2.0f, 1e-5f);
+    CHECK_FLOAT_EQ(ltm->alphaCutoff, 0.4f, 1e-5f);
+    CHECK_TRUE(ltm->invertNormalY);
 
     const SpriteComponent* lsp = loaded->getComponent<SpriteComponent>();
     CHECK_TRUE(lsp->texturePath == "textures/hero.aytex");

@@ -71,6 +71,39 @@ std::string cacheKey(const TilemapComponent& component,
          + std::to_string(chunkCols) + "x" + std::to_string(chunkRows);
 }
 
+ayt::render::RenderDomain2D renderDomainOf(
+    const TilemapComponent& component) noexcept
+{
+    return component.isWorldLit() ? ayt::render::RenderDomain2D::WorldLit
+                                  : ayt::render::RenderDomain2D::SceneOverlay;
+}
+
+std::string worldLitMaterialKey(const TilemapComponent& component,
+                                uint32_t entityId,
+                                const std::string& albedoPath)
+{
+    std::string key = "tilemap-world-lit\x1f";
+    const auto append = [&key](const std::string& value) {
+        key += value;
+        key.push_back('\x1f');
+    };
+    append(albedoPath);
+    append(component.normalTexturePath);
+    append(component.roughnessTexturePath);
+    append(component.emissiveTexturePath);
+    // Surface scalars are mutable Inspector state, so one material is owned
+    // per entity/map set and updated in place rather than cached per value.
+    append(std::to_string(entityId));
+    return key;
+}
+
+float finiteClamped(float value, float fallback, float minimum,
+                    float maximum) noexcept
+{
+    return std::clamp(std::isfinite(value) ? value : fallback,
+                      minimum, maximum);
+}
+
 } // namespace
 
 void TilemapRenderSystem::onStart()
@@ -123,8 +156,13 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             || !component->isValid()) {
             continue;
         }
+        const ayt::render::RenderDomain2D renderDomain =
+            renderDomainOf(*component);
+        const bool worldLit =
+            renderDomain == ayt::render::RenderDomain2D::WorldLit;
         const uint32_t layer = static_cast<uint32_t>(component->layer) & 0x1Fu;
-        if (visibility.valid && (visibility.layerMask & (1u << layer)) == 0u) {
+        if (!worldLit && visibility.valid
+            && (visibility.layerMask & (1u << layer)) == 0u) {
             continue;
         }
 
@@ -149,22 +187,105 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         }
         const std::string texturePath = resources.atlas
             ? resources.atlas->getTexturePath() : component->atlasTexturePath;
-        if (!resources.texture.isValid() && !texturePath.empty()) {
-            resources.texture = renderer.loadTexture(texturePath);
-        }
         const uint32_t quality = resources.atlas
-            ? static_cast<uint32_t>(resources.atlas->getFilter())
+            ? clampSamplingQuality(
+                static_cast<int32_t>(resources.atlas->getFilter()))
             : clampSamplingQuality(component->samplingQuality);
-        ayt::render::MaterialHandle& material = resources.materials[quality];
-        if (!material.isValid() && resources.texture.isValid()) {
-            material = renderer.createMaterialFromPhoskia(
-                samplingSource(quality),
-                texturePath + "#tilemap_chunk_q" + std::to_string(quality));
-            if (material.isValid()) {
-                renderer.setMaterialTexture(material, "albedoMap", resources.texture);
+
+        ayt::render::MaterialHandle material;
+        if (worldLit) {
+            const std::string surfaceKey = worldLitMaterialKey(
+                *component, entity->getId(), texturePath);
+            CachedWorldLitMaterial& surface = _worldLitMaterials[surfaceKey];
+            if (!surface.albedo.isValid() && !texturePath.empty()) {
+                surface.albedo = renderer.loadTexture(texturePath, /*srgb=*/true);
             }
+            const auto loadOptionalMap = [&](const std::string& path,
+                                             ayt::render::TextureHandle& texture,
+                                             bool srgb) {
+                if (path.empty() || texture.isValid()) {
+                    return true;
+                }
+                texture = renderer.loadTexture(path, srgb);
+                if (!texture.isValid() && _frameIndex <= 5u) {
+                    std::fprintf(stderr,
+                                 "[TilemapRenderSystem] optional map load "
+                                 "failed: '%s'\n", path.c_str());
+                }
+                return texture.isValid();
+            };
+            const bool optionalMapsReady =
+                loadOptionalMap(component->normalTexturePath,
+                                surface.normal, /*srgb=*/false)
+                && loadOptionalMap(component->roughnessTexturePath,
+                                   surface.roughness, /*srgb=*/false)
+                && loadOptionalMap(component->emissiveTexturePath,
+                                   surface.emissive, /*srgb=*/true);
+            if (!surface.albedo.isValid() || !optionalMapsReady) {
+                continue;
+            }
+            if (!surface.material.isValid()) {
+                ayt::render::Material2DDesc desc;
+                desc.albedo = surface.albedo;
+                desc.normal = surface.normal;
+                desc.roughnessMap = surface.roughness;
+                desc.emissiveMap = surface.emissive;
+                desc.metallic = component->metallic;
+                desc.roughness = component->roughness;
+                desc.ambientOcclusion = component->ambientOcclusion;
+                desc.emissiveStrength = component->emissiveStrength;
+                desc.alphaCutoff = component->alphaCutoff;
+                desc.alphaMode = ayt::render::Material2DAlphaMode::Cutout;
+                desc.invertNormalY = component->invertNormalY;
+                desc.doubleSided = true;
+                surface.material = renderer.createMaterial2D(
+                    desc, surfaceKey + "material");
+            }
+            if (!surface.material.isValid()) {
+                continue;
+            }
+            renderer.setMaterialFloat(
+                surface.material, "metallic",
+                finiteClamped(component->metallic, 0.0f, 0.0f, 1.0f));
+            renderer.setMaterialFloat(
+                surface.material, "roughness",
+                finiteClamped(component->roughness, 0.75f, 0.045f, 1.0f));
+            renderer.setMaterialFloat(
+                surface.material, "ao",
+                finiteClamped(component->ambientOcclusion, 1.0f, 0.0f, 1.0f));
+            renderer.setMaterialFloat(
+                surface.material, "normalYSign",
+                component->invertNormalY ? -1.0f : 1.0f);
+            const float emissive = finiteClamped(
+                component->emissiveStrength, 0.0f, 0.0f, 64.0f);
+            renderer.setMaterialVec3(surface.material, "emissive",
+                                     emissive, emissive, emissive);
+            renderer.setMaterialSurfaceProperties(
+                surface.material,
+                static_cast<int>(ayt::render::Material2DAlphaMode::Cutout),
+                finiteClamped(component->alphaCutoff, 0.5f, 0.0f, 1.0f),
+                /*doubleSided=*/true);
+            material = surface.material;
+        } else {
+            if (!resources.texture.isValid() && !texturePath.empty()) {
+                resources.texture = renderer.loadTexture(texturePath);
+            }
+            ayt::render::MaterialHandle& overlayMaterial =
+                resources.materials[quality];
+            if (!overlayMaterial.isValid() && resources.texture.isValid()) {
+                overlayMaterial = renderer.createMaterialFromPhoskia(
+                    samplingSource(quality),
+                    texturePath + "#tilemap_chunk_q" + std::to_string(quality));
+                if (overlayMaterial.isValid()) {
+                    renderer.setMaterialTexture(
+                        overlayMaterial, "albedoMap", resources.texture);
+                }
+            }
+            if (!resources.texture.isValid() || !overlayMaterial.isValid()) {
+                continue;
+            }
+            material = overlayMaterial;
         }
-        if (!resources.texture.isValid() || !material.isValid()) continue;
 
         const uint32_t cols = resources.tilemap->getCols();
         const uint32_t rows = resources.tilemap->getRows();
@@ -172,8 +293,14 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         const float tileH = static_cast<float>(resources.tilemap->getTileHeight());
         if (cols == 0u || rows == 0u || tileW <= 0.0f || tileH <= 0.0f) continue;
 
+        // WorldLit geometry is viewed through the 3D main camera. Reusing the
+        // independent overlay-camera rectangle would incorrectly hide valid
+        // chunks, so this first tilemap cut deliberately fails open. A later
+        // cut can add main-camera frustum chunk streaming without changing the
+        // material/routing contract introduced here.
         const TilemapCameraVisibility* cull =
-            isAxisAlignedPositive(*transform) ? &visibility : nullptr;
+            !worldLit && isAxisAlignedPositive(*transform)
+                ? &visibility : nullptr;
         const uint32_t margin = component->prefetchMarginChunks > 0
             ? static_cast<uint32_t>(component->prefetchMarginChunks) : 0u;
         const TilemapChunkRect range = visibleTilemapChunks(
@@ -256,6 +383,10 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                     atlasHeight > 0.0f ? 1.0f / atlasHeight : 0.0f);
                 draw.payload.packedSortKey =
                     drawSortKey(component->layer, component->sortingKey);
+                draw.payload.renderDomain = renderDomain;
+                draw.payload.uvMapping = ayt::render::UvMapping2D::BakedAtlas;
+                draw.payload.samplingQuality =
+                    static_cast<ayt::render::TilemapSamplingQuality>(quality);
                 draw.item.mesh = cached.mesh;
                 draw.item.material = material;
                 draw.item.world = ayt::math::Transform::getMatrix(

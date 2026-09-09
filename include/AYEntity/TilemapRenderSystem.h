@@ -7,9 +7,10 @@
 // Lazy-load contract (L-16): tile data is loaded on first use via
 // AYResourceManager::load<IAYTilemap>(tilemapPath); load failure
 // produces a skip (entity invisible) with a startup-only stderr log —
-// never an exception. GPU assets (texture + material) are cached
-// path-keyed; the material is created once from the embedded
-// kTilemapPhoskiaSource and the texture bound to "albedoMap".
+// never an exception. Overlay GPU assets (texture + sampling material) are
+// cached by tilemap configuration. WorldLit materials use a separate
+// per-entity/map cache so Inspector scalar edits update in place without
+// duplicating immutable chunk geometry.
 //
 #include <AYEntity/IEntity.h>
 
@@ -68,7 +69,18 @@ private:
         std::array<ayt::render::MaterialHandle, 4> materials{};
         std::unordered_map<uint64_t, CachedChunkMesh> chunks;
     };
+    struct CachedWorldLitMaterial {
+        ayt::render::TextureHandle albedo;
+        ayt::render::TextureHandle normal;
+        ayt::render::TextureHandle roughness;
+        ayt::render::TextureHandle emissive;
+        ayt::render::MaterialHandle material;
+    };
     std::unordered_map<std::string, CachedTilemapResources> _cache;
+    // Kept separate from chunk geometry so per-entity Inspector values do not
+    // duplicate resident chunk meshes. Texture handles still dedupe globally
+    // in AYRenderer.
+    std::unordered_map<std::string, CachedWorldLitMaterial> _worldLitMaterials;
 
     // Payload borrow contract (same as SceneLights): the payload
     // buffer must outlive render()'s synchronous consumption. Owned
