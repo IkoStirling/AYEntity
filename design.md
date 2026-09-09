@@ -1,5 +1,13 @@
 # AYEntity Design
 
+> **2026-09-09 — WorldLit2D Sprite authoring 第一刀**：`SpriteComponent`
+> 追加可序列化的 `renderDomain`、normal/roughness/emissive 路径与
+> metallic/roughness/AO/emissive/alpha-cutoff 参数。默认值仍为 Overlay；
+> `renderDomain=1` 时 `SpriteRenderSystem` 用 3D 世界变换提交 WorldLit payload，
+> 按颜色/数据语义加载 sRGB/linear 贴图并创建共享 `Material2D`。WorldLit
+> 不再被 OrthoCamera overlay 范围错误剔除；无效域值安全退回 Overlay。
+> 当前仅覆盖 Sprite cutout，Tilemap 与 blend 在后续阶段扩展。
+
 > **2026-09-02 — Core / Integration split**: `AYEntityCore` no longer links
 > Renderer, Animation, Physics, Script, Network, Resource or EventSystem.
 > Feature components, systems and the physics bridge live in explicit

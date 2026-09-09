@@ -80,6 +80,9 @@ TEST_CASE(cm3_sprite_component_defaults)
 {
     SpriteComponent c;
     CHECK_TRUE(c.texturePath.empty());
+    CHECK_TRUE(c.normalTexturePath.empty());
+    CHECK_TRUE(c.roughnessTexturePath.empty());
+    CHECK_TRUE(c.emissiveTexturePath.empty());
     CHECK_FLOAT_EQ(c.position.x, 0.0f, 0.0f);
     CHECK_FLOAT_EQ(c.position.y, 0.0f, 0.0f);
     CHECK_FLOAT_EQ(c.position.z, 0.0f, 0.0f);
@@ -95,7 +98,27 @@ TEST_CASE(cm3_sprite_component_defaults)
     CHECK_INT_EQ(c.flip, 0);
     CHECK_INT_EQ(c.layer, 0);
     CHECK_INT_EQ(c.sortingKey, 0);
+    CHECK_INT_EQ(c.renderDomain, 0);
+    CHECK_FALSE(c.isWorldLit());
+    CHECK_FLOAT_EQ(c.metallic, 0.0f, 0.0f);
+    CHECK_FLOAT_EQ(c.roughness, 0.75f, 0.0f);
+    CHECK_FLOAT_EQ(c.ambientOcclusion, 1.0f, 0.0f);
+    CHECK_FLOAT_EQ(c.emissiveStrength, 0.0f, 0.0f);
+    CHECK_FLOAT_EQ(c.alphaCutoff, 0.5f, 0.0f);
+    CHECK_FALSE(c.invertNormalY);
     CHECK_TRUE(c.visible);
+}
+
+TEST_CASE(world_lit_sprite_path_constructor_keeps_all_defaults)
+{
+    SpriteComponent c("textures/hero.aytex");
+    CHECK_TRUE(c.texturePath == "textures/hero.aytex");
+    CHECK_FLOAT_EQ(c.scaleX, 1.0f, 0.0f);
+    CHECK_FLOAT_EQ(c.scaleY, 1.0f, 0.0f);
+    CHECK_FLOAT_EQ(c.roughness, 0.75f, 0.0f);
+    CHECK_FLOAT_EQ(c.alphaCutoff, 0.5f, 0.0f);
+    CHECK_INT_EQ(c.renderDomain, 0);
+    CHECK_FALSE(c.isWorldLit());
 }
 
 // ─── #3 — OrthoCameraComponent ctor defaults. ─────────────────────
@@ -308,6 +331,9 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
 
     SpriteComponent* sp = original->addComponent<SpriteComponent>();
     sp->texturePath   = "textures/hero.aytex";
+    sp->normalTexturePath = "textures/hero_n.aytex";
+    sp->roughnessTexturePath = "textures/hero_r.aytex";
+    sp->emissiveTexturePath = "textures/hero_e.aytex";
     sp->position      = ayt::math::FVector3(1.0f, 2.0f, 3.0f);
     sp->rotationZ     = 0.5f;
     sp->scaleX        = 2.0f;
@@ -318,6 +344,13 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     sp->flip          = 1;
     sp->layer         = 3;
     sp->sortingKey    = 7;
+    sp->renderDomain = 1;
+    sp->metallic = 0.2f;
+    sp->roughness = 0.4f;
+    sp->ambientOcclusion = 0.8f;
+    sp->emissiveStrength = 1.5f;
+    sp->alphaCutoff = 0.35f;
+    sp->invertNormalY = true;
 
     OrthoCameraComponent* cam = original->addComponent<OrthoCameraComponent>();
     cam->positionX       = 5.0f;
@@ -356,6 +389,9 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
 
     const SpriteComponent* lsp = loaded->getComponent<SpriteComponent>();
     CHECK_TRUE(lsp->texturePath == "textures/hero.aytex");
+    CHECK_TRUE(lsp->normalTexturePath == "textures/hero_n.aytex");
+    CHECK_TRUE(lsp->roughnessTexturePath == "textures/hero_r.aytex");
+    CHECK_TRUE(lsp->emissiveTexturePath == "textures/hero_e.aytex");
     CHECK_FLOAT_EQ(lsp->position.x, 1.0f, 1e-5f);
     CHECK_FLOAT_EQ(lsp->position.z, 3.0f, 1e-5f);
     CHECK_FLOAT_EQ(lsp->rotationZ, 0.5f, 1e-5f);
@@ -368,6 +404,14 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     CHECK_INT_EQ(lsp->flip, 1);
     CHECK_INT_EQ(lsp->layer, 3);
     CHECK_INT_EQ(lsp->sortingKey, 7);
+    CHECK_INT_EQ(lsp->renderDomain, 1);
+    CHECK_TRUE(lsp->isWorldLit());
+    CHECK_FLOAT_EQ(lsp->metallic, 0.2f, 1e-5f);
+    CHECK_FLOAT_EQ(lsp->roughness, 0.4f, 1e-5f);
+    CHECK_FLOAT_EQ(lsp->ambientOcclusion, 0.8f, 1e-5f);
+    CHECK_FLOAT_EQ(lsp->emissiveStrength, 1.5f, 1e-5f);
+    CHECK_FLOAT_EQ(lsp->alphaCutoff, 0.35f, 1e-5f);
+    CHECK_TRUE(lsp->invertNormalY);
 
     const OrthoCameraComponent* lcam = loaded->getComponent<OrthoCameraComponent>();
     CHECK_FLOAT_EQ(lcam->positionX, 5.0f, 1e-5f);

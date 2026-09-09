@@ -4,9 +4,9 @@
 //   1. View-frustum AABB cull against the primary OrthoCameraComponent
 //      (world rect centered on the camera; zoom does not change the
 //      world extent — mirror of AY2D). No primary camera => fail-open.
-//   2. Cache the texture + kTilemapPhoskiaSource material (path-keyed;
-//      the sprite reuses the tilemap shader — both go through the same
-//      srcRect/tint/flip uniforms, pass has zero branches).
+//   2. Cache texture/material variants by domain, maps and surface values.
+//      SceneOverlay reuses kTilemapPhoskiaSource; WorldLit creates a
+//      Material2D whose quad is consumed by the GBuffer geometry substage.
 //   3. std::stable_sort by packedSortKey (design.md §7.4 hard rule),
 //      then submit — the Forward2DOpaquePass stable-sorts the same
 //      key, so item order here IS final draw order.
@@ -28,9 +28,48 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <string>
 
 namespace ayt::entity
 {
+
+namespace {
+
+ayt::render::RenderDomain2D renderDomainOf(const SpriteComponent& sprite) noexcept
+{
+    return sprite.isWorldLit() ? ayt::render::RenderDomain2D::WorldLit
+                               : ayt::render::RenderDomain2D::SceneOverlay;
+}
+
+std::string spriteResourceKey(const SpriteComponent& sprite, uint32_t entityId)
+{
+    if (!sprite.isWorldLit()) {
+        return std::string("overlay\x1f") + sprite.texturePath;
+    }
+
+    std::string key = "world-lit\x1f";
+    const auto append = [&key](const std::string& value) {
+        key += value;
+        key.push_back('\x1f');
+    };
+    append(sprite.texturePath);
+    append(sprite.normalTexturePath);
+    append(sprite.roughnessTexturePath);
+    append(sprite.emissiveTexturePath);
+    // One mutable material per entity/map set: Inspector slider edits update
+    // uniform slots in place instead of leaking one cached material per value.
+    append(std::to_string(entityId));
+    return key;
+}
+
+float finiteClamped(float value, float fallback, float minimum,
+                    float maximum) noexcept
+{
+    return std::clamp(std::isfinite(value) ? value : fallback,
+                      minimum, maximum);
+}
+
+} // namespace
 
 void SpriteRenderSystem::onStart()
 {
@@ -111,8 +150,12 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             continue;
         }
 
+        const ayt::render::RenderDomain2D renderDomain = renderDomainOf(*sprite);
+
         // Exact AABB of a rotated/scaled centered unit quad.
-        if (haveCamera) {
+        // WorldLit2D uses the renderer's 3D camera and must not be culled by
+        // the unrelated orthographic overlay camera.
+        if (haveCamera && renderDomain == ayt::render::RenderDomain2D::SceneOverlay) {
             const float c = std::fabs(std::cos(sprite->rotationZ));
             const float s = std::fabs(std::sin(sprite->rotationZ));
             const float sx = std::fabs(sprite->scaleX);
@@ -125,21 +168,72 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             }
         }
 
-        CachedSpriteResources& resources = _cache[sprite->texturePath];
+        const bool worldLit = renderDomain == ayt::render::RenderDomain2D::WorldLit;
+        const std::string resourceKey =
+            spriteResourceKey(*sprite, entity->getId());
+        CachedSpriteResources& resources = _cache[resourceKey];
         if (!resources.texture.isValid()) {
-            resources.texture = renderer.loadTexture(sprite->texturePath);
+            resources.texture = worldLit
+                ? renderer.loadTexture(sprite->texturePath, /*srgb=*/true)
+                : renderer.loadTexture(sprite->texturePath);
             if (!resources.texture.isValid() && frameIndex < 5) {
                 std::fprintf(stderr, "[SpriteRenderSystem] loadTexture failed: '%s'\n",
                              sprite->texturePath.c_str());
             }
         }
+        const auto loadOptionalMap = [&](const std::string& path,
+                                         ayt::render::TextureHandle& texture,
+                                         bool srgb) {
+            if (path.empty() || texture.isValid()) {
+                return true;
+            }
+            texture = renderer.loadTexture(path, srgb);
+            if (!texture.isValid() && frameIndex < 5) {
+                std::fprintf(stderr,
+                             "[SpriteRenderSystem] optional map load failed: '%s'\n",
+                             path.c_str());
+            }
+            return texture.isValid();
+        };
+        bool optionalMapsReady = true;
+        if (worldLit) {
+            optionalMapsReady =
+                loadOptionalMap(sprite->normalTexturePath,
+                                resources.normalTexture, /*srgb=*/false)
+                && loadOptionalMap(sprite->roughnessTexturePath,
+                                   resources.roughnessTexture, /*srgb=*/false)
+                && loadOptionalMap(sprite->emissiveTexturePath,
+                                   resources.emissiveTexture, /*srgb=*/true);
+        }
+        if (!resources.texture.isValid() || !optionalMapsReady) {
+            continue;
+        }
         if (!resources.material.isValid()) {
-            resources.material = renderer.createMaterialFromPhoskia(
-                ayt::render::kTilemapPhoskiaSource, sprite->texturePath);
-            if (resources.material.isValid()) {
-                renderer.setMaterialTexture(resources.material, "albedoMap",
-                                            resources.texture);
-            } else if (frameIndex < 5) {
+            if (worldLit) {
+                ayt::render::Material2DDesc materialDesc;
+                materialDesc.albedo = resources.texture;
+                materialDesc.normal = resources.normalTexture;
+                materialDesc.roughnessMap = resources.roughnessTexture;
+                materialDesc.emissiveMap = resources.emissiveTexture;
+                materialDesc.metallic = sprite->metallic;
+                materialDesc.roughness = sprite->roughness;
+                materialDesc.ambientOcclusion = sprite->ambientOcclusion;
+                materialDesc.emissiveStrength = sprite->emissiveStrength;
+                materialDesc.alphaCutoff = sprite->alphaCutoff;
+                materialDesc.alphaMode = ayt::render::Material2DAlphaMode::Cutout;
+                materialDesc.invertNormalY = sprite->invertNormalY;
+                materialDesc.doubleSided = true;
+                resources.material = renderer.createMaterial2D(
+                    materialDesc, resourceKey + "material");
+            } else {
+                resources.material = renderer.createMaterialFromPhoskia(
+                    ayt::render::kTilemapPhoskiaSource, resourceKey + "material");
+                if (resources.material.isValid()) {
+                    renderer.setMaterialTexture(resources.material, "albedoMap",
+                                                resources.texture);
+                }
+            }
+            if (!resources.material.isValid() && frameIndex < 5) {
                 std::fprintf(stderr,
                              "[SpriteRenderSystem] material compile failed "
                              "(shaderc missing?)\n");
@@ -152,6 +246,30 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         if (!resources.texture.isValid() || !resources.material.isValid()) {
             continue;
         }
+        if (worldLit) {
+            const float metallic = finiteClamped(
+                sprite->metallic, 0.0f, 0.0f, 1.0f);
+            const float roughness = finiteClamped(
+                sprite->roughness, 0.75f, 0.045f, 1.0f);
+            const float ao = finiteClamped(
+                sprite->ambientOcclusion, 1.0f, 0.0f, 1.0f);
+            const float emissive = finiteClamped(
+                sprite->emissiveStrength, 0.0f, 0.0f, 64.0f);
+            const float alphaCutoff = finiteClamped(
+                sprite->alphaCutoff, 0.5f, 0.0f, 1.0f);
+            renderer.setMaterialFloat(resources.material, "metallic", metallic);
+            renderer.setMaterialFloat(resources.material, "roughness", roughness);
+            renderer.setMaterialFloat(resources.material, "ao", ao);
+            renderer.setMaterialFloat(
+                resources.material, "normalYSign",
+                sprite->invertNormalY ? -1.0f : 1.0f);
+            renderer.setMaterialVec3(
+                resources.material, "emissive", emissive, emissive, emissive);
+            renderer.setMaterialSurfaceProperties(
+                resources.material,
+                static_cast<int>(ayt::render::Material2DAlphaMode::Cutout),
+                alphaCutoff, /*doubleSided=*/true);
+        }
 
         SpriteEntry entry;
         entry.payload.sourceRectMin = sprite->sourceRectMin;
@@ -159,6 +277,7 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         entry.payload.tintRGBA      = sprite->colorRGBA;
         entry.payload.flip          = static_cast<uint8_t>(sprite->flip);
         entry.payload.packedSortKey = drawSortKey(sprite->layer, sprite->sortingKey);
+        entry.payload.renderDomain  = renderDomain;
 
         entry.item.mesh     = quad;
         entry.item.material = resources.material;
