@@ -17,6 +17,9 @@ endforeach()
 if(NOT DEFINED AY_ENABLE_AY2D)
     set(AY_ENABLE_AY2D ON)
 endif()
+if(NOT DEFINED AY_ENABLE_ENTITY_2D_SCHEMA)
+    set(AY_ENABLE_ENTITY_2D_SCHEMA ${AY_ENABLE_AY2D})
+endif()
 
 set(AYENTITY_PUBLIC_INCLUDE_DIRS
     ${CMAKE_CURRENT_SOURCE_DIR}/interface
@@ -73,6 +76,18 @@ if(AY_ENTITY_PRECOMPILE_COMPONENTS)
 endif()
 
 set(_ay_entity_integrations)
+
+# Serialized 2D component metadata is useful to headless tools and servers.
+# Keep it separate from the renderer-backed systems so scene loading and
+# validation do not require a graphics device.
+if(AY_ENABLE_ENTITY_2D_SCHEMA)
+    add_library(AYEntity2DComponents STATIC
+        src/AYEntity2DComponents.cpp)
+    add_library(AYEntity::TwoDComponents ALIAS AYEntity2DComponents)
+    ay_configure_entity_target(AYEntity2DComponents)
+    target_link_libraries(AYEntity2DComponents PUBLIC AYEntityCore AYMath)
+    list(APPEND _ay_entity_integrations AYEntity2DComponents)
+endif()
 
 if(AY_ENABLE_ANIMATION)
     add_library(AYEntityAnimationIntegration STATIC
@@ -131,6 +146,7 @@ if(AY_ENABLE_RENDERER)
         add_library(AYEntity::TwoDIntegration ALIAS AYEntity2DIntegration)
         ay_configure_entity_target(AYEntity2DIntegration)
         target_link_libraries(AYEntity2DIntegration PUBLIC
+            AYEntity2DComponents
             AYEntityCore
             AYRenderer
             AYResource
@@ -191,6 +207,7 @@ target_link_libraries(AYEntity PUBLIC
 target_compile_definitions(AYEntity PRIVATE
     AY_ENTITY_HAS_ANIMATION_INTEGRATION=$<BOOL:${AY_ENABLE_ANIMATION}>
     AY_ENTITY_HAS_RENDER_INTEGRATION=$<BOOL:${AY_ENABLE_RENDERER}>
+    AY_ENTITY_HAS_2D_COMPONENTS=$<BOOL:${AY_ENABLE_ENTITY_2D_SCHEMA}>
     AY_ENTITY_HAS_2D_INTEGRATION=$<AND:$<BOOL:${AY_ENABLE_RENDERER}>,$<BOOL:${AY_ENABLE_AY2D}>>
     AY_ENTITY_HAS_PHYSICS_INTEGRATION=$<BOOL:${AY_ENABLE_PHYSICS}>
     AY_ENTITY_HAS_SCRIPT_INTEGRATION=$<BOOL:${AY_ENABLE_SCRIPT}>

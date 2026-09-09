@@ -6,7 +6,7 @@
 #if AY_ENTITY_HAS_RENDER_INTEGRATION
 #include <AYEntity/EntityRenderIntegrationModule.h>
 #endif
-#if AY_ENTITY_HAS_2D_INTEGRATION
+#if AY_ENTITY_HAS_2D_COMPONENTS
 #include <AYEntity/Entity2DIntegrationModule.h>
 #endif
 #if AY_ENTITY_HAS_PHYSICS_INTEGRATION
@@ -37,7 +37,7 @@ ComponentRegistryResult registerEntityComponents(ComponentRegistry& registry)
     result = registerEntityRenderComponents(registry);
     if (!result) return result;
 #endif
-#if AY_ENTITY_HAS_2D_INTEGRATION
+#if AY_ENTITY_HAS_2D_COMPONENTS
     result = registerEntity2DComponents(registry);
     if (!result) return result;
 #endif

@@ -1,6 +1,5 @@
 #include <AYEntity/Entity2DIntegrationModule.h>
 
-#include <AYEntity/ComponentRegistration.h>
 #include <AYEntity/EntityRuntimeModule.h>
 #include <AYEntity/OrthoCameraUpdateSystem.h>
 #include <AYEntity/SpriteRenderSystem.h>
@@ -9,9 +8,6 @@
 #include <AYEntity/TilemapStreamingSystem.h>
 #include <AYEntity/World.h>
 #include <AYEntity/WorldLifecycle.h>
-#include <AYEntity/components/OrthoCameraComponent.h>
-#include <AYEntity/components/SpriteComponent.h>
-#include <AYEntity/components/TilemapComponent.h>
 #include <AYRenderer/RendererRuntimeModule.h>
 #include <AYRenderer/RendererSubSystem.h>
 
@@ -20,10 +16,6 @@
 
 namespace ayt::entity
 {
-
-AY_FINALIZE_REGISTRATION_METADATA(TilemapComponent)
-AY_FINALIZE_REGISTRATION_METADATA(SpriteComponent)
-AY_FINALIZE_REGISTRATION_METADATA(OrthoCameraComponent)
 
 namespace
 {
@@ -54,25 +46,6 @@ void ensureWorldLifecycleBridge()
 }
 
 } // namespace
-
-ComponentRegistryResult registerEntity2DComponents(ComponentRegistry& registry)
-{
-    if (auto result = registerSceneComponent<TilemapComponent>(
-            registry, "TilemapComponent", "Tilemap", "2D");
-        !result) {
-        return result;
-    }
-    if (auto result = registerSceneComponent<SpriteComponent>(
-            registry, "SpriteComponent", "Sprite", "2D");
-        !result) {
-        return result;
-    }
-    return registerSceneComponent<OrthoCameraComponent>(
-        registry,
-        "OrthoCameraComponent",
-        "Orthographic Camera",
-        "2D");
-}
 
 void registerEntity2DSystems()
 {
