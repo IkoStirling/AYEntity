@@ -81,12 +81,16 @@ set(_ay_entity_integrations)
 # Keep it separate from the renderer-backed systems so scene loading and
 # validation do not require a graphics device.
 if(AY_ENABLE_ENTITY_2D_SCHEMA)
-    add_library(AYEntity2DComponents STATIC
-        src/AYEntity2DComponents.cpp)
+    target_sources(AYEntityCore PRIVATE src/AYEntity2DComponents.cpp)
+    target_compile_definitions(AYEntityCore PRIVATE
+        AY_ENTITY_HAS_2D_SCHEMA=1)
+    add_library(AYEntity2DComponents INTERFACE)
     add_library(AYEntity::TwoDComponents ALIAS AYEntity2DComponents)
-    ay_configure_entity_target(AYEntity2DComponents)
-    target_link_libraries(AYEntity2DComponents PUBLIC AYEntityCore AYMath)
+    target_link_libraries(AYEntity2DComponents INTERFACE AYEntityCore AYMath)
     list(APPEND _ay_entity_integrations AYEntity2DComponents)
+else()
+    target_compile_definitions(AYEntityCore PRIVATE
+        AY_ENTITY_HAS_2D_SCHEMA=0)
 endif()
 
 if(AY_ENABLE_ANIMATION)

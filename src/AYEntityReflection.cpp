@@ -8,8 +8,13 @@
 #include "AYEntity/ComponentRegistration.h"
 
 #include "AYEntity/components/HealthComponent.h"
+#include "AYEntity/components/MeshComponent.h"
 #include "AYEntity/components/SimTransformComponent.h"
 #include "AYEntity/components/TransformComponent.h"
+
+#if AY_ENTITY_HAS_2D_SCHEMA
+#include "AYEntity/Entity2DIntegrationModule.h"
+#endif
 
 namespace ayt::entity
 {
@@ -17,6 +22,7 @@ namespace ayt::entity
 // Reflect metadata (one static initializer per type, this TU only).
 AY_FINALIZE_REGISTRATION_METADATA(Transform)
 AY_FINALIZE_REGISTRATION_METADATA(HealthComponent)
+AY_FINALIZE_REGISTRATION_METADATA(MeshComponent)
 
 ComponentRegistryResult registerEntityCoreComponents(ComponentRegistry& registry)
 {
@@ -35,6 +41,11 @@ ComponentRegistryResult registerEntityCoreComponents(ComponentRegistry& registry
         "Simulation"));
     AYT_REGISTER_COMPONENT(registerSceneComponent<HealthComponent>(
         registry, "HealthComponent", "Health", "Gameplay"));
+    AYT_REGISTER_COMPONENT(registerSceneComponent<MeshComponent>(
+        registry, "MeshComponent", "Mesh", "Rendering"));
+#if AY_ENTITY_HAS_2D_SCHEMA
+    AYT_REGISTER_COMPONENT(registerEntity2DComponents(registry));
+#endif
 #undef AYT_REGISTER_COMPONENT
     return ComponentRegistryResult::success();
 }

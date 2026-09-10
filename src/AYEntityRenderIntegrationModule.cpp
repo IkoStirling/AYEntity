@@ -17,8 +17,6 @@
 namespace ayt::entity
 {
 
-AY_FINALIZE_REGISTRATION_METADATA(MeshComponent)
-
 namespace
 {
 
