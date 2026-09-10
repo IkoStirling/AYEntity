@@ -63,11 +63,17 @@ private:
     };
 
     struct CachedTilemapResources {
+        struct AuthoredAtlasGpu {
+            ayt::render::TextureHandle texture;
+            std::array<ayt::render::MaterialHandle, 4> materials{};
+        };
         std::shared_ptr<ayt::resource::ITilemap> tilemap;  // null = not loaded / failed
         std::shared_ptr<ayt::resource::IAtlas> atlas;
         ayt::render::TextureHandle  texture;               // invalid = not loaded / failed
         std::array<ayt::render::MaterialHandle, 4> materials{};
-        std::unordered_map<uint64_t, CachedChunkMesh> chunks;
+        std::unordered_map<uint32_t, AuthoredAtlasGpu> authoredAtlases;
+        ayt::render::MaterialHandle shadowMaterial;
+        std::unordered_map<std::string, CachedChunkMesh> chunks;
     };
     struct CachedWorldLitMaterial {
         ayt::render::TextureHandle albedo;

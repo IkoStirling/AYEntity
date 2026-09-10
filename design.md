@@ -1086,7 +1086,7 @@ AYEntity/
 | 460 | `TilemapAnimationTickSystem` (CM-5) | 按 QPC 墙钟推进每 path 动画表,tick 幂等(同 path 多实体同帧只推进一次) |
 | 500 | `SkinnedMeshRenderSystem` | 注册 scene-builder,把 skinned 实体写进 RenderScene |
 | 500 | `RenderSystem` | 注册 scene-builder,把非 skinned 实体写进 RenderScene |
-| 510 | `TilemapRenderSystem` / `SpriteRenderSystem` (CM-3) | 注册 scene-builder,把 2D 实体写进 RenderScene;tile 经动画 resolve 后取 UV |
+| 510 | `TilemapRenderSystem` / `SpriteRenderSystem` (CM-3) | 注册 scene-builder,把 2D 实体写进 RenderScene；tile 经动画 resolve 后按可见层、图集与 tint 分批，语义阴影单独透明提交 |
 | 600+ | （未占用） | 留给 Physics / Audio / Script / 工具系统 |
 
 **契约**：`AnimationSystem` 必须早于所有 render 系统（priority 450 < 500），
@@ -1098,6 +1098,12 @@ AYEntity/
 < 510 —— tick 先于 render 消费,渲染侧读到的永远是本帧 resolved 的 tileId
 （`TilemapAnimationRuntime::resolve` 的 `resolved[]` 在 tick 内同步刷新）；
 否则会画出上一帧的帧（1 帧动画延迟）。
+
+Tilemap runtime v3 不再要求一个组件只绑定一张规则图集。系统先按 layer 顺序读取
+resolved Tile ID，再用资源内精确 sourceRect 生成 UV，并以 `(atlasId, tint)` 为最小
+draw batch；层级通过相邻 sortingKey 保持稳定顺序。四分格 shadow mask 生成独立透明
+几何，颜色取资源内 `0xRRGGBBAA`，因此 Edit 与 Play 消费同一份烘焙数据。v1/v2 资源
+继续走组件 `atlasPath/atlasTexturePath` 的旧规则网格分支。
 
 **验证**：`unittest/SkinnedAnimationTest.cpp::animation_system_priority_before_render_systems`
 在每次构建时跑 `bootstrapModule()` → 枚举 `World::systemCount()` → 断言

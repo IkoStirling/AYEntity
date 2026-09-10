@@ -37,6 +37,14 @@ struct TilemapChunkGeometry {
     uint32_t cells = 0;
 };
 
+struct TilemapChunkBatch {
+    uint32_t atlasId = 0u;
+    uint32_t tintRgba = 0xffffffffu;
+    uint32_t atlasWidth = 0u;
+    uint32_t atlasHeight = 0u;
+    TilemapChunkGeometry geometry;
+};
+
 // Conservative homogeneous-frustum test for one flat tilemap chunk. Camera
 // depth follows the engine LH [0,1] convention. Invalid/non-finite inputs fail
 // open so malformed host camera data cannot make world geometry disappear.
@@ -66,5 +74,23 @@ struct TilemapChunkGeometry {
     uint32_t endCol, uint32_t endRow,
     const AtlasGridDesc& atlas,
     const std::vector<uint32_t>* resolvedTileIds = nullptr);
+
+// v3 exact-atlas path. A chunk is split only when texture or tint changes;
+// each output batch contains UVs from the authored pixel source rectangle.
+// Tiles without a cooked visual entry (including the editor Empty tile) are
+// omitted. Hidden/invalid layers return an empty vector.
+[[nodiscard]] std::vector<TilemapChunkBatch> buildTilemapChunkBatches(
+    const ayt::resource::ITilemap& map, uint32_t layerIndex,
+    uint32_t beginCol, uint32_t beginRow,
+    uint32_t endCol, uint32_t endRow,
+    const std::vector<uint32_t>* resolvedTileIds = nullptr);
+
+// Semantic shadow masks are independent of tiles/layers. The returned mesh
+// contains one quad per selected quarter cell and is tinted by the draw
+// payload using ITilemap::getShadowColorRgba().
+[[nodiscard]] TilemapChunkGeometry buildTilemapShadowGeometry(
+    const ayt::resource::ITilemap& map,
+    uint32_t beginCol, uint32_t beginRow,
+    uint32_t endCol, uint32_t endRow);
 
 } // namespace ayt::entity

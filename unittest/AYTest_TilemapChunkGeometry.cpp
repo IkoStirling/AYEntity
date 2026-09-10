@@ -152,4 +152,51 @@ TEST_CASE(FormalAtlasUsesIndependentTexelSizeAndGutter)
                    1.5f / 64.0f, 1e-6f);
 }
 
+TEST_CASE(V3GeometryUsesLayerSourceRectAndTintBatches)
+{
+    TilemapAsset map;
+    map.create(2u, 1u, 16u, 16u,
+               TilemapPackMode::Narrow16, 0u, nullptr, 0u);
+    const UInt32 bottom[] = {2u, 3u};
+    const UInt32 top[] = {3u, 2u};
+    CHECK_TRUE(map.setLayer(0u, true, bottom, 2u));
+    CHECK_TRUE(map.setLayer(1u, true, top, 2u));
+    CHECK_TRUE(map.addAtlasSource(7u, "sheet.png", 64u, 32u));
+    CHECK_TRUE(map.addTileVisual({2u, 7u, 16u, 0u, 16u, 16u,
+                                  0xff0000ffu}));
+    CHECK_TRUE(map.addTileVisual({3u, 7u, 32u, 16u, 16u, 16u,
+                                  0xffffffffu}));
+
+    const std::vector<TilemapChunkBatch> batches = buildTilemapChunkBatches(
+        map, 1u, 0u, 0u, 2u, 1u);
+    CHECK_INT_EQ(static_cast<uint32_t>(batches.size()), 2u);
+    CHECK_INT_EQ(batches[0].atlasId, 7u);
+    CHECK_INT_EQ(batches[0].tintRgba, 0xffffffffu);
+    CHECK_INT_EQ(batches[0].geometry.cells, 1u);
+    CHECK_FLOAT_EQ(batches[0].geometry.vertices[0].u, 32.5f / 64.0f, 1e-6f);
+    CHECK_FLOAT_EQ(batches[0].geometry.vertices[0].v, 31.5f / 32.0f, 1e-6f);
+    CHECK_FLOAT_EQ(batches[0].geometry.vertices[2].v, 16.5f / 32.0f, 1e-6f);
+    CHECK_INT_EQ(batches[1].tintRgba, 0xff0000ffu);
+    CHECK_FLOAT_EQ(batches[1].geometry.vertices[0].x, 16.0f, 1e-6f);
+}
+
+TEST_CASE(V3ShadowGeometryUsesSemanticQuadrants)
+{
+    TilemapAsset map;
+    map.create(1u, 1u, 16u, 8u,
+               TilemapPackMode::Narrow16, 0u, nullptr, 0u);
+    const UInt8 mask = 0x09u; // top-left + bottom-right
+    CHECK_TRUE(map.setShadowData(0x00000080u, &mask, 1u));
+    const TilemapChunkGeometry geometry = buildTilemapShadowGeometry(
+        map, 0u, 0u, 1u, 1u);
+    CHECK_INT_EQ(geometry.cells, 2u);
+    CHECK_INT_EQ(static_cast<uint32_t>(geometry.vertices.size()), 8u);
+    CHECK_FLOAT_EQ(geometry.vertices[0].x, 0.0f, 1e-6f);
+    CHECK_FLOAT_EQ(geometry.vertices[0].y, 4.0f, 1e-6f);
+    CHECK_FLOAT_EQ(geometry.vertices[2].x, 8.0f, 1e-6f);
+    CHECK_FLOAT_EQ(geometry.vertices[2].y, 8.0f, 1e-6f);
+    CHECK_FLOAT_EQ(geometry.vertices[4].x, 8.0f, 1e-6f);
+    CHECK_FLOAT_EQ(geometry.vertices[4].y, 0.0f, 1e-6f);
+}
+
 TEST_SUITE_END

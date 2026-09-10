@@ -40,9 +40,32 @@ uint32_t clampSamplingQuality(int32_t value) noexcept
     return value >= 0 && value <= 3 ? static_cast<uint32_t>(value) : 1u;
 }
 
-uint64_t packChunkKey(uint32_t x, uint32_t y) noexcept
+std::string legacyChunkKey(uint32_t x, uint32_t y)
 {
-    return (static_cast<uint64_t>(x) << 32u) | y;
+    return "legacy/" + std::to_string(x) + "/" + std::to_string(y);
+}
+
+std::string v3ChunkKey(uint32_t layer, uint32_t x, uint32_t y,
+                       uint32_t atlasId, uint32_t tintRgba)
+{
+    return "v3/" + std::to_string(layer) + "/"
+         + std::to_string(x) + "/" + std::to_string(y) + "/"
+         + std::to_string(atlasId) + "/" + std::to_string(tintRgba);
+}
+
+std::string shadowChunkKey(uint32_t x, uint32_t y)
+{
+    return "shadow/" + std::to_string(x) + "/" + std::to_string(y);
+}
+
+ayt::math::FVector4 unpackRgba(uint32_t rgba) noexcept
+{
+    constexpr float scale = 1.0f / 255.0f;
+    return ayt::math::FVector4(
+        static_cast<float>((rgba >> 24u) & 0xffu) * scale,
+        static_cast<float>((rgba >> 16u) & 0xffu) * scale,
+        static_cast<float>((rgba >> 8u) & 0xffu) * scale,
+        static_cast<float>(rgba & 0xffu) * scale);
 }
 
 bool isAxisAlignedPositive(const Transform& transform) noexcept
@@ -188,7 +211,11 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         }
         if (!resources.tilemap) continue;
 
-        if (!component->atlasPath.empty() && !resources.atlas) {
+        const bool hasAuthoredVisuals = resources.tilemap->getAtlasCount() > 0u
+            && resources.tilemap->getVisualCount() > 0u;
+
+        if (!hasAuthoredVisuals && !component->atlasPath.empty()
+            && !resources.atlas) {
             resources.atlas = ayt::resource::ResourceManager::instance()
                 .load<ayt::resource::IAtlas>(component->atlasPath);
         }
@@ -199,13 +226,35 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 static_cast<int32_t>(resources.atlas->getFilter()))
             : clampSamplingQuality(component->samplingQuality);
 
-        ayt::render::MaterialHandle material;
-        if (worldLit) {
+        const auto resolveMaterial = [&] (
+            const std::string& albedoPath, uint32_t samplingQuality,
+            ayt::render::TextureHandle& overlayTexture,
+            std::array<ayt::render::MaterialHandle, 4>& overlayMaterials) {
+            ayt::render::MaterialHandle resolvedMaterial;
+            if (!worldLit) {
+                if (!overlayTexture.isValid() && !albedoPath.empty()) {
+                    overlayTexture = renderer.loadTexture(albedoPath);
+                }
+                ayt::render::MaterialHandle& overlayMaterial =
+                    overlayMaterials[samplingQuality];
+                if (!overlayMaterial.isValid() && overlayTexture.isValid()) {
+                    overlayMaterial = renderer.createMaterialFromPhoskia(
+                        samplingSource(samplingQuality),
+                        albedoPath + "#tilemap_chunk_q"
+                            + std::to_string(samplingQuality));
+                    if (overlayMaterial.isValid()) {
+                        renderer.setMaterialTexture(
+                            overlayMaterial, "albedoMap", overlayTexture);
+                    }
+                }
+                return overlayTexture.isValid() ? overlayMaterial
+                                                : resolvedMaterial;
+            }
             const std::string surfaceKey = worldLitMaterialKey(
-                *component, entity->getId(), texturePath);
+                *component, entity->getId(), albedoPath);
             CachedWorldLitMaterial& surface = _worldLitMaterials[surfaceKey];
-            if (!surface.albedo.isValid() && !texturePath.empty()) {
-                surface.albedo = renderer.loadTexture(texturePath, /*srgb=*/true);
+            if (!surface.albedo.isValid() && !albedoPath.empty()) {
+                surface.albedo = renderer.loadTexture(albedoPath, /*srgb=*/true);
             }
             const auto loadOptionalMap = [&](const std::string& path,
                                              ayt::render::TextureHandle& texture,
@@ -229,7 +278,7 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 && loadOptionalMap(component->emissiveTexturePath,
                                    surface.emissive, /*srgb=*/true);
             if (!surface.albedo.isValid() || !optionalMapsReady) {
-                continue;
+                return resolvedMaterial;
             }
             if (!surface.material.isValid()) {
                 ayt::render::Material2DDesc desc;
@@ -249,7 +298,7 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                     desc, surfaceKey + "material");
             }
             if (!surface.material.isValid()) {
-                continue;
+                return resolvedMaterial;
             }
             renderer.setMaterialFloat(
                 surface.material, "metallic",
@@ -272,26 +321,14 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 static_cast<int>(ayt::render::Material2DAlphaMode::Cutout),
                 finiteClamped(component->alphaCutoff, 0.5f, 0.0f, 1.0f),
                 /*doubleSided=*/true);
-            material = surface.material;
-        } else {
-            if (!resources.texture.isValid() && !texturePath.empty()) {
-                resources.texture = renderer.loadTexture(texturePath);
-            }
-            ayt::render::MaterialHandle& overlayMaterial =
-                resources.materials[quality];
-            if (!overlayMaterial.isValid() && resources.texture.isValid()) {
-                overlayMaterial = renderer.createMaterialFromPhoskia(
-                    samplingSource(quality),
-                    texturePath + "#tilemap_chunk_q" + std::to_string(quality));
-                if (overlayMaterial.isValid()) {
-                    renderer.setMaterialTexture(
-                        overlayMaterial, "albedoMap", resources.texture);
-                }
-            }
-            if (!resources.texture.isValid() || !overlayMaterial.isValid()) {
-                continue;
-            }
-            material = overlayMaterial;
+            return surface.material;
+        };
+
+        ayt::render::MaterialHandle legacyMaterial;
+        if (!hasAuthoredVisuals) {
+            legacyMaterial = resolveMaterial(
+                texturePath, quality, resources.texture, resources.materials);
+            if (!legacyMaterial.isValid()) continue;
         }
 
         const uint32_t cols = resources.tilemap->getCols();
@@ -371,50 +408,196 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 }
 
                 ++_lastStats.visibleChunks;
-                const uint64_t key = packChunkKey(chunkX, chunkY);
-                CachedChunkMesh& cached = resources.chunks[key];
-                if (!cached.mesh.isValid()
-                    || cached.animationRevision != animationRevision) {
-                    if (cached.mesh.isValid()) renderer.destroyMesh(cached.mesh);
-                    TilemapChunkGeometry geometry = buildTilemapChunkGeometry(
-                        *resources.tilemap, beginCol, beginRow, endCol, endRow,
-                        atlasGrid, resolved);
-                    _lastStats.cellsVisited += geometry.cells;
-                    if (!geometry.vertices.empty() && !geometry.indices.empty()) {
-                        cached.mesh = renderer.createMesh(
-                            geometry.vertices.data(),
-                            static_cast<uint32_t>(geometry.vertices.size()),
-                            ayt::render::VertexLayoutDesc::position3TexCoord2(),
-                            geometry.indices.data(),
-                            static_cast<uint32_t>(geometry.indices.size()));
-                    }
-                    cached.animationRevision = animationRevision;
-                    ++_lastStats.chunkMeshesBuilt;
-                }
-                cached.lastUsedFrame = _frameIndex;
-                if (!cached.mesh.isValid()) continue;
+                if (hasAuthoredVisuals) {
+                    const auto* atlasEntries = resources.tilemap->getAtlasEntries();
+                    const uint32_t atlasCount = resources.tilemap->getAtlasCount();
+                    const uint32_t layerCount = resources.tilemap->getLayerCount();
+                    for (uint32_t sourceLayer = 0u;
+                         sourceLayer < layerCount; ++sourceLayer) {
+                        if (!resources.tilemap->isLayerVisible(sourceLayer)) continue;
+                        std::vector<TilemapChunkBatch> batches =
+                            buildTilemapChunkBatches(
+                                *resources.tilemap, sourceLayer,
+                                beginCol, beginRow, endCol, endRow, resolved);
+                        for (TilemapChunkBatch& batch : batches) {
+                            const ayt::resource::TilemapAtlasEntry* atlasEntry = nullptr;
+                            for (uint32_t i = 0u; i < atlasCount; ++i) {
+                                if (atlasEntries[i].atlasId == batch.atlasId) {
+                                    atlasEntry = atlasEntries + i;
+                                    break;
+                                }
+                            }
+                            if (atlasEntry == nullptr
+                                || atlasEntry->sourcePath == nullptr) continue;
+                            auto& atlasGpu =
+                                resources.authoredAtlases[batch.atlasId];
+                            ayt::render::MaterialHandle batchMaterial =
+                                resolveMaterial(
+                                    atlasEntry->sourcePath, quality,
+                                    atlasGpu.texture, atlasGpu.materials);
+                            if (!batchMaterial.isValid()) continue;
 
-                ChunkDraw draw;
-                draw.payload.sourceRectMin = ayt::math::FVector2(0.0f, 0.0f);
-                draw.payload.sourceRectMax = ayt::math::FVector2(1.0f, 1.0f);
-                draw.payload.tintRGBA = ayt::math::FVector4(1.0f, 1.0f, 1.0f, 1.0f);
-                draw.payload.atlasTexelSize = ayt::math::FVector2(
-                    atlasWidth > 0.0f ? 1.0f / atlasWidth : 0.0f,
-                    atlasHeight > 0.0f ? 1.0f / atlasHeight : 0.0f);
-                draw.payload.packedSortKey =
-                    drawSortKey(component->layer, component->sortingKey);
-                draw.payload.renderDomain = renderDomain;
-                draw.payload.uvMapping = ayt::render::UvMapping2D::BakedAtlas;
-                draw.payload.samplingQuality =
-                    static_cast<ayt::render::TilemapSamplingQuality>(quality);
-                draw.item.mesh = cached.mesh;
-                draw.item.material = material;
-                draw.item.world = worldMatrix;
-                draw.item.shadowFlags = worldLit
-                    ? ayt::render::makeShadowFlags(
-                        component->castShadow, /*receive=*/true)
-                    : ayt::render::ShadowFlags::None;
-                draws.push_back(draw);
+                            const std::string key = v3ChunkKey(
+                                sourceLayer, chunkX, chunkY,
+                                batch.atlasId, batch.tintRgba);
+                            CachedChunkMesh& cached = resources.chunks[key];
+                            if (!cached.mesh.isValid()
+                                || cached.animationRevision != animationRevision) {
+                                if (cached.mesh.isValid()) {
+                                    renderer.destroyMesh(cached.mesh);
+                                }
+                                _lastStats.cellsVisited += batch.geometry.cells;
+                                if (!batch.geometry.vertices.empty()
+                                    && !batch.geometry.indices.empty()) {
+                                    cached.mesh = renderer.createMesh(
+                                        batch.geometry.vertices.data(),
+                                        static_cast<uint32_t>(
+                                            batch.geometry.vertices.size()),
+                                        ayt::render::VertexLayoutDesc::position3TexCoord2(),
+                                        batch.geometry.indices.data(),
+                                        static_cast<uint32_t>(
+                                            batch.geometry.indices.size()));
+                                }
+                                cached.animationRevision = animationRevision;
+                                ++_lastStats.chunkMeshesBuilt;
+                            }
+                            cached.lastUsedFrame = _frameIndex;
+                            if (!cached.mesh.isValid()) continue;
+
+                            ChunkDraw draw;
+                            draw.payload.sourceRectMin = {0.0f, 0.0f};
+                            draw.payload.sourceRectMax = {1.0f, 1.0f};
+                            draw.payload.tintRGBA = unpackRgba(batch.tintRgba);
+                            draw.payload.atlasTexelSize = {
+                                batch.atlasWidth > 0u
+                                    ? 1.0f / static_cast<float>(batch.atlasWidth)
+                                    : 0.0f,
+                                batch.atlasHeight > 0u
+                                    ? 1.0f / static_cast<float>(batch.atlasHeight)
+                                    : 0.0f};
+                            draw.payload.packedSortKey = drawSortKey(
+                                component->layer,
+                                component->sortingKey
+                                    + static_cast<int32_t>(sourceLayer));
+                            draw.payload.renderDomain = renderDomain;
+                            draw.payload.uvMapping =
+                                ayt::render::UvMapping2D::BakedAtlas;
+                            draw.payload.samplingQuality =
+                                static_cast<ayt::render::TilemapSamplingQuality>(quality);
+                            draw.item.mesh = cached.mesh;
+                            draw.item.material = batchMaterial;
+                            draw.item.world = worldMatrix;
+                            draw.item.shadowFlags = worldLit
+                                ? ayt::render::makeShadowFlags(
+                                    component->castShadow, /*receive=*/true)
+                                : ayt::render::ShadowFlags::None;
+                            draws.push_back(draw);
+                        }
+                    }
+                } else {
+                    const std::string key = legacyChunkKey(chunkX, chunkY);
+                    CachedChunkMesh& cached = resources.chunks[key];
+                    if (!cached.mesh.isValid()
+                        || cached.animationRevision != animationRevision) {
+                        if (cached.mesh.isValid()) renderer.destroyMesh(cached.mesh);
+                        TilemapChunkGeometry geometry = buildTilemapChunkGeometry(
+                            *resources.tilemap, beginCol, beginRow, endCol, endRow,
+                            atlasGrid, resolved);
+                        _lastStats.cellsVisited += geometry.cells;
+                        if (!geometry.vertices.empty() && !geometry.indices.empty()) {
+                            cached.mesh = renderer.createMesh(
+                                geometry.vertices.data(),
+                                static_cast<uint32_t>(geometry.vertices.size()),
+                                ayt::render::VertexLayoutDesc::position3TexCoord2(),
+                                geometry.indices.data(),
+                                static_cast<uint32_t>(geometry.indices.size()));
+                        }
+                        cached.animationRevision = animationRevision;
+                        ++_lastStats.chunkMeshesBuilt;
+                    }
+                    cached.lastUsedFrame = _frameIndex;
+                    if (cached.mesh.isValid()) {
+                        ChunkDraw draw;
+                        draw.payload.sourceRectMin = {0.0f, 0.0f};
+                        draw.payload.sourceRectMax = {1.0f, 1.0f};
+                        draw.payload.tintRGBA = {1.0f, 1.0f, 1.0f, 1.0f};
+                        draw.payload.atlasTexelSize = {
+                            atlasWidth > 0.0f ? 1.0f / atlasWidth : 0.0f,
+                            atlasHeight > 0.0f ? 1.0f / atlasHeight : 0.0f};
+                        draw.payload.packedSortKey = drawSortKey(
+                            component->layer, component->sortingKey);
+                        draw.payload.renderDomain = renderDomain;
+                        draw.payload.uvMapping =
+                            ayt::render::UvMapping2D::BakedAtlas;
+                        draw.payload.samplingQuality =
+                            static_cast<ayt::render::TilemapSamplingQuality>(quality);
+                        draw.item.mesh = cached.mesh;
+                        draw.item.material = legacyMaterial;
+                        draw.item.world = worldMatrix;
+                        draw.item.shadowFlags = worldLit
+                            ? ayt::render::makeShadowFlags(
+                                component->castShadow, /*receive=*/true)
+                            : ayt::render::ShadowFlags::None;
+                        draws.push_back(draw);
+                    }
+                }
+
+                if (resources.tilemap->getShadowMaskCount() > 0u) {
+                    if (!resources.shadowMaterial.isValid()) {
+                        resources.shadowMaterial =
+                            renderer.createMaterialFromPhoskia(
+                                ayt::render::kTilemapSemanticShadowPhoskiaSource,
+                                component->tilemapPath + "#semantic_shadow");
+                        if (resources.shadowMaterial.isValid()) {
+                            renderer.setMaterialBlendMode(
+                                resources.shadowMaterial,
+                                ayt::render::BlendMode::Alpha);
+                        }
+                    }
+                    const std::string key = shadowChunkKey(chunkX, chunkY);
+                    CachedChunkMesh& cached = resources.chunks[key];
+                    if (!cached.mesh.isValid()) {
+                        TilemapChunkGeometry geometry =
+                            buildTilemapShadowGeometry(
+                                *resources.tilemap, beginCol, beginRow,
+                                endCol, endRow);
+                        _lastStats.cellsVisited += geometry.cells;
+                        if (!geometry.vertices.empty()
+                            && !geometry.indices.empty()) {
+                            cached.mesh = renderer.createMesh(
+                                geometry.vertices.data(),
+                                static_cast<uint32_t>(geometry.vertices.size()),
+                                ayt::render::VertexLayoutDesc::position3TexCoord2(),
+                                geometry.indices.data(),
+                                static_cast<uint32_t>(geometry.indices.size()));
+                        }
+                        ++_lastStats.chunkMeshesBuilt;
+                    }
+                    cached.lastUsedFrame = _frameIndex;
+                    if (cached.mesh.isValid()
+                        && resources.shadowMaterial.isValid()) {
+                        ChunkDraw draw;
+                        draw.payload.sourceRectMin = {0.0f, 0.0f};
+                        draw.payload.sourceRectMax = {1.0f, 1.0f};
+                        draw.payload.tintRGBA = unpackRgba(
+                            resources.tilemap->getShadowColorRgba());
+                        draw.payload.atlasTexelSize = {0.0f, 0.0f};
+                        draw.payload.packedSortKey = drawSortKey(
+                            component->layer,
+                            component->sortingKey + static_cast<int32_t>(
+                                resources.tilemap->getLayerCount()));
+                        draw.payload.renderDomain = renderDomain;
+                        draw.payload.uvMapping =
+                            ayt::render::UvMapping2D::BakedAtlas;
+                        draw.payload.samplingQuality =
+                            ayt::render::TilemapSamplingQuality::Linear;
+                        draw.item.mesh = cached.mesh;
+                        draw.item.material = resources.shadowMaterial;
+                        draw.item.world = worldMatrix;
+                        draw.item.shadowFlags = ayt::render::ShadowFlags::None;
+                        draws.push_back(draw);
+                    }
+                }
             }
         }
 
