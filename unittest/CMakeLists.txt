@@ -108,6 +108,10 @@ target_compile_options(${PROJECT_NAME} PRIVATE
 )
 
 ay_add_test(${PROJECT_NAME})
+ay_add_test(${PROJECT_NAME}
+    NAME AYEntity_2DBaseline
+    SUITE AYEntity2DComponents
+    LABELS "2d-baseline;ayentity")
 
 # Registration-only IModule pilot. It runs in a dedicated process because the
 # process ComponentRegistry is deliberately sealed for the remainder of its
