@@ -22,6 +22,8 @@ public:
     static void serializeComponent(ayt::serializer::ISerializer& s, const IComponent& component);
     static bool deserializeComponent(ayt::serializer::ISerializer& s, const char* typeName,
                                    IComponent& component);
+    static void afterSceneDeserialize(Entity& entity, const char* typeName,
+                                      IComponent& component);
 };
 
 } // namespace ayt::entity

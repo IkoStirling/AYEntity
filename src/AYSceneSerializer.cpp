@@ -215,7 +215,11 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                                   std::string("unknown scene component type: \"") + typeName
                                       + '"');
                 } else {
-                    ComponentFactory::deserializeComponent(s, typeName.c_str(), *component);
+                    if (ComponentFactory::deserializeComponent(
+                            s, typeName.c_str(), *component)) {
+                        ComponentFactory::afterSceneDeserialize(
+                            *entity, typeName.c_str(), *component);
+                    }
                 }
             }
 

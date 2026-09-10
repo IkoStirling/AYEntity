@@ -1,9 +1,13 @@
 #include "AYEntity/TilemapStreamingSystem.h"
 
 #include "AYEntity.h"
+#include "AYEntity/OrthoCameraSelection.h"
 #include "AYEntity/TilemapVisibilityRuntime.h"
 #include "AYEntity/World.h"
 #include "AYEntity/components/OrthoCameraComponent.h"
+#include "AYRenderer/RendererSubSystem.h"
+
+#include <cmath>
 
 namespace ayt::entity
 {
@@ -17,22 +21,27 @@ void TilemapStreamingSystem::onUpdate(float)
 {
     TilemapCameraVisibility state{};
     World& world = World::instance();
-    for (Entity* entity : world.query<OrthoCameraComponent>()) {
-        if (entity == nullptr) continue;
-        const OrthoCameraComponent* camera =
-            entity->getComponent<OrthoCameraComponent>();
-        if (camera == nullptr || !camera->isPrimary || camera->viewSize <= 0.0f) {
-            continue;
-        }
-        const float halfH = camera->viewSize * 0.5f;
-        const float halfW = halfH * camera->viewportAspectOr();
+    const SelectedOrthoCamera2D selected = selectOrthoCamera2D(world);
+    if (selected) {
+        const ayt::render::RendererSubSystem* renderer =
+            ayt::render::RendererSubSystem::findRegistered();
+        const float aspect = renderer != nullptr
+            ? renderer->viewportAspect() : selected.camera->viewportAspectOr();
+        const math::FVector2 viewHalf =
+            selected.camera->visibleHalfExtents(aspect);
+        const float angle = selected.transform->rotation.toEulerAngles().z;
+        const float c = std::fabs(std::cos(angle));
+        const float s = std::fabs(std::sin(angle));
+        const float halfW = c * viewHalf.x + s * viewHalf.y;
+        const float halfH = s * viewHalf.x + c * viewHalf.y;
+        const float cameraX = selected.transform->position.x;
+        const float cameraY = selected.transform->position.y;
         state.valid = true;
-        state.minX = camera->positionX - halfW;
-        state.minY = camera->positionY - halfH;
-        state.maxX = camera->positionX + halfW;
-        state.maxY = camera->positionY + halfH;
-        state.layerMask = camera->layerMask;
-        break;
+        state.minX = cameraX - halfW;
+        state.minY = cameraY - halfH;
+        state.maxX = cameraX + halfW;
+        state.maxY = cameraY + halfH;
+        state.layerMask = selected.camera->layerMask;
     }
     TilemapVisibilityRuntime::instance().publish(state);
 }

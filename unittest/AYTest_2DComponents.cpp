@@ -38,11 +38,13 @@
 
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 
 using ayt::entity::Entity;
 using ayt::entity::OrthoCameraComponent;
 using ayt::entity::SpriteComponent;
 using ayt::entity::TilemapComponent;
+using ayt::entity::Transform;
 using ayt::entity::World;
 
 namespace
@@ -148,6 +150,11 @@ TEST_CASE(cm3_orthocamera_component_defaults)
     CHECK_FLOAT_EQ(c.nearZ, -1.0f, 0.0f);
     CHECK_FLOAT_EQ(c.farZ, 1.0f, 0.0f);
     CHECK(c.layerMask == 0xFFFFFFFFu);
+    CHECK_FLOAT_EQ(c.designWidth, 0.0f, 0.0f);
+    CHECK_FLOAT_EQ(c.designHeight, 0.0f, 0.0f);
+    CHECK_INT_EQ(c.aspectPolicy, 0);
+    CHECK_TRUE(c.active);
+    CHECK_INT_EQ(c.priority, 0);
     CHECK_TRUE(c.isPrimary);
 }
 
@@ -273,6 +280,25 @@ TEST_CASE(cm3_orthocamera_matrix_matches_ay2d)
     checkMatrixEq(mine.projectionMatrix(), ref.projectionMatrix());
 }
 
+TEST_CASE(orthocamera_zoom_and_resize_policy_define_visible_extent)
+{
+    OrthoCameraComponent camera;
+    camera.viewSize = 600.0f;
+    camera.zoom = 2.0f;
+    const ayt::math::FVector2 zoomed = camera.visibleHalfExtents(1.6f);
+    CHECK_FLOAT_EQ(zoomed.x, 240.0f, 1e-5f);
+    CHECK_FLOAT_EQ(zoomed.y, 150.0f, 1e-5f);
+    CHECK_FLOAT_EQ(camera.viewMatrix().row[0].x, 2.0f, 1e-5f);
+
+    camera.zoom = 1.0f;
+    camera.designWidth = 960.0f;
+    camera.designHeight = 600.0f;
+    camera.aspectPolicy = 1; // Fit: a narrow viewport expands vertically.
+    CHECK_FLOAT_EQ(camera.effectiveViewSize(4.0f / 3.0f), 720.0f, 1e-4f);
+    camera.aspectPolicy = 2; // Fill: a wide viewport crops vertically.
+    CHECK_FLOAT_EQ(camera.effectiveViewSize(16.0f / 9.0f), 540.0f, 1e-5f);
+}
+
 // ─── #9.1 — LH invariant pin (H3, lh-rh-split-entity audit 2026-08-24). ─
 //
 // The matrix-vs-reference test above compares two consumers of the
@@ -335,6 +361,13 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     original->setName("Ground");
     CHECK_NOT_NULL(original);
 
+    Transform* authoredTransform = original->addComponent<Transform>();
+    CHECK_NOT_NULL(authoredTransform);
+    authoredTransform->position = {1.0f, 2.0f, 3.0f};
+    authoredTransform->rotation = ayt::math::FQuaternion::fromAxisAngle(
+        {0.0f, 0.0f, 1.0f}, 0.5f);
+    authoredTransform->scale = {2.0f, 0.5f, 1.0f};
+
     TilemapComponent* tm = original->addComponent<TilemapComponent>();
     tm->tilemapPath        = "tilemaps/ground.aytilemap";
     tm->atlasTexturePath   = "textures/terrain.aytex";
@@ -388,6 +421,11 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     cam->nearZ           = -2.0f;
     cam->farZ            = 2.0f;
     cam->layerMask       = 0xFFu;
+    cam->designWidth     = 960.0f;
+    cam->designHeight    = 600.0f;
+    cam->aspectPolicy    = 1;
+    cam->active          = true;
+    cam->priority        = 7;
 
     const char* path = "test_cm3_2d_components.ayscene";
     CHECK(saveScene(World::instance(), path));
@@ -404,6 +442,15 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     CHECK_TRUE(loaded->hasComponent<TilemapComponent>());
     CHECK_TRUE(loaded->hasComponent<SpriteComponent>());
     CHECK_TRUE(loaded->hasComponent<OrthoCameraComponent>());
+    CHECK_TRUE(loaded->hasComponent<Transform>());
+
+    const Transform* loadedTransform = loaded->getComponent<Transform>();
+    CHECK_FLOAT_EQ(loadedTransform->position.x, 1.0f, 1e-5f);
+    CHECK_FLOAT_EQ(loadedTransform->position.y, 2.0f, 1e-5f);
+    CHECK_FLOAT_EQ(loadedTransform->position.z, 3.0f, 1e-5f);
+    CHECK_FLOAT_EQ(loadedTransform->rotation.toEulerAngles().z, 0.5f, 1e-5f);
+    CHECK_FLOAT_EQ(loadedTransform->scale.x, 2.0f, 1e-5f);
+    CHECK_FLOAT_EQ(loadedTransform->scale.y, 0.5f, 1e-5f);
 
     const TilemapComponent* ltm = loaded->getComponent<TilemapComponent>();
     CHECK_TRUE(ltm->tilemapPath == "tilemaps/ground.aytilemap");
@@ -462,6 +509,74 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     CHECK_FLOAT_EQ(lcam->nearZ, -2.0f, 1e-5f);
     CHECK_FLOAT_EQ(lcam->farZ, 2.0f, 1e-5f);
     CHECK(lcam->layerMask == 0xFFu);
+    CHECK_FLOAT_EQ(lcam->designWidth, 960.0f, 1e-5f);
+    CHECK_FLOAT_EQ(lcam->designHeight, 600.0f, 1e-5f);
+    CHECK_INT_EQ(lcam->aspectPolicy, 1);
+    CHECK_TRUE(lcam->active);
+    CHECK_INT_EQ(lcam->priority, 7);
+
+    std::remove(path);
+    World::instance().shutdown();
+}
+
+TEST_CASE(scene_v2_migrates_legacy_2d_placement_into_transform)
+{
+    World::instance().initialize();
+    ayt::entity::registerEntityComponents();
+    const char* path = "test_scene_v2_2d_transform_migration.ayscene";
+    {
+        std::ofstream out(path, std::ios::binary);
+        out << R"json({
+  "__schemaVersion": 2,
+  "__coordConvention": "ay-coordinates-lh-yup-zfwd-ccw-uvtop-m-v1",
+  "entities": [
+    {"id":1,"name":"Legacy Sprite","components":[
+      {"$type":"SpriteComponent","texturePath":"textures/hero.png",
+       "position":[12.0,34.0,5.0],"rotationZ":0.25,
+       "scaleX":8.0,"scaleY":6.0}
+    ]},
+    {"id":2,"name":"Legacy Camera","components":[
+      {"$type":"OrthoCameraComponent","positionX":48.0,"positionY":30.0,
+       "rotationRadians":0.5,"viewSize":60.0,"zoom":1.0}
+    ]},
+    {"id":3,"name":"Explicit Transform Wins","components":[
+      {"$type":"SpriteComponent","texturePath":"textures/hero.png",
+       "position":[99.0,99.0,0.0],"scaleX":9.0,"scaleY":9.0},
+      {"$type":"Transform","position":[3.0,4.0,0.0],
+       "rotation":[0.0,0.0,0.0,1.0],"scale":[2.0,2.0,1.0]}
+    ]}
+  ]
+})json";
+    }
+
+    ayt::serializer::SerializeError error;
+    CHECK(ayt::entity::loadScene(World::instance(), path, &error));
+    CHECK(error.ok());
+
+    const Transform* sprite = World::instance().findEntity("Legacy Sprite")
+        ->getComponent<Transform>();
+    CHECK_NOT_NULL(sprite);
+    CHECK_FLOAT_EQ(sprite->position.x, 12.0f, 1e-5f);
+    CHECK_FLOAT_EQ(sprite->position.y, 34.0f, 1e-5f);
+    CHECK_FLOAT_EQ(sprite->position.z, 5.0f, 1e-5f);
+    CHECK_FLOAT_EQ(sprite->rotation.toEulerAngles().z, 0.25f, 1e-5f);
+    CHECK_FLOAT_EQ(sprite->scale.x, 8.0f, 1e-5f);
+    CHECK_FLOAT_EQ(sprite->scale.y, 6.0f, 1e-5f);
+
+    const Transform* camera = World::instance().findEntity("Legacy Camera")
+        ->getComponent<Transform>();
+    CHECK_NOT_NULL(camera);
+    CHECK_FLOAT_EQ(camera->position.x, 48.0f, 1e-5f);
+    CHECK_FLOAT_EQ(camera->position.y, 30.0f, 1e-5f);
+    CHECK_FLOAT_EQ(camera->rotation.toEulerAngles().z, 0.5f, 1e-5f);
+
+    const Transform* explicitTransform =
+        World::instance().findEntity("Explicit Transform Wins")
+            ->getComponent<Transform>();
+    CHECK_NOT_NULL(explicitTransform);
+    CHECK_FLOAT_EQ(explicitTransform->position.x, 3.0f, 1e-5f);
+    CHECK_FLOAT_EQ(explicitTransform->position.y, 4.0f, 1e-5f);
+    CHECK_FLOAT_EQ(explicitTransform->scale.x, 2.0f, 1e-5f);
 
     std::remove(path);
     World::instance().shutdown();

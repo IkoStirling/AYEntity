@@ -112,4 +112,18 @@ bool ComponentFactory::deserializeComponent(
     return true;
 }
 
+void ComponentFactory::afterSceneDeserialize(
+    Entity& entity,
+    const char* typeName,
+    IComponent& component)
+{
+    const ComponentDescriptor* entry = findEntry(typeName);
+    const ComponentDescriptor* componentEntry =
+        ComponentRegistry::instance().find(component);
+    if (entry != nullptr && componentEntry == entry
+        && entry->afterSceneDeserialize != nullptr) {
+        entry->afterSceneDeserialize(entity, component);
+    }
+}
+
 } // namespace ayt::entity

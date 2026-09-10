@@ -1,11 +1,9 @@
 #pragma once
 // AYEntity/components/AYEntity/components/AYEntity/components/AYEntity/components/SpriteComponent.h — CM-3 (2026-08-11): 2D sprite placement metadata.
 //
-// Self-contained transform: position (world, z carried for the world
-// matrix translation), rotationZ (radians about +z), scaleX/scaleY.
-// The sprite carries its own transform instead of riding a
-// Transform component so a 2D-only entity can be authored without
-// the 3D Transform semantics (AY2D convention, design.md §7.x).
+// Transform is authoritative for all runtime/editor placement. The legacy
+// position/rotationZ/scaleX/scaleY fields remain serialized and hidden for a
+// compatibility window so pre-v3 Scenes can migrate without losing data.
 // sourceRectMin/Max are atlas UVs in 0..1; default (0,0)-(1,1) =
 // whole texture. colorRGBA tints the sampled color (default white).
 
@@ -28,10 +26,10 @@ struct SpriteComponent : public IComponent {
     AY_PROPERTY(std::string, normalTexturePath, kAttrSerialize)
     AY_PROPERTY(std::string, roughnessTexturePath, kAttrSerialize)
     AY_PROPERTY(std::string, emissiveTexturePath, kAttrSerialize)
-    AY_PROPERTY(math::FVector3, position, kAttrSerialize)
-    AY_PROPERTY(float, rotationZ, kAttrSerialize)
-    AY_PROPERTY(float, scaleX, kAttrSerialize)
-    AY_PROPERTY(float, scaleY, kAttrSerialize)
+    AY_PROPERTY(math::FVector3, position, kAttrSerializeHidden)
+    AY_PROPERTY(float, rotationZ, kAttrSerializeHidden)
+    AY_PROPERTY(float, scaleX, kAttrSerializeHidden)
+    AY_PROPERTY(float, scaleY, kAttrSerializeHidden)
     AY_PROPERTY(math::FVector2, sourceRectMin, kAttrSerialize)
     AY_PROPERTY(math::FVector2, sourceRectMax, kAttrSerialize)
     AY_PROPERTY(math::FVector4, colorRGBA, kAttrSerialize)

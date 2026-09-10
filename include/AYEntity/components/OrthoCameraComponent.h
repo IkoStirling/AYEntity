@@ -8,13 +8,10 @@
 // reintroduce bare math::* / math::rh::* or hand-rolled Float4x4 row
 // writes here. (M3, lh-rh-split-entity audit 2026-08-24.)
 //
-// viewMatrix()/projectionMatrix() mirror ayt::ay2d::OrthographicCamera
-// (AY2D/OrthographicCamera.h:116-163) exactly — same origin-centered
-// convention, zoom as a view-side scale, viewSize = VERTICAL world
-// extent (horizontal = viewSize * viewportAspect), nearZ/farZ default
-// -1/1 (depth 0..1 for a 2D scene). The component has no viewport
-// struct; the aspect is a plain float field (viewportAspect, default
-// 16:9) that the host sets from its window size.
+// Runtime placement comes from the entity Transform. Legacy position and
+// rotation fields remain hidden/serialized for pre-v3 Scene migration. The
+// host supplies the current viewport aspect to projectionMatrix(aspect), while
+// viewportAspect remains a headless/legacy fallback.
 //
 // Dependency-direction lock: AYEntity must not depend on AY2D, so
 // this math is duplicated with a mirror-of comment; the unittest
@@ -22,10 +19,13 @@
 
 #include <AYCore.h>
 #include <AYEntity/IEntity.h>
+#include <AYEntity/components/TransformComponent.h>
 
 #include <AYMath/MathTypes.h>
 #include <AYMath/MathUtils.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 
 namespace ayt::entity
@@ -35,24 +35,33 @@ namespace ayt::entity
 struct OrthoCameraComponent : public IComponent {
     const char* getName() const override { return "OrthoCameraComponent"; }
 
-    AY_PROPERTY(float, positionX, kAttrSerialize)
-    AY_PROPERTY(float, positionY, kAttrSerialize)
+    AY_PROPERTY(float, positionX, kAttrSerializeHidden)
+    AY_PROPERTY(float, positionY, kAttrSerializeHidden)
     // Zoom factor: 1.0 = 1 world unit == 1 viewport pixel. >1 zooms in.
     AY_PROPERTY(float, zoom, kAttrSerialize)
     // Rotation in radians about the screen-space +z axis.
-    AY_PROPERTY(float, rotationRadians, kAttrSerialize)
+    AY_PROPERTY(float, rotationRadians, kAttrSerializeHidden)
     // Vertical extent in world units; horizontal = viewSize * aspect.
     AY_PROPERTY(float, viewSize, kAttrSerialize)
     // Viewport aspect (width/height). Host sets it from window size.
-    AY_PROPERTY(float, viewportAspect, kAttrSerialize)
+    AY_PROPERTY(float, viewportAspect, kAttrSerializeHidden)
     // Near/far clip planes along the camera forward; default -1/1.
     AY_PROPERTY(float, nearZ, kAttrSerialize)
     AY_PROPERTY(float, farZ, kAttrSerialize)
     // 32 layers max: layerMask & (1u << layer) gates camera visibility.
     AY_PROPERTY(uint32_t, layerMask, kAttrSerialize)
+    // Optional design frame used by resize adaptation. Zero disables design
+    // framing and keeps viewSize as a fixed vertical extent.
+    AY_PROPERTY(float, designWidth, kAttrSerialize)
+    AY_PROPERTY(float, designHeight, kAttrSerialize)
+    // 0=Expand (fixed height), 1=Fit (show the complete design frame),
+    // 2=Fill (cover the viewport and crop the design frame).
+    AY_PROPERTY(int32_t, aspectPolicy, kAttrSerialize)
+    AY_PROPERTY(bool, active, kAttrSerialize)
+    AY_PROPERTY(int32_t, priority, kAttrSerialize)
 
-    // Runtime-only: the first primary camera found wins the
-    // RendererSubSystem main camera during the scene build.
+    // Runtime-only compatibility gate. Serialized active/priority determine
+    // normal selection; legacy hosts can still suppress a camera here.
     bool isPrimary = true;
 
     OrthoCameraComponent() {
@@ -65,15 +74,56 @@ struct OrthoCameraComponent : public IComponent {
         nearZ           = -1.0f;
         farZ            = 1.0f;
         layerMask       = 0xFFFFFFFFu;
+        designWidth     = 0.0f;
+        designHeight    = 0.0f;
+        aspectPolicy    = 0;
+        active          = true;
+        priority        = 0;
     }
 
     [[nodiscard]] float viewportAspectOr() const noexcept {
-        return viewportAspect > 0.0f ? viewportAspect : 1.0f;
+        return std::isfinite(viewportAspect) && viewportAspect > 0.0f
+            ? viewportAspect : 1.0f;
+    }
+
+    [[nodiscard]] float viewportAspectOr(float actualAspect) const noexcept {
+        return std::isfinite(actualAspect) && actualAspect > 0.0f
+            ? actualAspect : viewportAspectOr();
+    }
+
+    [[nodiscard]] float safeZoom() const noexcept {
+        return std::isfinite(zoom) && std::fabs(zoom) > 1.0e-6f
+            ? zoom : 1.0f;
+    }
+
+    [[nodiscard]] float effectiveViewSize(float actualAspect = 0.0f) const noexcept {
+        const float base = std::isfinite(viewSize) && viewSize > 1.0e-6f
+            ? viewSize : 1.0f;
+        if (!(designWidth > 0.0f) || !(designHeight > 0.0f)) return base;
+        const float viewport = viewportAspectOr(actualAspect);
+        const float designAspect = designWidth / designHeight;
+        if (!std::isfinite(designAspect) || designAspect <= 0.0f) return base;
+        const float ratio = designAspect / viewport;
+        if (aspectPolicy == 1) return base * std::max(1.0f, ratio);
+        if (aspectPolicy == 2) return base * std::min(1.0f, ratio);
+        return base;
+    }
+
+    [[nodiscard]] math::FVector2 visibleHalfExtents(
+        float actualAspect = 0.0f) const noexcept {
+        const float aspect = viewportAspectOr(actualAspect);
+        const float halfH = effectiveViewSize(aspect) * 0.5f
+                          / std::fabs(safeZoom());
+        return {halfH * aspect, halfH};
+    }
+
+    [[nodiscard]] bool isEnabled() const noexcept {
+        return active && isPrimary;
     }
 
     // Mirror of ayt::ay2d::OrthographicCamera::viewMatrix()
     // (AY2D/OrthographicCamera.h:116-152). Translate by -position,
-    // rotate by -rotationRadians about +z, scale by 1/zoom. Y axis
+    // rotate by -rotationRadians about +z, scale by zoom. Y axis
     // is bottom-up — no Y flip here (the projection matches).
     //
     // Routed through the AYMath composition API
@@ -81,34 +131,48 @@ struct OrthoCameraComponent : public IComponent {
     // writes — keeps future 2.5D additions (e.g. rotateY) routed
     // through the lh:: helpers instead of reintroducing a hand-built
     // handedness bug. (M1, lh-rh-split-entity audit 2026-08-24.)
-    [[nodiscard]] math::Float4x4 viewMatrix() const noexcept {
-        // Non-uniform scale: Z stays 1.0 so the matrix exactly matches
-        // AY2D's hand-rolled OrthographicCamera::viewMatrix() (which
-        // preserves Z via m.row[2].z = 1.0f). math::scale(s) would use
-        // uniform (s,s,s) and diverge at row[2][2]; tests
-        // checkMatrixEq-compare against AY2D's reference.
-        const float s = 1.0f / zoom;
+    [[nodiscard]] math::Float4x4 viewMatrix(
+        float cameraX, float cameraY, float cameraRotation) const noexcept {
+        // Zoom scales view-space XY: values above one magnify content and
+        // reduce the visible world extent. Z remains unscaled.
+        const float s = safeZoom();
         // Inverse camera transform for column vectors. Translation is
         // composed on the right so the camera position is transformed by
         // the inverse rotation/scale and always maps to the view origin.
         return math::rotate(math::FVector3(0.0f, 0.0f, 1.0f),
-                            -rotationRadians)
+                            -cameraRotation)
              * math::scale(s, s, 1.0f)
-             * math::translate(-positionX, -positionY, 0.0f);
+             * math::translate(-cameraX, -cameraY, 0.0f);
+    }
+
+    [[nodiscard]] math::Float4x4 viewMatrix(
+        const Transform& transform) const noexcept {
+        return viewMatrix(transform.position.x, transform.position.y,
+                          transform.rotation.toEulerAngles().z);
+    }
+
+    // Legacy/headless compatibility overload. Runtime systems use Transform.
+    [[nodiscard]] math::Float4x4 viewMatrix() const noexcept {
+        return viewMatrix(positionX, positionY, rotationRadians);
     }
 
     // Mirror of ayt::ay2d::OrthographicCamera::projectionMatrix()
     // (AY2D/OrthographicCamera.h:155-163). Visible region centered on
     // the camera with vertical extent viewSize (top/bottom = ±half);
     // horizontal extent = vertical * aspect.
-    [[nodiscard]] math::Float4x4 projectionMatrix() const noexcept {
-        const float aspect = viewportAspectOr();
-        const float half   = viewSize * 0.5f;
+    [[nodiscard]] math::Float4x4 projectionMatrix(
+        float actualAspect) const noexcept {
+        const float aspect = viewportAspectOr(actualAspect);
+        const float half   = effectiveViewSize(aspect) * 0.5f;
         const float left   = -half * aspect;
         const float right  =  half * aspect;
         const float bottom = -half;
         const float top    =  half;
         return math::lh::ortho(left, right, bottom, top, nearZ, farZ);
+    }
+
+    [[nodiscard]] math::Float4x4 projectionMatrix() const noexcept {
+        return projectionMatrix(viewportAspect);
     }
 };
 #undef AY_CURRENT_CLASS

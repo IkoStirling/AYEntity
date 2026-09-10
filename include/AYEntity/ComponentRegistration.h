@@ -66,7 +66,8 @@ template<std::derived_from<IComponent> T>
     ComponentRegistry& registry,
     std::string_view name,
     std::string_view displayName = {},
-    std::string_view category = {})
+    std::string_view category = {},
+    ComponentAfterSceneDeserializeFn afterSceneDeserialize = nullptr)
 {
     ComponentDescriptor descriptor = detail::makeComponentDescriptor<T>(
         name,
@@ -88,6 +89,7 @@ template<std::derived_from<IComponent> T>
             serializer,
             static_cast<T&>(component));
     };
+    descriptor.afterSceneDeserialize = afterSceneDeserialize;
     return registry.registerComponent(std::move(descriptor));
 }
 

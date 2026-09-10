@@ -19,6 +19,9 @@ using ::ayt::FieldAttribute;
 // Compile-time field attrs for AY_PROPERTY (MSVC NTP requires integral constants).
 inline constexpr uint32_t kAttrSerialize =
     static_cast<uint32_t>(::ayt::reflect::FieldAttribute::Serialize);
+inline constexpr uint32_t kAttrSerializeHidden =
+    static_cast<uint32_t>(::ayt::reflect::FieldAttribute::Serialize) |
+    static_cast<uint32_t>(::ayt::reflect::FieldAttribute::Hidden);
 inline constexpr uint32_t kAttrSerializeNetReplicate =
     static_cast<uint32_t>(::ayt::reflect::FieldAttribute::Serialize) |
     static_cast<uint32_t>(::ayt::reflect::FieldAttribute::NetReplicate);

@@ -9,10 +9,9 @@
 // — equal keys keep author order. The Forward2DOpaquePass sorts the
 // same key ascending, so item order here IS final draw order.
 //
-// Culling: view-frustum AABB test against the primary
-// OrthoCameraComponent (world rect = position ± viewSize/2,
-// viewSize*aspect/2 — zoom does not change the world extent, mirror
-// of AY2D). No primary camera -> fail-open (submit everything).
+// Culling uses the selected OrthoCameraComponent plus Transform. Zoom and
+// viewport adaptation change the visible world extent. No enabled camera
+// remains a deliberate fail-open state.
 
 #include <AYEntity/IEntity.h>
 

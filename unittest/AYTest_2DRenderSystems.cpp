@@ -256,16 +256,17 @@ TEST_CASE(ortho_camera_is_recorded_as_an_independent_scene_overlay)
 
     Entity* entity = world.createEntity();
     CHECK_NOT_NULL(entity);
+    Transform* transform = entity->addComponent<Transform>();
+    CHECK_NOT_NULL(transform);
+    transform->position = {17.0f, -9.0f, 0.0f};
     OrthoCameraComponent* camera = entity->addComponent<OrthoCameraComponent>();
     CHECK_NOT_NULL(camera);
-    camera->positionX = 17.0f;
-    camera->positionY = -9.0f;
     camera->viewSize = 24.0f;
     camera->viewportAspect = 4.0f / 3.0f;
     camera->layerMask = 0x0000002Du;
     camera->isPrimary = true;
 
-    const auto expectedView = camera->viewMatrix();
+    const auto expectedView = camera->viewMatrix(*transform);
     const auto expectedProjection = camera->projectionMatrix();
     ayt::render::RenderScene scene;
     ayt::entity::OrthoCameraUpdateSystem system;
@@ -285,6 +286,61 @@ TEST_CASE(ortho_camera_is_recorded_as_an_independent_scene_overlay)
     world.shutdown();
 }
 
+TEST_CASE(ortho_camera_selection_uses_active_priority_and_viewport_aspect)
+{
+    auto* rss = registerTestRenderer();
+    CHECK_NOT_NULL(rss);
+    if (rss == nullptr) return;
+    rss->setViewportRect(0, 0, 400, 400);
+
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+
+    Entity* low = world.createEntity();
+    Transform* lowTransform = low->addComponent<Transform>();
+    lowTransform->position = {2.0f, 0.0f, 0.0f};
+    OrthoCameraComponent* lowCamera =
+        low->addComponent<OrthoCameraComponent>();
+    lowCamera->priority = 1;
+
+    Entity* high = world.createEntity();
+    Transform* highTransform = high->addComponent<Transform>();
+    highTransform->position = {8.0f, 0.0f, 0.0f};
+    OrthoCameraComponent* highCamera =
+        high->addComponent<OrthoCameraComponent>();
+    highCamera->priority = 9;
+    highCamera->viewSize = 600.0f;
+    highCamera->designWidth = 960.0f;
+    highCamera->designHeight = 600.0f;
+    highCamera->aspectPolicy = 1;
+
+    Entity* inactive = world.createEntity();
+    inactive->addComponent<Transform>();
+    OrthoCameraComponent* inactiveCamera =
+        inactive->addComponent<OrthoCameraComponent>();
+    inactiveCamera->priority = 100;
+    inactiveCamera->active = false;
+
+    ayt::render::RenderScene scene;
+    ayt::entity::OrthoCameraUpdateSystem system;
+    system.buildCamera(scene);
+
+    CHECK(scene.hasOverlayCamera2D());
+    const auto expectedView = highCamera->viewMatrix(*highTransform);
+    const auto expectedProjection = highCamera->projectionMatrix(1.0f);
+    CHECK_FLOAT_EQ(scene.overlayCamera2D().view.row[0].w,
+                   expectedView.row[0].w, 1e-6f);
+    CHECK_FLOAT_EQ(scene.overlayCamera2D().projection.row[0].x,
+                   expectedProjection.row[0].x, 1e-6f);
+    CHECK_FLOAT_EQ(scene.overlayCamera2D().projection.row[1].y,
+                   expectedProjection.row[1].y, 1e-6f);
+
+    rss->shutdown();
+    unregisterTestRenderer();
+    world.shutdown();
+}
+
 // ─── #2 — tilemap render closed loop (sticky-Noop). ───────────────
 TEST_CASE(cm3_tilemap_render_closed_loop)
 {
@@ -301,7 +357,6 @@ TEST_CASE(cm3_tilemap_render_closed_loop)
     if (rss == nullptr) {
         return;
     }
-
     World::instance().initialize();
     Entity* entity = World::instance().createEntity();
     entity->setName("ground");
@@ -474,6 +529,7 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     if (rss == nullptr) {
         return;
     }
+    rss->setViewportRect(0, 0, 600, 600);
 
     World::instance().initialize();
 
@@ -482,6 +538,7 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     Entity* camEntity = World::instance().createEntity();
     camEntity->setName("cam");
     CHECK_NOT_NULL(camEntity);
+    CHECK_NOT_NULL(camEntity->addComponent<Transform>());
     OrthoCameraComponent* cam = camEntity->addComponent<OrthoCameraComponent>();
     CHECK_NOT_NULL(cam);
     cam->viewSize       = 10.0f;
@@ -491,6 +548,7 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     // A: on-screen (origin), layer 0 / key 5.
     Entity* a = World::instance().createEntity();
     a->setName("spriteA");
+    CHECK_NOT_NULL(a->addComponent<Transform>());
     SpriteComponent* sa = a->addComponent<SpriteComponent>();
     sa->texturePath = texPath;
     sa->layer = 0;
@@ -498,17 +556,21 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     // C: on-screen, layer 1 / key 3 — must sort AFTER A.
     Entity* c = World::instance().createEntity();
     c->setName("spriteC");
+    Transform* tc = c->addComponent<Transform>();
+    CHECK_NOT_NULL(tc);
+    tc->position = {1.0f, 1.0f, 0.0f};
     SpriteComponent* sc = c->addComponent<SpriteComponent>();
     sc->texturePath = texPath;
-    sc->position    = ayt::math::FVector3(1.0f, 1.0f, 0.0f);
     sc->layer       = 1;
     sc->sortingKey  = 3;
     // B: far off-screen — must be culled.
     Entity* b = World::instance().createEntity();
     b->setName("spriteB");
+    Transform* tb = b->addComponent<Transform>();
+    CHECK_NOT_NULL(tb);
+    tb->position = {100.0f, 0.0f, 0.0f};
     SpriteComponent* sb = b->addComponent<SpriteComponent>();
     sb->texturePath = texPath;
-    sb->position    = ayt::math::FVector3(100.0f, 0.0f, 0.0f);
 
     ayt::entity::SpriteRenderSystem system;
     system.onStart();
@@ -523,6 +585,16 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     CHECK(first == ayt::entity::drawSortKey(0, 5));
     CHECK(second == ayt::entity::drawSortKey(1, 3));
     CHECK(first < second);
+
+    // At zoom 2 the square renderer viewport exposes ±2.5 in X.
+    // Moving C to x=4 proves culling uses the reduced world extent.
+    tc->position.x = 4.0f;
+    cam->zoom = 2.0f;
+    scene.clear();
+    system.buildRenderScene(scene);
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+    CHECK(scene.items()[0].payload->packedSortKey
+          == ayt::entity::drawSortKey(0, 5));
 
     // Culled sprite must have left a slot in the payload buffer only
     // for the two submitted items (no dangling pointers).
@@ -556,6 +628,7 @@ TEST_CASE(world_lit_sprite_authors_shadow_cast_control)
     World::instance().initialize();
     Entity* entity = World::instance().createEntity();
     CHECK_NOT_NULL(entity);
+    CHECK_NOT_NULL(entity->addComponent<Transform>());
     SpriteComponent* sprite = entity->addComponent<SpriteComponent>();
     CHECK_NOT_NULL(sprite);
     sprite->texturePath = texPath;
@@ -636,6 +709,7 @@ TEST_CASE(cm3_sprite_texture_load_failure_skips)
     Entity* entity = World::instance().createEntity();
     entity->setName("brokenSprite");
     CHECK_NOT_NULL(entity);
+    CHECK_NOT_NULL(entity->addComponent<Transform>());
     SpriteComponent* sp = entity->addComponent<SpriteComponent>();
     CHECK_NOT_NULL(sp);
     sp->texturePath = "textures/does_not_exist.aytex";

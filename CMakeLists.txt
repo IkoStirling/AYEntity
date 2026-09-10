@@ -134,6 +134,7 @@ if(AY_ENABLE_RENDERER)
     if(AY_ENABLE_AY2D)
         add_library(AYEntity2DIntegration STATIC
             src/AYEntity2DIntegrationModule.cpp
+            src/AYOrthoCameraSelection.cpp
             src/AYOrthoCameraUpdateSystem.cpp
             src/AYTilemapStreamingSystem.cpp
             src/AYTilemapVisibilityRuntime.cpp

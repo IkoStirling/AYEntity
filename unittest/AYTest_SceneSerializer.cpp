@@ -149,7 +149,7 @@ bool migrateScene1To2(uint32_t from, uint32_t to)
 TEST_CASE(scene_schema_migration_e2e_v1_to_v2)
 {
     // Envelope E2E: older __schemaVersion=1 file runs registered 1→2 step
-    // before entities are materialized (kSceneSchemaVersion == 2).
+    // before entities are materialized (later missing steps are no-ops).
     g_sceneMigSteps = 0;
     registerSceneSchemaMigration(1, 2, migrateScene1To2);
 

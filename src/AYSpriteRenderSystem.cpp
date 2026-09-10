@@ -1,9 +1,9 @@
 // AYSpriteRenderSystem.cpp — CM-3 (2026-08-11).
 //
 // Per entity:
-//   1. View-frustum AABB cull against the primary OrthoCameraComponent
-//      (world rect centered on the camera; zoom does not change the
-//      world extent — mirror of AY2D). No primary camera => fail-open.
+//   1. View-frustum AABB cull against the selected orthographic camera.
+//      Camera and sprite placement both come from Transform; viewport resize,
+//      design-frame adaptation and zoom all affect the visible world extent.
 //   2. Cache texture/material variants by domain, maps and surface values.
 //      SceneOverlay reuses kTilemapPhoskiaSource; WorldLit creates a
 //      Material2D whose quad is consumed by the GBuffer geometry substage.
@@ -16,12 +16,14 @@
 #include "AYEntity/2DUvMath.h"
 #include "AYEntity.h"
 #include "AYEntity/EntityModule.h"
+#include "AYEntity/OrthoCameraSelection.h"
 #include "AYRenderer/RendererSubSystem.h"
 #include "AYRenderer/TilemapShaderSources.h"
 #include "AYEntity/World.h"
 
 #include "AYEntity/components/OrthoCameraComponent.h"
 #include "AYEntity/components/SpriteComponent.h"
+#include "AYEntity/components/TransformComponent.h"
 
 #include <AYMath/MathTransform.h>
 
@@ -112,25 +114,26 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         return;
     }
 
-    // Cull viewport (world rect) from the primary camera, if any.
+    // Conservative world AABB of the selected, potentially rotated camera.
     float camCx = 0.0f, camCy = 0.0f, camHalfW = 0.0f, camHalfH = 0.0f;
     bool haveCamera = false;
+    uint32_t cameraLayerMask = 0xFFFFFFFFu;
     {
         World& world = World::instance();
-        for (Entity* entity : world.query<OrthoCameraComponent>()) {
-            if (entity == nullptr) {
-                continue;
-            }
-            OrthoCameraComponent* cam = entity->getComponent<OrthoCameraComponent>();
-            if (cam == nullptr || !cam->isPrimary) {
-                continue;
-            }
-            camCx    = cam->positionX;
-            camCy    = cam->positionY;
-            camHalfH = cam->viewSize * 0.5f;
-            camHalfW = camHalfH * cam->viewportAspectOr();
+        const SelectedOrthoCamera2D selected = selectOrthoCamera2D(world);
+        if (selected) {
+            const float aspect = rss->viewportAspect();
+            const math::FVector2 viewHalf =
+                selected.camera->visibleHalfExtents(aspect);
+            const float angle = selected.transform->rotation.toEulerAngles().z;
+            const float c = std::fabs(std::cos(angle));
+            const float s = std::fabs(std::sin(angle));
+            camCx = selected.transform->position.x;
+            camCy = selected.transform->position.y;
+            camHalfW = c * viewHalf.x + s * viewHalf.y;
+            camHalfH = s * viewHalf.x + c * viewHalf.y;
+            cameraLayerMask = selected.camera->layerMask;
             haveCamera = true;
-            break;
         }
     }
 
@@ -141,12 +144,14 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
     std::vector<SpriteEntry> entries;
 
     World& world = World::instance();
-    for (Entity* entity : world.query<SpriteComponent>()) {
+    for (Entity* entity : world.query<Transform, SpriteComponent>()) {
         if (entity == nullptr) {
             continue;
         }
         SpriteComponent* sprite = entity->getComponent<SpriteComponent>();
-        if (sprite == nullptr || !sprite->visible || !sprite->isValid()) {
+        Transform* transform = entity->getComponent<Transform>();
+        if (transform == nullptr || sprite == nullptr
+            || !sprite->visible || !sprite->isValid()) {
             continue;
         }
 
@@ -156,14 +161,17 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         // WorldLit2D uses the renderer's 3D camera and must not be culled by
         // the unrelated orthographic overlay camera.
         if (haveCamera && renderDomain == ayt::render::RenderDomain2D::SceneOverlay) {
-            const float c = std::fabs(std::cos(sprite->rotationZ));
-            const float s = std::fabs(std::sin(sprite->rotationZ));
-            const float sx = std::fabs(sprite->scaleX);
-            const float sy = std::fabs(sprite->scaleY);
+            const uint32_t layer = static_cast<uint32_t>(sprite->layer) & 0x1Fu;
+            if ((cameraLayerMask & (1u << layer)) == 0u) continue;
+            const float angle = transform->rotation.toEulerAngles().z;
+            const float c = std::fabs(std::cos(angle));
+            const float s = std::fabs(std::sin(angle));
+            const float sx = std::fabs(transform->scale.x);
+            const float sy = std::fabs(transform->scale.y);
             const float halfW = 0.5f * (c * sx + s * sy);
             const float halfH = 0.5f * (s * sx + c * sy);
-            if (std::fabs(sprite->position.x - camCx) > camHalfW + halfW
-                || std::fabs(sprite->position.y - camCy) > camHalfH + halfH) {
+            if (std::fabs(transform->position.x - camCx) > camHalfW + halfW
+                || std::fabs(transform->position.y - camCy) > camHalfH + halfH) {
                 continue;
             }
         }
@@ -282,10 +290,7 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         entry.item.mesh     = quad;
         entry.item.material = resources.material;
         entry.item.world    = ayt::math::Transform::getMatrix(
-            sprite->position,
-            ayt::math::FQuaternion::fromAxisAngle(
-                ayt::math::FVector3(0.0f, 0.0f, 1.0f), sprite->rotationZ),
-            ayt::math::FVector3(sprite->scaleX, sprite->scaleY, 1.0f));
+            transform->position, transform->rotation, transform->scale);
         entry.item.shadowFlags = worldLit
             ? ayt::render::makeShadowFlags(sprite->castShadow, /*receive=*/true)
             : ayt::render::ShadowFlags::None;

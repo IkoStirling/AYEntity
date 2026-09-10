@@ -32,6 +32,7 @@ using ComponentSerializeFn = void (*)(
 using ComponentDeserializeFn = void (*)(
     ayt::serializer::ISerializer&,
     IComponent&);
+using ComponentAfterSceneDeserializeFn = void (*)(Entity&, IComponent&);
 
 // Stable component identity is the name. type is process-local and is used
 // only for fast typed lookup; it must never be serialized.
@@ -52,6 +53,11 @@ struct ComponentDescriptor
     ComponentRemoveFn remove = nullptr;
     ComponentSerializeFn serialize = nullptr;
     ComponentDeserializeFn deserialize = nullptr;
+    // Optional normalization hook invoked after one component has been read
+    // from a Scene. It lets schema modules migrate legacy component-local
+    // data into entity-level dependencies without coupling SceneSerializer to
+    // optional component types.
+    ComponentAfterSceneDeserializeFn afterSceneDeserialize = nullptr;
 };
 
 enum class ComponentRegistryError

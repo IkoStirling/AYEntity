@@ -3,10 +3,10 @@
 #include "AYEntity/OrthoCameraUpdateSystem.h"
 
 #include "AYEntity.h"
+#include "AYEntity/OrthoCameraSelection.h"
+#include "AYEntity/components/OrthoCameraComponent.h"
 #include "AYRenderer/RendererSubSystem.h"
 #include "AYEntity/World.h"
-
-#include "AYEntity/components/OrthoCameraComponent.h"
 
 #include <cstdio>
 
@@ -35,18 +35,16 @@ void OrthoCameraUpdateSystem::onStart()
 void OrthoCameraUpdateSystem::buildCamera(ayt::render::RenderScene& scene)
 {
     World& world = World::instance();
-    for (Entity* entity : world.query<OrthoCameraComponent>()) {
-        if (entity == nullptr) {
-            continue;
-        }
-        OrthoCameraComponent* cam = entity->getComponent<OrthoCameraComponent>();
-        if (cam == nullptr || !cam->isPrimary) {
-            continue;
-        }
-        scene.setOverlayCamera2D(cam->viewMatrix(), cam->projectionMatrix(),
-                                 cam->layerMask);
-        return;  // first primary camera wins
-    }
+    const SelectedOrthoCamera2D selected = selectOrthoCamera2D(world);
+    if (!selected) return;
+    const ayt::render::RendererSubSystem* renderer =
+        ayt::render::RendererSubSystem::findRegistered();
+    const float aspect = renderer != nullptr
+        ? renderer->viewportAspect() : selected.camera->viewportAspectOr();
+    scene.setOverlayCamera2D(
+        selected.camera->viewMatrix(*selected.transform),
+        selected.camera->projectionMatrix(aspect),
+        selected.camera->layerMask);
 }
 
 void registerOrthoCameraUpdateSystem()
