@@ -6,6 +6,7 @@
 #include "AYEntity/World.h"
 
 #include <AYSerializer.h>
+#include <AYIO/File.h>
 #include <AYMath/CoordinateConvention.h>
 
 #include <mutex>
@@ -287,7 +288,26 @@ bool saveScene(const World& world, const std::string& path, ayt::serializer::For
     if (!writeSceneEnvelope(*serializer, world)) {
         return false;
     }
-    return serializer->saveToFile(path);
+
+    // Serialize to an in-memory buffer first, then flush via
+    // `ayt::io::File::atomicWrite`. This protects the on-disk scene file
+    // from corruption if the editor crashes (or the host loses power)
+    // mid-write: a partial JSON/XML/binary file would otherwise replace
+    // the previously good copy and leave the user with no recoverable
+    // version. atomicWrite uses a `.tmp + rename` pattern under the same
+    // directory so the swap is atomic on every platform AYIO targets.
+    //
+    // Empty serialized output means an empty world — treated as a save
+    // failure rather than a no-op, because atomicWrite rejects zero-byte
+    // writes (its contract is "delete" rather than "create empty file").
+    // Callers that genuinely want to clear a scene must remove the file
+    // explicitly; silently producing a 0-byte scene would corrupt the
+    // document the next time the user opens it.
+    const std::string serialized = serializer->output();
+    if (serialized.empty()) {
+        return false;
+    }
+    return ayt::io::File::atomicWrite(path, serialized.data(), serialized.size());
 }
 
 bool loadScene(World& world, const std::string& path, ayt::serializer::SerializeError* outError)
