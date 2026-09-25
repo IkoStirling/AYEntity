@@ -14,6 +14,7 @@
 
 #include <AYMath/MathTransform.h>
 #include <AYResource/ResourceManager.h>
+#include <AYResource/AssetPath.h>
 #include <AYResource/assetsDefs/ITilemap.h>
 #include <AYResource/assetsDefs/IAtlas.h>
 
@@ -201,8 +202,10 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         CachedTilemapResources& resources =
             _cache[cacheKey(*component, chunkCols, chunkRows)];
         if (!resources.tilemap) {
+            const std::string tilemapPath =
+                ayt::resource::resolveAssetPath({}, component->tilemapPath);
             resources.tilemap = ayt::resource::ResourceManager::instance()
-                .load<ayt::resource::ITilemap>(component->tilemapPath);
+                .load<ayt::resource::ITilemap>(tilemapPath);
             if (!resources.tilemap && _frameIndex <= 5u) {
                 std::fprintf(stderr,
                              "[TilemapRenderSystem] load<ITilemap> failed: '%s'\n",
@@ -216,8 +219,10 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
         if (!hasAuthoredVisuals && !component->atlasPath.empty()
             && !resources.atlas) {
+            const std::string atlasPath =
+                ayt::resource::resolveAssetPath({}, component->atlasPath);
             resources.atlas = ayt::resource::ResourceManager::instance()
-                .load<ayt::resource::IAtlas>(component->atlasPath);
+                .load<ayt::resource::IAtlas>(atlasPath);
         }
         const std::string texturePath = resources.atlas
             ? resources.atlas->getTexturePath() : component->atlasTexturePath;

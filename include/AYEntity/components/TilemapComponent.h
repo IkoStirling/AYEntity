@@ -26,9 +26,10 @@ namespace ayt::entity
 struct TilemapComponent : public IComponent {
     const char* getName() const override { return "TilemapComponent"; }
 
-    // Path fields declared via the AY_PROPERTY macro below. The
-    // expansion emits `Type name;` and registers a serializer metadata
-    // entry — keep these macro-only (see AYEntity/components/AYEntity/components/AYEntity/components/MeshComponent.h:6-8).
+    // Paths may be absolute or portable references below the asset root
+    // (for example tilemaps/restaurant.aytilemap). Path fields declared via
+    // the AY_PROPERTY macro below. The expansion emits `Type name;` and
+    // registers serializer metadata; keep these declarations macro-only.
     AY_PROPERTY(std::string, tilemapPath, kAttrSerialize)
     AY_PROPERTY(std::string, atlasTexturePath, kAttrSerialize)
     // Optional atlas-aligned WorldLit2D surface maps. Empty paths use the
