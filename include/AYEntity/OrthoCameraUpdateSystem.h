@@ -4,6 +4,8 @@
 // World-owned scene-builder callback records the primary
 // OrthoCameraComponent as RenderScene's independent 2D overlay camera.
 // The Renderer main perspective camera remains available to every 3D pass.
+// Camera placement samples Transform's Sim-to-Present interpolation alpha so
+// fixed-step camera motion remains smooth at the presentation refresh rate.
 
 #include <AYEntity/IEntity.h>
 

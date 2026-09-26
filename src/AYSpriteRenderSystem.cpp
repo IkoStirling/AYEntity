@@ -25,6 +25,7 @@
 #include "AYEntity/components/SpriteComponent.h"
 #include "AYEntity/components/TransformComponent.h"
 
+#include <AYGameLoop.h>
 #include <AYMath/MathTransform.h>
 
 #include <algorithm>
@@ -103,6 +104,8 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         return;
     }
     ayt::render::Renderer& renderer = rss->renderer();
+    const float interpolationAlpha =
+        ayt::game::GameLoop::instance().getInterpolationFactor();
 
     _payloads.clear();
 
@@ -125,11 +128,15 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             const float aspect = rss->viewportAspect();
             const math::FVector2 viewHalf =
                 selected.camera->visibleHalfExtents(aspect);
-            const float angle = selected.transform->rotation.toEulerAngles().z;
+            const math::FVector3 cameraPosition =
+                selected.transform->interpolatedPosition(interpolationAlpha);
+            const math::FQuaternion cameraRotation =
+                selected.transform->interpolatedRotation(interpolationAlpha);
+            const float angle = cameraRotation.toEulerAngles().z;
             const float c = std::fabs(std::cos(angle));
             const float s = std::fabs(std::sin(angle));
-            camCx = selected.transform->position.x;
-            camCy = selected.transform->position.y;
+            camCx = cameraPosition.x;
+            camCy = cameraPosition.y;
             camHalfW = c * viewHalf.x + s * viewHalf.y;
             camHalfH = s * viewHalf.x + c * viewHalf.y;
             cameraLayerMask = selected.camera->layerMask;
@@ -156,25 +163,10 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         }
 
         const ayt::render::RenderDomain2D renderDomain = renderDomainOf(*sprite);
-
-        // Exact AABB of a rotated/scaled centered unit quad.
-        // WorldLit2D uses the renderer's 3D camera and must not be culled by
-        // the unrelated orthographic overlay camera.
-        if (haveCamera && renderDomain == ayt::render::RenderDomain2D::SceneOverlay) {
-            const uint32_t layer = static_cast<uint32_t>(sprite->layer) & 0x1Fu;
-            if ((cameraLayerMask & (1u << layer)) == 0u) continue;
-            const float angle = transform->rotation.toEulerAngles().z;
-            const float c = std::fabs(std::cos(angle));
-            const float s = std::fabs(std::sin(angle));
-            const float sx = std::fabs(transform->scale.x);
-            const float sy = std::fabs(transform->scale.y);
-            const float halfW = 0.5f * (c * sx + s * sy);
-            const float halfH = 0.5f * (s * sx + c * sy);
-            if (std::fabs(transform->position.x - camCx) > camHalfW + halfW
-                || std::fabs(transform->position.y - camCy) > camHalfH + halfH) {
-                continue;
-            }
-        }
+        const math::FVector3 presentationPosition =
+            transform->interpolatedPosition(interpolationAlpha);
+        const math::FQuaternion presentationRotation =
+            transform->interpolatedRotation(interpolationAlpha);
 
         const bool worldLit = renderDomain == ayt::render::RenderDomain2D::WorldLit;
         const std::string resourceKey =
@@ -254,6 +246,28 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         if (!resources.texture.isValid() || !resources.material.isValid()) {
             continue;
         }
+
+        // Prepare a loaded World's Sprite resources before visibility culling.
+        // Otherwise an off-screen sprite blocks the main thread the first time
+        // camera motion reveals it. The cache makes this a first-frame cost.
+        // Exact AABB uses the same interpolated presentation pose as drawing.
+        // WorldLit2D uses the renderer's 3D camera and must not be culled by
+        // the unrelated orthographic overlay camera.
+        if (haveCamera && renderDomain == ayt::render::RenderDomain2D::SceneOverlay) {
+            const uint32_t layer = static_cast<uint32_t>(sprite->layer) & 0x1Fu;
+            if ((cameraLayerMask & (1u << layer)) == 0u) continue;
+            const float angle = presentationRotation.toEulerAngles().z;
+            const float c = std::fabs(std::cos(angle));
+            const float s = std::fabs(std::sin(angle));
+            const float sx = std::fabs(transform->scale.x);
+            const float sy = std::fabs(transform->scale.y);
+            const float halfW = 0.5f * (c * sx + s * sy);
+            const float halfH = 0.5f * (s * sx + c * sy);
+            if (std::fabs(presentationPosition.x - camCx) > camHalfW + halfW
+                || std::fabs(presentationPosition.y - camCy) > camHalfH + halfH) {
+                continue;
+            }
+        }
         if (worldLit) {
             const float metallic = finiteClamped(
                 sprite->metallic, 0.0f, 0.0f, 1.0f);
@@ -290,7 +304,7 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         entry.item.mesh     = quad;
         entry.item.material = resources.material;
         entry.item.world    = ayt::math::Transform::getMatrix(
-            transform->position, transform->rotation, transform->scale);
+            presentationPosition, presentationRotation, transform->scale);
         entry.item.shadowFlags = worldLit
             ? ayt::render::makeShadowFlags(sprite->castShadow, /*receive=*/true)
             : ayt::render::ShadowFlags::None;

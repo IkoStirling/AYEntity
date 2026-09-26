@@ -9,9 +9,11 @@
 // — equal keys keep author order. The Forward2DOpaquePass sorts the
 // same key ascending, so item order here IS final draw order.
 //
-// Culling uses the selected OrthoCameraComponent plus Transform. Zoom and
-// viewport adaptation change the visible world extent. No enabled camera
-// remains a deliberate fail-open state.
+// Culling and drawing use the same Sim-to-Present interpolated Transform.
+// Sprite GPU resources are prepared before culling on the active World's
+// first presentation frame so camera motion cannot trigger a first-use load.
+// Zoom and viewport adaptation change the visible world extent. No enabled
+// camera remains a deliberate fail-open state.
 
 #include <AYEntity/IEntity.h>
 

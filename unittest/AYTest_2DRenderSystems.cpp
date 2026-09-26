@@ -27,6 +27,7 @@
 #include <AYEntity/OrthoCameraUpdateSystem.h>
 #include <AYRenderer/RendererSubSystem.h>
 #include <AYEntity/SpriteRenderSystem.h>
+#include <AYGameLoop.h>
 #include <AYGameLoop/SubSystemRegistry.h>
 #include <AYEntity/TilemapAnimationTickSystem.h>
 #include <AYEntity/TilemapRenderSystem.h>
@@ -45,6 +46,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <sys/stat.h>
 #include <vector>
@@ -258,7 +260,10 @@ TEST_CASE(ortho_camera_is_recorded_as_an_independent_scene_overlay)
     CHECK_NOT_NULL(entity);
     Transform* transform = entity->addComponent<Transform>();
     CHECK_NOT_NULL(transform);
-    transform->position = {17.0f, -9.0f, 0.0f};
+    transform->applySimulationPose(
+        {17.0f, -9.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f});
+    transform->applySimulationPose(
+        {117.0f, -9.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f});
     OrthoCameraComponent* camera = entity->addComponent<OrthoCameraComponent>();
     CHECK_NOT_NULL(camera);
     camera->viewSize = 24.0f;
@@ -266,7 +271,13 @@ TEST_CASE(ortho_camera_is_recorded_as_an_independent_scene_overlay)
     camera->layerMask = 0x0000002Du;
     camera->isPrimary = true;
 
-    const auto expectedView = camera->viewMatrix(*transform);
+    const float alpha = ayt::game::GameLoop::instance().getInterpolationFactor();
+    const auto expectedPosition = transform->interpolatedPosition(alpha);
+    const auto expectedRotation = transform->interpolatedRotation(alpha);
+    const auto expectedView = camera->viewMatrix(
+        expectedPosition.x,
+        expectedPosition.y,
+        expectedRotation.toEulerAngles().z);
     const auto expectedProjection = camera->projectionMatrix();
     ayt::render::RenderScene scene;
     ayt::entity::OrthoCameraUpdateSystem system;
@@ -523,6 +534,13 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
 
     std::string texPath, mapPath;
     CHECK(bakeAssets(texPath, mapPath));
+    const std::string prewarmTexPath = tempPath("prewarm.aytex");
+    {
+        std::ifstream source(texPath, std::ios::binary);
+        std::ofstream destination(prewarmTexPath, std::ios::binary);
+        destination << source.rdbuf();
+    }
+    CHECK(fileExists(prewarmTexPath));
 
     auto* rss = registerTestRenderer();
     CHECK_NOT_NULL(rss);
@@ -558,7 +576,10 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     c->setName("spriteC");
     Transform* tc = c->addComponent<Transform>();
     CHECK_NOT_NULL(tc);
-    tc->position = {1.0f, 1.0f, 0.0f};
+    tc->applySimulationPose(
+        {1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f});
+    tc->applySimulationPose(
+        {3.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f});
     SpriteComponent* sc = c->addComponent<SpriteComponent>();
     sc->texturePath = texPath;
     sc->layer       = 1;
@@ -570,7 +591,7 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     CHECK_NOT_NULL(tb);
     tb->position = {100.0f, 0.0f, 0.0f};
     SpriteComponent* sb = b->addComponent<SpriteComponent>();
-    sb->texturePath = texPath;
+    sb->texturePath = prewarmTexPath;
 
     ayt::entity::SpriteRenderSystem system;
     system.onStart();
@@ -585,10 +606,26 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     CHECK(first == ayt::entity::drawSortKey(0, 5));
     CHECK(second == ayt::entity::drawSortKey(1, 3));
     CHECK(first < second);
+    const float interpolationAlpha =
+        ayt::game::GameLoop::instance().getInterpolationFactor();
+    const float expectedCPosition =
+        tc->interpolatedPosition(interpolationAlpha).x;
+    CHECK_FLOAT_EQ(scene.items()[1].world.row[0].w,
+                   expectedCPosition, 1e-6f);
+
+    // Off-screen B was prepared before culling. Removing its source file and
+    // revealing it must still draw from the resident cache without a hitch.
+    removeFile(prewarmTexPath);
+    tb->position = {0.0f, 0.0f, 0.0f};
+    scene.clear();
+    system.buildRenderScene(scene);
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 3);
+    tb->position = {100.0f, 0.0f, 0.0f};
 
     // At zoom 2 the square renderer viewport exposes ±2.5 in X.
     // Moving C to x=4 proves culling uses the reduced world extent.
     tc->position.x = 4.0f;
+    tc->hasPreviousSimulationPose = false;
     cam->zoom = 2.0f;
     scene.clear();
     system.buildRenderScene(scene);
@@ -608,6 +645,7 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     World::instance().shutdown();
     removeFile(texPath);
     removeFile(mapPath);
+    removeFile(prewarmTexPath);
 }
 
 TEST_CASE(world_lit_sprite_authors_shadow_cast_control)

@@ -8,6 +8,8 @@
 #include "AYRenderer/RendererSubSystem.h"
 #include "AYEntity/World.h"
 
+#include <AYGameLoop.h>
+
 #include <cstdio>
 
 namespace ayt::entity
@@ -41,8 +43,15 @@ void OrthoCameraUpdateSystem::buildCamera(ayt::render::RenderScene& scene)
         ayt::render::RendererSubSystem::findRegistered();
     const float aspect = renderer != nullptr
         ? renderer->viewportAspect() : selected.camera->viewportAspectOr();
+    const float interpolationAlpha =
+        ayt::game::GameLoop::instance().getInterpolationFactor();
+    const math::FVector3 position =
+        selected.transform->interpolatedPosition(interpolationAlpha);
+    const math::FQuaternion rotation =
+        selected.transform->interpolatedRotation(interpolationAlpha);
     scene.setOverlayCamera2D(
-        selected.camera->viewMatrix(*selected.transform),
+        selected.camera->viewMatrix(
+            position.x, position.y, rotation.toEulerAngles().z),
         selected.camera->projectionMatrix(aspect),
         selected.camera->layerMask);
 }
