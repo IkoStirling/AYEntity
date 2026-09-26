@@ -39,6 +39,10 @@ struct SpriteComponent : public IComponent {
     AY_PROPERTY(int32_t, sortingKey, kAttrSerialize)
     // 0 = legacy SceneOverlay (default), 1 = deferred WorldLit2D.
     AY_PROPERTY(int32_t, renderDomain, kAttrSerialize)
+    // SceneOverlay sampling: 0 = ordinary linear sampling, 1 = Retro AA for
+    // stable pixel-art motion at non-integer viewport scales. WorldLit2D
+    // currently ignores this option.
+    AY_PROPERTY(int32_t, samplingQuality, kAttrSerialize)
     AY_PROPERTY(float, metallic, kAttrSerialize)
     AY_PROPERTY(float, roughness, kAttrSerialize)
     AY_PROPERTY(float, ambientOcclusion, kAttrSerialize)
@@ -63,6 +67,7 @@ struct SpriteComponent : public IComponent {
         layer       = 0;
         sortingKey  = 0;
         renderDomain = 0;
+        samplingQuality = 0;
         metallic = 0.0f;
         roughness = 0.75f;
         ambientOcclusion = 1.0f;

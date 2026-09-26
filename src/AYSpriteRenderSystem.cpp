@@ -47,7 +47,10 @@ ayt::render::RenderDomain2D renderDomainOf(const SpriteComponent& sprite) noexce
 std::string spriteResourceKey(const SpriteComponent& sprite, uint32_t entityId)
 {
     if (!sprite.isWorldLit()) {
-        return std::string("overlay\x1f") + sprite.texturePath;
+        const char* sampling = sprite.samplingQuality == 1
+            ? "overlay-retro-aa\x1f"
+            : "overlay-linear\x1f";
+        return std::string(sampling) + sprite.texturePath;
     }
 
     std::string key = "world-lit\x1f";
@@ -226,8 +229,11 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 resources.material = renderer.createMaterial2D(
                     materialDesc, resourceKey + "material");
             } else {
+                const char* shaderSource = sprite->samplingQuality == 1
+                    ? ayt::render::kSpriteRetroAaPhoskiaSource
+                    : ayt::render::kTilemapPhoskiaSource;
                 resources.material = renderer.createMaterialFromPhoskia(
-                    ayt::render::kTilemapPhoskiaSource, resourceKey + "material");
+                    shaderSource, resourceKey + "material");
                 if (resources.material.isValid()) {
                     renderer.setMaterialTexture(resources.material, "albedoMap",
                                                 resources.texture);

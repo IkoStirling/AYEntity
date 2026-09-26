@@ -77,6 +77,7 @@ TEST_CASE(cm3_tilemap_component_defaults)
     CHECK_INT_EQ(c.layer, 0);
     CHECK_INT_EQ(c.sortingKey, 0);
     CHECK_INT_EQ(c.renderDomain, 0);
+    CHECK_INT_EQ(c.samplingQuality, 1);
     CHECK_FALSE(c.isWorldLit());
     CHECK_FLOAT_EQ(c.metallic, 0.0f, 0.0f);
     CHECK_FLOAT_EQ(c.roughness, 0.75f, 0.0f);
@@ -113,6 +114,7 @@ TEST_CASE(cm3_sprite_component_defaults)
     CHECK_INT_EQ(c.layer, 0);
     CHECK_INT_EQ(c.sortingKey, 0);
     CHECK_INT_EQ(c.renderDomain, 0);
+    CHECK_INT_EQ(c.samplingQuality, 0);
     CHECK_FALSE(c.isWorldLit());
     CHECK_FLOAT_EQ(c.metallic, 0.0f, 0.0f);
     CHECK_FLOAT_EQ(c.roughness, 0.75f, 0.0f);
@@ -403,6 +405,7 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     sp->layer         = 3;
     sp->sortingKey    = 7;
     sp->renderDomain = 1;
+    sp->samplingQuality = 1;
     sp->metallic = 0.2f;
     sp->roughness = 0.4f;
     sp->ambientOcclusion = 0.8f;
@@ -490,6 +493,7 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     CHECK_INT_EQ(lsp->layer, 3);
     CHECK_INT_EQ(lsp->sortingKey, 7);
     CHECK_INT_EQ(lsp->renderDomain, 1);
+    CHECK_INT_EQ(lsp->samplingQuality, 1);
     CHECK_TRUE(lsp->isWorldLit());
     CHECK_FLOAT_EQ(lsp->metallic, 0.2f, 1e-5f);
     CHECK_FLOAT_EQ(lsp->roughness, 0.4f, 1e-5f);
