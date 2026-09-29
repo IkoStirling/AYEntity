@@ -146,6 +146,7 @@ if(AY_ENABLE_RENDERER)
             src/AYTilemapAnimationRuntime.cpp
             src/AYTilemapAnimationTickSystem.cpp
             src/AYTilemapRenderSystem.cpp
+            src/AYSpriteAnimationSystem.cpp
             src/AYSpriteRenderSystem.cpp
         )
         add_library(AYEntity::TwoDIntegration ALIAS AYEntity2DIntegration)

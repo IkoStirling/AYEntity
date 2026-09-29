@@ -26,6 +26,7 @@
 #include <AYEntity/2DUvMath.h>
 #include <AYEntity/OrthoCameraUpdateSystem.h>
 #include <AYRenderer/RendererSubSystem.h>
+#include <AYEntity/SpriteAnimationSystem.h>
 #include <AYEntity/SpriteRenderSystem.h>
 #include <AYGameLoop.h>
 #include <AYGameLoop/SubSystemRegistry.h>
@@ -201,6 +202,7 @@ TEST_CASE(cm3_2d_systems_priority_wiring)
     CHECK(ayt::entity::OrthoCameraUpdateSystem::kPriority == 405);
     CHECK(ayt::entity::TilemapStreamingSystem::kPriority == 430);
     CHECK(ayt::entity::TilemapAnimationTickSystem::kPriority == 460);
+    CHECK(ayt::entity::SpriteAnimationSystem::kPriority == 470);
     CHECK(ayt::entity::TilemapRenderSystem::kPriority == 510);
     CHECK(ayt::entity::SpriteRenderSystem::kPriority == 510);
     CHECK(ayt::entity::OrthoCameraUpdateSystem::kPriority
@@ -208,6 +210,8 @@ TEST_CASE(cm3_2d_systems_priority_wiring)
     CHECK(ayt::entity::TilemapStreamingSystem::kPriority
           < ayt::entity::TilemapAnimationTickSystem::kPriority);
     CHECK(ayt::entity::TilemapAnimationTickSystem::kPriority
+          < ayt::entity::SpriteAnimationSystem::kPriority);
+    CHECK(ayt::entity::SpriteAnimationSystem::kPriority
           < ayt::entity::TilemapRenderSystem::kPriority);
 
     // Sanity: confirm via world introspection that the registered
@@ -217,6 +221,7 @@ TEST_CASE(cm3_2d_systems_priority_wiring)
     ayt::entity::bootstrapModule();
     int idxTilemap = -1, idxSprite = -1;
     bool sawCamera = false, sawStreaming = false, sawTick = false;
+    bool sawSpriteAnimation = false;
     for (size_t i = 0; i < world.systemCount(); ++i) {
         const char* name = world.getSystemNameAt(i);
         const int32_t p  = world.getSystemPriorityAt(i);
@@ -232,6 +237,9 @@ TEST_CASE(cm3_2d_systems_priority_wiring)
         } else if (std::strcmp(name, "TilemapAnimationTickSystem") == 0) {
             CHECK(p == 460);
             sawTick = true;
+        } else if (std::strcmp(name, "SpriteAnimationSystem") == 0) {
+            CHECK(p == 470);
+            sawSpriteAnimation = true;
         } else if (std::strcmp(name, "TilemapRenderSystem") == 0) {
             CHECK(p == 510);
             idxTilemap = static_cast<int>(i);
@@ -243,6 +251,7 @@ TEST_CASE(cm3_2d_systems_priority_wiring)
     CHECK(sawCamera);
     CHECK(sawStreaming);
     CHECK(sawTick);
+    CHECK(sawSpriteAnimation);
     CHECK(idxTilemap >= 0);
     CHECK(idxSprite >= 0);
     CHECK(idxTilemap < idxSprite);

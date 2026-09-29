@@ -2,6 +2,7 @@
 
 #include <AYEntity/EntityRuntimeModule.h>
 #include <AYEntity/OrthoCameraUpdateSystem.h>
+#include <AYEntity/SpriteAnimationSystem.h>
 #include <AYEntity/SpriteRenderSystem.h>
 #include <AYEntity/TilemapAnimationTickSystem.h>
 #include <AYEntity/TilemapRenderSystem.h>
@@ -59,6 +60,9 @@ void registerEntity2DSystems()
     }
     if (!hasSystemNamed(world, "TilemapAnimationTickSystem")) {
         registerTilemapAnimationTickSystem();
+    }
+    if (!hasSystemNamed(world, "SpriteAnimationSystem")) {
+        registerSpriteAnimationSystem();
     }
     if (!hasSystemNamed(world, "TilemapRenderSystem")) {
         registerTilemapRenderSystem();

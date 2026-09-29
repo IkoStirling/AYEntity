@@ -32,6 +32,7 @@ set(SOURCES
     # buildRenderScene closed loop (sticky-Noop) + cull + lazy-load
     # failure + draw-order pin.
     AYTest_2DRenderSystems.cpp
+    AYTest_SpriteAnimationSystem.cpp
     # CM-5 (2026-08-12) — animation table runtime: cross-assert vs the
     # real ayt::ay2d tick/resolve on a shared deterministic case + the
     # sticky-Noop render closed loop (animated tile payload flips frame).

@@ -60,6 +60,7 @@ void registerStateMachineSystem();
 void registerOrthoCameraUpdateSystem();
 void registerTilemapStreamingSystem();
 void registerTilemapAnimationTickSystem();
+void registerSpriteAnimationSystem();
 void registerTilemapRenderSystem();
 void registerSpriteRenderSystem();
 void register2DSystems();
