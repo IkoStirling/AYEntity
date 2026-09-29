@@ -37,6 +37,17 @@ AYEntity 是 AY Engine 的实体组件系统。`AYEntityCore` 负责 Entity/Comp
 新模块应链接 `AYEntityCore` 和自己确实使用的 integration；只有旧 Demo 或明确
 需要完整表面的产品才链接 `AYEntity`。
 
+## 2D Sprite 序列帧
+
+规则网格 Sprite Sheet 使用 `SpriteComponent + SpriteAnimationComponent`。动画格从
+纹理左上角开始，按从左到右、再从上到下编号；组件提供列数、行数、起始格、帧数、
+统一帧时长、Loop/Once 和播放开关。`SpriteAnimationSystem` 在 Sprite 渲染系统之前
+更新 UV，因此本帧推进会在同一表现帧可见。暂停保留帧内时间，Once 停在末帧；场景
+重载只恢复作者参数，不恢复上次运行进度。
+
+该组件刻意只覆盖最常见的规则网格 MVP。非规则区域、逐帧时长、动画事件、命名
+片段与状态机应由后续独立 clip 资产描述，而不是继续扩张组件字段。
+
 ECS 结构、Simulation/Presentation 分轨和引导流程见 [design.md](design.md)。
 
 ## 确定性 Simulation / Presentation 分轨

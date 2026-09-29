@@ -19,6 +19,10 @@ namespace ayt::entity
 {
 
 #define AY_CURRENT_CLASS SpriteAnimationComponent
+/// Authors constant-rate playback for a regular SpriteComponent grid.
+///
+/// Cell zero is at the texture's top-left. Cells advance left-to-right and
+/// then top-to-bottom. Runtime playback state is not serialized.
 struct SpriteAnimationComponent : public IComponent {
     const char* getName() const override {
         return "SpriteAnimationComponent";
