@@ -23,6 +23,7 @@
 
 #include <AYEntity/2DUvMath.h>
 #include <AYEntity/components/OrthoCameraComponent.h>
+#include <AYEntity/components/SpriteAnimationComponent.h>
 #include <AYEntity/components/SpriteComponent.h>
 #include <AYEntity/components/TilemapComponent.h>
 
@@ -43,6 +44,7 @@
 using ayt::entity::Entity;
 using ayt::entity::OrthoCameraComponent;
 using ayt::entity::SpriteComponent;
+using ayt::entity::SpriteAnimationComponent;
 using ayt::entity::TilemapComponent;
 using ayt::entity::Transform;
 using ayt::entity::World;
@@ -137,6 +139,31 @@ TEST_CASE(world_lit_sprite_path_constructor_keeps_all_defaults)
     CHECK_INT_EQ(c.renderDomain, 0);
     CHECK_FALSE(c.isWorldLit());
     CHECK_TRUE(c.castShadow);
+}
+
+TEST_CASE(sprite_animation_component_defaults_and_bounds)
+{
+    SpriteAnimationComponent animation;
+    CHECK_INT_EQ(animation.columns, 1);
+    CHECK_INT_EQ(animation.rows, 1);
+    CHECK_INT_EQ(animation.firstFrame, 0);
+    CHECK_INT_EQ(animation.frameCount, 1);
+    CHECK_INT_EQ(animation.frameDurationMs, 100);
+    CHECK_INT_EQ(animation.playbackMode, 0);
+    CHECK_TRUE(animation.playing);
+    CHECK_TRUE(animation.isValid());
+    CHECK_INT_EQ(animation.effectiveFrameCount(), 1u);
+
+    animation.columns = 4;
+    animation.rows = 2;
+    animation.firstFrame = 6;
+    animation.frameCount = 8;
+    CHECK_TRUE(animation.isValid());
+    CHECK_INT_EQ(animation.effectiveFrameCount(), 2u);
+
+    animation.firstFrame = 8;
+    CHECK_FALSE(animation.isValid());
+    CHECK_INT_EQ(animation.effectiveFrameCount(), 0u);
 }
 
 // ─── #3 — OrthoCameraComponent ctor defaults. ─────────────────────
@@ -414,6 +441,16 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     sp->invertNormalY = true;
     sp->castShadow = false;
 
+    SpriteAnimationComponent* spriteAnimation =
+        original->addComponent<SpriteAnimationComponent>();
+    spriteAnimation->columns = 4;
+    spriteAnimation->rows = 2;
+    spriteAnimation->firstFrame = 1;
+    spriteAnimation->frameCount = 6;
+    spriteAnimation->frameDurationMs = 80;
+    spriteAnimation->playbackMode = 1;
+    spriteAnimation->playing = false;
+
     OrthoCameraComponent* cam = original->addComponent<OrthoCameraComponent>();
     cam->positionX       = 5.0f;
     cam->positionY       = -3.0f;
@@ -444,6 +481,7 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     CHECK_NOT_NULL(loaded);
     CHECK_TRUE(loaded->hasComponent<TilemapComponent>());
     CHECK_TRUE(loaded->hasComponent<SpriteComponent>());
+    CHECK_TRUE(loaded->hasComponent<SpriteAnimationComponent>());
     CHECK_TRUE(loaded->hasComponent<OrthoCameraComponent>());
     CHECK_TRUE(loaded->hasComponent<Transform>());
 
@@ -502,6 +540,20 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     CHECK_FLOAT_EQ(lsp->alphaCutoff, 0.35f, 1e-5f);
     CHECK_TRUE(lsp->invertNormalY);
     CHECK_FALSE(lsp->castShadow);
+
+    const SpriteAnimationComponent* loadedAnimation =
+        loaded->getComponent<SpriteAnimationComponent>();
+    CHECK_NOT_NULL(loadedAnimation);
+    CHECK_INT_EQ(loadedAnimation->columns, 4);
+    CHECK_INT_EQ(loadedAnimation->rows, 2);
+    CHECK_INT_EQ(loadedAnimation->firstFrame, 1);
+    CHECK_INT_EQ(loadedAnimation->frameCount, 6);
+    CHECK_INT_EQ(loadedAnimation->frameDurationMs, 80);
+    CHECK_INT_EQ(loadedAnimation->playbackMode, 1);
+    CHECK_FALSE(loadedAnimation->playing);
+    CHECK_INT_EQ(loadedAnimation->currentFrame, 0u);
+    CHECK_INT_EQ(loadedAnimation->elapsedMicroseconds, 0u);
+    CHECK_FALSE(loadedAnimation->finished);
 
     const OrthoCameraComponent* lcam = loaded->getComponent<OrthoCameraComponent>();
     CHECK_FLOAT_EQ(lcam->positionX, 5.0f, 1e-5f);

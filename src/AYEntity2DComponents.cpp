@@ -3,6 +3,7 @@
 #include <AYEntity.h>
 #include <AYEntity/ComponentRegistration.h>
 #include <AYEntity/components/OrthoCameraComponent.h>
+#include <AYEntity/components/SpriteAnimationComponent.h>
 #include <AYEntity/components/SpriteComponent.h>
 #include <AYEntity/components/TilemapComponent.h>
 #include <AYEntity/components/TransformComponent.h>
@@ -12,6 +13,7 @@ namespace ayt::entity
 
 AY_FINALIZE_REGISTRATION_METADATA(TilemapComponent)
 AY_FINALIZE_REGISTRATION_METADATA(SpriteComponent)
+AY_FINALIZE_REGISTRATION_METADATA(SpriteAnimationComponent)
 AY_FINALIZE_REGISTRATION_METADATA(OrthoCameraComponent)
 
 namespace {
@@ -65,6 +67,11 @@ ComponentRegistryResult registerEntity2DComponents(ComponentRegistry& registry)
     if (auto result = registerSceneComponent<SpriteComponent>(
             registry, "SpriteComponent", "Sprite", "2D",
             migrateLegacySpriteTransform);
+        !result) {
+        return result;
+    }
+    if (auto result = registerSceneComponent<SpriteAnimationComponent>(
+            registry, "SpriteAnimationComponent", "Sprite Animation", "2D");
         !result) {
         return result;
     }
