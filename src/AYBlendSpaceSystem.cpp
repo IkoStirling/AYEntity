@@ -176,6 +176,7 @@ void BlendSpaceSystem::onUpdate(float dt)
         SkeletonComponent*     skel = e->getComponent<SkeletonComponent>();
         BlendSpaceComponent*   bs   = e->getComponent<BlendSpaceComponent>();
         if (skel == nullptr || bs == nullptr) continue;
+        if (skel->externalPoseOwner) continue;
         if (!bs->isValid()) continue;
 
         // Defer if the skeleton hasn't been lazy-loaded yet by

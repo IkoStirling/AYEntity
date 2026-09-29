@@ -148,6 +148,7 @@ void AnimationSystem::onUpdate(float dt)
         SkeletonComponent* skel = e->getComponent<SkeletonComponent>();
         AnimationComponent* anim = e->getComponent<AnimationComponent>();
         if (skel == nullptr || anim == nullptr) continue;
+        if (skel->externalPoseOwner) continue;
 
         // First-time lazy-load. Skeletons are loaded ONCE per
         // unique skeletonPath (ResourceManager caches by path); the

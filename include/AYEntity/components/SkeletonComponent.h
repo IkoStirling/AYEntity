@@ -46,8 +46,12 @@ struct SkeletonComponent : public IComponent {
     // AnimationSystem refuses to touch a component whose magic doesn't
     // match — catches stale .obj ABI mismatches that otherwise AV inside
     // AnimationPlayer::setSkeleton with a near-null this (write @ 0x20).
-    static constexpr uint32_t kLayoutMagic = 0x534B4333; // 'SKC3'
+    static constexpr uint32_t kLayoutMagic = 0x534B4334; // 'SKC4'
     uint32_t layoutMagic = kLayoutMagic;
+    /// Main-thread, nonserialized exclusive external pose lease. Built-in
+    /// Animation/BlendSpace/StateMachine systems freeze while non-null. The
+    /// owner must release before World teardown; this does not lock setters.
+    const void* externalPoseOwner = nullptr;
 
     // Asset reference. Declared via AY_PROPERTY (which expands to
     // `Type name;` + serializer metadata). Don't redeclare.

@@ -80,6 +80,7 @@ void StateMachineSystem::onUpdate(float dt) {
         if (c == nullptr) continue;
         auto* skel = e->getComponent<SkeletonComponent>();
         if (skel == nullptr || skel->player == nullptr) continue;
+        if (skel->externalPoseOwner) continue;
 
         // (1) Lazily create the per-entity StateMachine. Tests bypass
         //     buildStateMachine by injecting via getOrCreateMachine.

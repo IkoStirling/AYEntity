@@ -1,5 +1,12 @@
 # AYEntity Design
 
+> **2026-09-29 — 外部骨骼姿势控制权**：`SkeletonComponent::externalPoseOwner`
+> 是主线程、非序列化的独占 lease，非空时 AnimationSystem、BlendSpaceSystem 和
+> StateMachineSystem 在加载、参数同步、tick、Notify 与姿势写入之前跳过对象。
+> AYSequence 使用独立采样器，不替换或重置原 player；原状态机、BlendSpace 与
+> 播放时间冻结，释放后从原状态继续。该字段不是 setter/线程锁，其他 writer
+> 也必须遵守 lease。所有者负责在 World teardown 前释放；组件 ABI magic 为 SKC4。
+
 > **2026-09-09 — WorldLit2D 第四刀（Shadow authoring）**：
 > `SpriteComponent` 与 `TilemapComponent` 新增可序列化 `castShadow`，
 > 默认开启以保持 WorldLit 的直觉行为。RenderSystem 显式生成
