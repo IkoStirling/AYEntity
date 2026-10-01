@@ -277,8 +277,13 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                                       + '"');
                 } else if (!entity->setComponentInstanceId(component, instanceId)
                            || !entity->setComponentDisplayName(component, displayName)) {
+                    const auto* current = entity->componentInstance(component);
                     s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
-                                  "invalid or duplicate component instance identity: " + typeName);
+                                  "invalid or duplicate component instance identity: " + typeName
+                                      + " on Entity '" + name + "' in " + scenePath
+                                      + " (schema=" + std::to_string(wireVersion)
+                                      + ", requested=" + instanceId
+                                      + ", current=" + (current ? current->id : "missing") + ")");
                 } else {
                     if (ComponentFactory::deserializeComponent(
                             s, typeName.c_str(), *component)) {
