@@ -202,7 +202,16 @@ bool readComponent(Entity& entity, const std::string& type,
         fail(error, "unsupported Actor component: " + type);
         return false;
     }
-    IComponent* component = ComponentFactory::addComponent(entity, type.c_str());
+    IComponent* component = instanceId.empty()
+        ? nullptr : entity.findComponentById(instanceId);
+    if (component) {
+        const char* existingType = ComponentFactory::registeredTypeName(*component);
+        if (!existingType || type != existingType) {
+            fail(error, "Actor component ID is bound to another type: " + instanceId);
+            return false;
+        }
+    }
+    if (!component) component = ComponentFactory::addComponent(entity, type.c_str());
     if (!component) {
         fail(error, "cannot add Actor component: " + type);
         return false;
@@ -255,9 +264,16 @@ bool collectSerializableComponents(const Entity& entity, Json& out,
             fail(error, "cannot capture Actor component: " + std::string(type));
             return false;
         }
-        out[type] = std::move(payload);
+        const auto* instance = entity.componentInstance(component);
+        if (!instance || !isValidComponentInstanceId(instance->id)) {
+            fail(error, "Actor component has no stable instance ID: " + std::string(type));
+            return false;
+        }
+        out[instance->id] = {{"$type", type},
+                             {"$displayName", instance->displayName},
+                             {"data", std::move(payload)}};
     }
-    if (!out.contains("Transform")) {
+    if (!out.contains(legacyComponentInstanceId("Transform"))) {
         fail(error, "Actor is missing Transform");
         return false;
     }
@@ -287,33 +303,47 @@ bool applyOverrides(Entity& entity, const std::string& encoded,
         const Json overrides = Json::parse(encoded);
         if (!overrides.is_object()) throw std::runtime_error("Actor overrides must be an object");
         for (auto it = overrides.begin(); it != overrides.end(); ++it) {
-            const std::string type = it.key();
+            const bool legacyKey = !isValidComponentInstanceId(it.key());
+            const std::string id = legacyKey
+                ? legacyComponentInstanceId(it.key()) : it.key();
+            const Json& change = it.value();
+            if (!change.is_object())
+                throw std::runtime_error("invalid Actor override: " + it.key());
+            const std::string op = change.value("op", std::string{});
+            IComponent* existing = entity.findComponentById(id);
+            const char* existingType = existing
+                ? ComponentFactory::registeredTypeName(*existing) : nullptr;
+            const std::string type = legacyKey ? it.key()
+                : change.value("type", existingType ? std::string(existingType) : std::string{});
             const auto* descriptor = ComponentRegistry::instance().find(type);
             if (!descriptor || !descriptor->sceneSerializable
-                || type == "ActorInstanceComponent" || !it.value().is_object()) {
-                throw std::runtime_error("invalid Actor override: " + type);
+                || type == "ActorInstanceComponent"
+                || (existingType && type != existingType)) {
+                throw std::runtime_error("invalid Actor override type: " + it.key());
             }
-            const Json& change = it.value();
-            const std::string op = change.value("op", std::string{});
             if (op == "remove") {
-                if (type == "Transform" || !descriptor->remove) {
+                if (type == "Transform" || !existing) {
                     throw std::runtime_error("cannot remove Actor root component: " + type);
                 }
-                descriptor->remove(entity);
+                if (!entity.removeComponentById(id)) return false;
             } else if (op == "add") {
                 if (!change.contains("value") || !change["value"].is_object()
                     || !readComponent(entity, type, change["value"].dump(),
-                                      legacyComponentInstanceId(type), {}, error)) return false;
+                                      id, change.value("displayName", std::string{}),
+                                      error)) return false;
             } else if (op == "patch") {
-                if (!change.contains("value") || !change["value"].is_array()
-                    || !descriptor->get) throw std::runtime_error("invalid patch: " + type);
-                IComponent* component = descriptor->get(entity);
+                if (!change.contains("value") || !change["value"].is_array())
+                    throw std::runtime_error("invalid patch: " + type);
                 Json base;
-                if (!component || !writeComponent(*component, base)) {
+                if (!existing || !writeComponent(*existing, base)) {
                     throw std::runtime_error("missing patch base: " + type);
                 }
                 const Json patched = base.patch(change["value"]);
-                if (!readComponent(entity, type, patched.dump(), {}, {}, error)) return false;
+                const auto* instance = entity.componentInstance(existing);
+                const std::string displayName = change.value("displayName",
+                    instance ? instance->displayName : std::string{});
+                if (!readComponent(entity, type, patched.dump(), id,
+                                   displayName, error)) return false;
             } else {
                 throw std::runtime_error("unknown Actor override operation: " + op);
             }
@@ -669,27 +699,42 @@ bool captureActorOverrides(const Entity& entity,
     }
     Json current;
     if (!collectSerializableComponents(entity, current, error)) return false;
-    std::unordered_set<std::string> latestTypes{"Transform"};
-    for (const auto& component : asset.components) latestTypes.insert(component.type);
+    std::unordered_set<std::string> latestIds{legacyComponentInstanceId("Transform")};
+    for (const auto& component : asset.components) latestIds.insert(slotId(component));
     Json overrides = Json::object();
     for (auto entry = defaults.begin(); entry != defaults.end(); ++entry) {
-        const std::string type = entry.key();
+        const std::string id = entry.key();
         const Json& base = entry.value();
-        const auto it = current.find(type);
-        if (it == current.end()) overrides[type] = {{"op", "remove"}};
+        const auto it = current.find(id);
+        if (it == current.end()) overrides[id] = {{"op", "remove"},
+                                                   {"type", base.at("$type")}};
         else if (it.value() != base) {
-            if (!latestTypes.contains(type)) {
-                overrides[type] = {{"op", "add"}, {"value", it.value()}};
+            if (it.value().at("$type") != base.at("$type")) {
+                fail(error, "Actor component ID changed type: " + id);
+                return false;
+            }
+            if (!latestIds.contains(id)) {
+                overrides[id] = {{"op", "add"},
+                                 {"type", it.value().at("$type")},
+                                 {"displayName", it.value().at("$displayName")},
+                                 {"value", it.value().at("data")}};
             } else {
-                overrides[type] = {{"op", "patch"},
-                                   {"value", Json::diff(base, it.value())}};
+                overrides[id] = {{"op", "patch"},
+                                 {"type", it.value().at("$type")},
+                                 {"value", Json::diff(base.at("data"),
+                                                       it.value().at("data"))}};
+                if (it.value().at("$displayName") != base.at("$displayName"))
+                    overrides[id]["displayName"] = it.value().at("$displayName");
             }
         }
     }
     for (auto entry = current.begin(); entry != current.end(); ++entry) {
-        const std::string type = entry.key();
-        if (!defaults.contains(type)) {
-            overrides[type] = {{"op", "add"}, {"value", entry.value()}};
+        const std::string id = entry.key();
+        if (!defaults.contains(id)) {
+            overrides[id] = {{"op", "add"},
+                             {"type", entry.value().at("$type")},
+                             {"displayName", entry.value().at("$displayName")},
+                             {"value", entry.value().at("data")}};
         }
     }
     instance.componentOverridesJson = overrides.dump();

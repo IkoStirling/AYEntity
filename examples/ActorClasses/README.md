@@ -19,7 +19,7 @@ dispatch. The runtime stores instances as ordinary ECS Entities with an
 The editor can reload saved Logia behavior during Play when the script watcher
 is enabled. Class structure and default changes take effect when a Scene is
 loaded or Play restarts; existing Play Entities are not migrated in place.
-Schema 1 class files remain readable; new saves use schema 2. Actor class and
+Schema 1 and 2 class files remain readable; new saves use schema 3. Actor class and
 script files are loose assets under the same resource root as the Scene.
 Actor `on_update` runs in the Gameplay phase, so it should not be used as a
 deterministic fixed-step authority or replication protocol. Networked games

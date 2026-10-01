@@ -2,10 +2,12 @@
 #include <AYEntity/ActorClassAsset.h>
 #include <AYEntity/EntityModule.h>
 #include <AYEntity/SceneSerializer.h>
+#include <AYEntity/ComponentRegistry.h>
 #include <AYEntity/components/ActorInstanceComponent.h>
 #include <AYEntity/components/HealthComponent.h>
 #include <AYEntity/components/TransformComponent.h>
 #include <AYTest.h>
+#include <AYSerializer/SerializerCore.h>
 
 #include <filesystem>
 #include <fstream>
@@ -15,7 +17,107 @@
 
 using namespace ayt::entity;
 
+namespace {
+class ActorMultiProbe final : public IComponent {
+public:
+    const char* getName() const override { return "ActorMultiProbe"; }
+    Int32 value = 0;
+};
+
+bool registerActorMultiProbe() {
+    ComponentDescriptor descriptor;
+    descriptor.name = "test.ActorMultiProbe";
+    descriptor.displayName = "Actor Multi Probe";
+    descriptor.type = typeid(ActorMultiProbe);
+    descriptor.size = sizeof(ActorMultiProbe);
+    descriptor.alignment = alignof(ActorMultiProbe);
+    descriptor.multiplicity = ComponentMultiplicity::Multiple;
+    descriptor.sceneSerializable = true;
+    descriptor.add = [](Entity& entity) -> IComponent* {
+        return entity.createComponent<ActorMultiProbe>();
+    };
+    descriptor.get = [](Entity& entity) -> IComponent* {
+        return entity.getComponent<ActorMultiProbe>();
+    };
+    descriptor.has = [](const Entity& entity) -> bool {
+        return entity.hasComponent<ActorMultiProbe>();
+    };
+    descriptor.remove = [](Entity& entity) { entity.removeComponent<ActorMultiProbe>(); };
+    descriptor.serialize = [](ayt::serializer::ISerializer& s, const IComponent& c) {
+        Int32 value = static_cast<const ActorMultiProbe&>(c).value;
+        s.field("value", value);
+    };
+    descriptor.deserialize = [](ayt::serializer::ISerializer& s, IComponent& c) {
+        s.field("value", static_cast<ActorMultiProbe&>(c).value);
+    };
+    return ComponentRegistry::instance().registerComponent(std::move(descriptor)).succeeded();
+}
+} // namespace
+
 TEST_SUITE(ActorClass)
+
+TEST_CASE(actor_multi_slots_inherit_override_and_roundtrip)
+{
+    namespace fs = std::filesystem;
+    World& world = World::instance();
+    world.initialize();
+    registerEntityComponents();
+    CHECK(registerActorMultiProbe());
+    const fs::path root = fs::temp_directory_path()
+        / "ay_actor_multi_slots" / "Assets";
+    fs::create_directories(root / "actors");
+    fs::create_directories(root / "worlds");
+    const std::string firstId = makeComponentInstanceId();
+    const std::string secondId = makeComponentInstanceId();
+    ActorClassAsset base;
+    base.id = "MultiBase";
+    base.components.push_back({"test.ActorMultiProbe", R"({"value":10})",
+                               firstId, "First"});
+    base.components.push_back({"test.ActorMultiProbe", R"({"value":20})",
+                               secondId, "Second"});
+    std::string error;
+    CHECK(saveActorClassAsset((root / "actors/Base.ayactor").string(), base, &error));
+    ActorClassAsset child;
+    child.id = "MultiChild";
+    child.parentPath = "actors/Base.ayactor";
+    child.components.push_back({"test.ActorMultiProbe", R"({"value":25})",
+                                secondId, {}});
+    CHECK(saveActorClassAsset((root / "actors/Child.ayactor").string(), child, &error));
+    ActorClassAsset effective;
+    CHECK(resolveActorClassAsset(root.string(), "actors/Child.ayactor", effective, &error));
+    CHECK_INT_EQ(static_cast<int>(effective.components.size()), 2);
+    Entity* entity = world.createEntity();
+    entity->setName("MultiActor");
+    CHECK(instantiateActorClass(*entity, child, "actors/Child.ayactor",
+                                root.string(), &error));
+    auto* first = static_cast<ActorMultiProbe*>(entity->findComponentById(firstId));
+    auto* second = static_cast<ActorMultiProbe*>(entity->findComponentById(secondId));
+    CHECK_NOT_NULL(first);
+    CHECK_NOT_NULL(second);
+    CHECK_INT_EQ(first->value, 10);
+    CHECK_INT_EQ(second->value, 25);
+    first->value = 13;
+    CHECK(entity->removeComponentById(secondId));
+    auto* third = entity->createComponent<ActorMultiProbe>();
+    third->value = 30;
+    const std::string thirdId = entity->componentInstance(third)->id;
+    const auto scene = root / "worlds/Multi.ayscene";
+    CHECK(saveScene(world, scene.string()));
+    ayt::serializer::SerializeError sceneError;
+    CHECK(loadScene(world, scene.string(), &sceneError));
+    CHECK(sceneError.ok());
+    entity = world.findEntity("MultiActor");
+    CHECK_NOT_NULL(entity);
+    first = static_cast<ActorMultiProbe*>(entity->findComponentById(firstId));
+    third = static_cast<ActorMultiProbe*>(entity->findComponentById(thirdId));
+    CHECK_NOT_NULL(first);
+    CHECK_NOT_NULL(third);
+    CHECK_INT_EQ(first->value, 13);
+    CHECK_INT_EQ(third->value, 30);
+    CHECK(entity->findComponentById(secondId) == nullptr);
+    world.shutdown();
+    fs::remove_all(root.parent_path());
+}
 
 TEST_CASE(actor_class_scene_roundtrip_preserves_identity_and_field_overrides)
 {

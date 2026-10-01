@@ -1,6 +1,6 @@
 {
   "type": "ay.actorClass",
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "id": "EnemyActor",
   "script": "actors/EnemyActor.logia",
   "properties": {
@@ -10,6 +10,8 @@
   "components": [
     {
       "$type": "HealthComponent",
+      "$instanceId": "a1c74be68f4d40e8ac73512b8a033bb9",
+      "$displayName": "Health",
       "currentHp": 100,
       "maxHp": 100
     }
