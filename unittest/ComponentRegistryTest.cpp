@@ -30,6 +30,13 @@ public:
     const char* getName() const override { return "ExplicitUseComponent"; }
 };
 
+class MultiProbeComponent final : public IComponent
+{
+public:
+    const char* getName() const override { return "MultiProbeComponent"; }
+    int value = 0;
+};
+
 } // namespace
 
 TEST_SUITE(ComponentRegistryTests)
@@ -135,6 +142,42 @@ TEST_CASE(factory_uses_registry_canonical_name)
     CHECK_NOT_NULL(registeredName);
     CHECK(std::strcmp(registeredName, "HealthComponent") == 0);
     CHECK_TRUE(ComponentFactory::isSceneSerializable(registeredName));
+}
+
+TEST_CASE(multiple_instances_keep_distinct_identity_and_one_query_membership)
+{
+    ComponentRegistry& registry = ComponentRegistry::instance();
+    CHECK_TRUE(registerComponent<MultiProbeComponent>(registry,
+        "test.MultiProbe", "Multi Probe", "Tests",
+        ComponentMultiplicity::Multiple).succeeded());
+    World& world = World::processWorld();
+    world.initialize();
+    Entity* entity = world.createEntity();
+    CHECK(entity->addComponent<MultiProbeComponent>() == nullptr);
+    auto* first = entity->createComponent<MultiProbeComponent>();
+    auto* second = entity->createComponent<MultiProbeComponent>();
+    CHECK_NOT_NULL(first);
+    CHECK_NOT_NULL(second);
+    first->value = 10;
+    second->value = 20;
+    const std::string firstId = entity->componentInstance(first)->id;
+    const std::string secondId = entity->componentInstance(second)->id;
+    CHECK(firstId != secondId);
+    CHECK(entity->getComponent<MultiProbeComponent>() == nullptr);
+    CHECK_INT_EQ(static_cast<int>(entity->getComponents<MultiProbeComponent>().size()), 2);
+    int entityMatches = 0;
+    for (Entity* found : world.query<MultiProbeComponent>()) {
+        CHECK(found == entity);
+        ++entityMatches;
+    }
+    CHECK_INT_EQ(entityMatches, 1);
+    CHECK(entity->removeComponentById(firstId));
+    CHECK(entity->findComponentById(firstId) == nullptr);
+    CHECK(entity->findComponentById(secondId) == second);
+    CHECK_INT_EQ(second->value, 20);
+    CHECK_INT_EQ(static_cast<int>(entity->getComponents<MultiProbeComponent>().size()), 1);
+    world.destroyEntity(entity);
+    world.shutdown();
 }
 
 TEST_SUITE_END

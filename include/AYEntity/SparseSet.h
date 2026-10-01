@@ -59,6 +59,12 @@ public:
         _sparse[entityId] = INVALID_INDEX;
     }
 
+    bool removeInstance(uint32_t entityId, void* component) override {
+        if (get(entityId) != component) return false;
+        remove(entityId);
+        return true;
+    }
+
     size_t size() const override {
         return _dense.size();
     }
@@ -79,7 +85,7 @@ public:
         return static_cast<T*>(get(entityId));
     }
 
-    const std::vector<uint32_t>& getEntityIds() const { return _inverse; }
+    const std::vector<uint32_t>& getEntityIds() const override { return _inverse; }
     const std::vector<T*>& getDense() const { return _dense; }
 
 private:

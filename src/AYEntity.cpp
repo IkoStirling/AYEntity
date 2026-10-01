@@ -2,10 +2,47 @@
 
 #include <AYEntity.h>
 #include <AYEntity/ComponentFactory.h>
+#include <algorithm>
+#include <atomic>
+#include <cctype>
 #include <cstdio>
+#include <iomanip>
+#include <random>
+#include <sstream>
 
 namespace ayt::entity
 {
+
+std::string makeComponentInstanceId() {
+    static std::atomic<uint64_t> serial{1};
+    std::random_device random;
+    std::ostringstream out;
+    out << std::hex << std::setfill('0') << std::setw(8) << random()
+        << std::setw(8) << random() << std::setw(16) << serial.fetch_add(1);
+    return out.str();
+}
+
+std::string legacyComponentInstanceId(const std::string& registeredTypeName) {
+    // The same legacy slot keeps the same Entity-local identity on every load.
+    constexpr uint64_t basis = 14695981039346656037ull;
+    constexpr uint64_t prime = 1099511628211ull;
+    uint64_t left = basis;
+    uint64_t right = basis ^ 0x9e3779b97f4a7c15ull;
+    for (unsigned char c : registeredTypeName) {
+        left = (left ^ c) * prime;
+        right = (right ^ c) * prime;
+    }
+    std::ostringstream out;
+    out << std::hex << std::setfill('0') << std::setw(16) << left
+        << std::setw(16) << right;
+    return out.str();
+}
+
+bool isValidComponentInstanceId(const std::string& id) noexcept {
+    return id.size() == 32 && std::all_of(id.begin(), id.end(), [](unsigned char c) {
+        return std::isdigit(c) != 0 || (c >= 'a' && c <= 'f');
+    });
+}
 
 Entity::Entity() = default;
 
@@ -24,7 +61,8 @@ void Entity::removeAllComponents() {
     // each SparseSet sees the entity's id and drops the entry.
     World* world = getWorld();
     if (world) {
-        for (size_t typeHash : _componentTypeHashes) {
+        for (const auto& instance : _componentInstances) {
+            const size_t typeHash = instance.typeHash;
             auto it = world->_componentStorages.find(typeHash);
             if (it != world->_componentStorages.end()) {
                 it->second->remove(_id);
@@ -32,12 +70,11 @@ void Entity::removeAllComponents() {
         }
     }
 
-    for (auto* component : _components) {
-        component->onDetach();
-        delete component;
+    for (const auto& instance : _componentInstances) {
+        instance.component->onDetach();
+        delete instance.component;
     }
-    _components.clear();
-    _componentTypeHashes.clear();
+    _componentInstances.clear();
 }
 
 void Entity::setName(const char* name) {
@@ -68,14 +105,14 @@ void Entity::onDetachFromWorld() {
 
 void Entity::onUpdate(float dt) {
     (void)dt;
-    for (auto* component : _components) {
-        component->onUpdate(dt);
+    for (const auto& instance : _componentInstances) {
+        instance.component->onUpdate(dt);
     }
 }
 
 void Entity::onStart() {
-    for (auto* component : _components) {
-        component->onStart();
+    for (const auto& instance : _componentInstances) {
+        instance.component->onStart();
     }
 }
 
@@ -95,8 +132,72 @@ void Entity::removeComponentByName(const char* typeName) {
     (void)ComponentFactory::removeComponent(*this, typeName);
 }
 
+IComponent* Entity::findComponentById(const std::string& id) const noexcept {
+    const auto* instance = findComponentInstance(id);
+    return instance ? instance->component : nullptr;
+}
+
+bool Entity::removeComponentById(const std::string& id) {
+    if (!_world) return false;
+    for (size_t i = 0; i < _componentInstances.size(); ++i) {
+        if (_componentInstances[i].id != id) continue;
+        const auto instance = _componentInstances[i];
+        const auto storage = _world->_componentStorages.find(instance.typeHash);
+        if (storage == _world->_componentStorages.end()
+            || !storage->second->removeInstance(_id, instance.component)) return false;
+        _componentInstances.erase(_componentInstances.begin() + static_cast<long>(i));
+        instance.component->onDetach();
+        delete instance.component;
+        return true;
+    }
+    return false;
+}
+
 std::vector<IComponent*> Entity::getComponents() const {
-    return _components;
+    std::vector<IComponent*> result;
+    result.reserve(_componentInstances.size());
+    for (const auto& instance : _componentInstances) result.push_back(instance.component);
+    return result;
+}
+
+const Entity::ComponentInstance* Entity::componentInstance(
+    const IComponent* component) const noexcept {
+    for (const auto& instance : _componentInstances) {
+        if (instance.component == component) return &instance;
+    }
+    return nullptr;
+}
+
+const Entity::ComponentInstance* Entity::findComponentInstance(
+    const std::string& id) const noexcept {
+    for (const auto& instance : _componentInstances) {
+        if (instance.id == id) return &instance;
+    }
+    return nullptr;
+}
+
+bool Entity::setComponentInstanceId(const IComponent* component, const std::string& id) {
+    if (!isValidComponentInstanceId(id)) return false;
+    for (auto& instance : _componentInstances) {
+        if (instance.id == id && instance.component != component) return false;
+        if (instance.component == component) {
+            if (instance.restoredIdentity) return instance.id == id;
+            instance.id = id;
+            instance.restoredIdentity = true;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Entity::setComponentDisplayName(const IComponent* component, std::string name) {
+    for (auto& instance : _componentInstances) {
+        if (instance.component == component) {
+            instance.displayName = std::move(name);
+            return true;
+        }
+    }
+    return false;
 }
 
 Entity* Entity::create() {

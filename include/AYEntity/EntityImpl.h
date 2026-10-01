@@ -14,6 +14,12 @@ class World;
 
 constexpr uint32_t MAX_ENTITIES = 10000;
 
+// Persistent, Entity-local identity. The value is independent of runtime
+// EntityHandle generations and must never be used as a raw pointer handle.
+std::string makeComponentInstanceId();
+std::string legacyComponentInstanceId(const std::string& registeredTypeName);
+bool isValidComponentInstanceId(const std::string& id) noexcept;
+
 // =============================================================================
 // Query - declaration
 // =============================================================================
@@ -25,6 +31,14 @@ class Query;
 // =============================================================================
 class Entity {
 public:
+    struct ComponentInstance {
+        IComponent* component = nullptr;
+        size_t typeHash = 0;
+        std::string id;
+        std::string displayName;
+        bool restoredIdentity = false;
+    };
+
     static Entity* create();
     static void destroy(Entity* e);
 
@@ -38,8 +52,15 @@ public:
     template<typename T, typename... Args>
     T* addComponent(Args&&... args);
 
+    /// Create one new instance. A Single type rejects a second instance.
+    template<typename T, typename... Args>
+    T* createComponent(Args&&... args);
+
     template<typename T>
     T* getComponent();
+
+    template<typename T>
+    std::vector<T*> getComponents() const;
 
     template<typename T>
     void removeComponent();
@@ -48,8 +69,22 @@ public:
     IComponent* getComponentByName(const char* typeName);
     bool hasComponentByName(const char* typeName) const;
     void removeComponentByName(const char* typeName);
+    IComponent* findComponentById(const std::string& id) const noexcept;
+    bool removeComponentById(const std::string& id);
 
     std::vector<IComponent*> getComponents() const;
+    /// Runtime components with persistent Entity-local IDs and authoring labels.
+    /// Pointers and references become invalid after structural mutation.
+    const std::vector<ComponentInstance>& componentInstances() const noexcept {
+        return _componentInstances;
+    }
+    const ComponentInstance* componentInstance(const IComponent* component) const noexcept;
+    const ComponentInstance* findComponentInstance(const std::string& id) const noexcept;
+    /// Restore a persisted ID before exposing a newly loaded component.
+    /// Ordinary gameplay must not change an existing component's identity.
+    bool setComponentInstanceId(const IComponent* component, const std::string& id);
+    /// Rename the authoring label without changing the component's identity.
+    bool setComponentDisplayName(const IComponent* component, std::string name);
     bool isValid() const { return _id != INVALID_ID && _world != nullptr; }
 
     World* getWorld() const { return _world; }
@@ -69,8 +104,7 @@ private:
     uint32_t _id = INVALID_ID;
     std::string _name;
     World* _world = nullptr;
-    std::vector<IComponent*> _components;
-    std::vector<size_t> _componentTypeHashes;
+    std::vector<ComponentInstance> _componentInstances;
 
     friend class World;
 };

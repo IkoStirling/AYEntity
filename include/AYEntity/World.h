@@ -157,6 +157,9 @@ void World::registerComponentType(const char* name) {
 
 template<typename T>
 SparseSet<T>* World::getStorage() {
+    const auto* descriptor = ComponentRegistry::instance().find<T>();
+    if (descriptor && descriptor->multiplicity == ComponentMultiplicity::Multiple)
+        return nullptr;
     size_t typeHash = typeid(T).hash_code();
     auto it = _componentStorages.find(typeHash);
     return (it != _componentStorages.end()) ? static_cast<SparseSet<T>*>(it->second.get()) : nullptr;

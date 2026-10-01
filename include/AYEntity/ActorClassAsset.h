@@ -11,6 +11,9 @@ struct ActorInstanceComponent;
 struct ActorComponentDefault {
     std::string type;
     std::string payloadJson;
+    // Stable slot identity within an Actor class and each instantiated Entity.
+    std::string instanceId;
+    std::string displayName;
 };
 
 struct ActorClassAsset {
@@ -24,11 +27,13 @@ struct ActorClassAsset {
     // Object of primitive property defaults, keyed by Logia self field name.
     std::string propertiesJson = "{}";
     std::vector<ActorComponentDefault> components;
+    // Schema 3 uses component instance IDs. Legacy callers may still supply a
+    // registered type name for the one slot of that type.
     std::vector<std::string> removedComponents;
     std::vector<std::string> removedProperties;
 };
 
-/// Parse a schema 1 or 2 `.ayactor` document in memory, including component
+/// Parse a schema 1, 2 or 3 `.ayactor` document in memory, including component
 /// registration checks. Use this for editor diagnostics before saving.
 bool parseActorClassAsset(const std::string& source,
                           ActorClassAsset& out, std::string* error = nullptr);

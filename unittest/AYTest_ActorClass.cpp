@@ -42,6 +42,8 @@ TEST_CASE(actor_class_scene_roundtrip_preserves_identity_and_field_overrides)
     first->setName("Enemy A");
     CHECK(instantiateActorClass(*first, asset, "actors/Enemy.ayactor",
                                 root.string(), &error));
+    const std::string healthSlotId =
+        first->componentInstance(first->getComponent<HealthComponent>())->id;
     const std::string firstId = first->getComponent<ActorInstanceComponent>()->instanceId;
     first->getComponent<Transform>()->setPosition(3.0f, 0.0f, 0.0f);
     first->getComponent<HealthComponent>()->currentHp = 25;
@@ -63,6 +65,7 @@ TEST_CASE(actor_class_scene_roundtrip_preserves_identity_and_field_overrides)
     CHECK_NOT_NULL(first);
     CHECK_NOT_NULL(second);
     CHECK(first->getComponent<ActorInstanceComponent>()->instanceId == firstId);
+    CHECK(first->componentInstance(first->getComponent<HealthComponent>())->id == healthSlotId);
     CHECK(second->getComponent<ActorInstanceComponent>()->instanceId == secondId);
     CHECK_FLOAT_EQ(first->getComponent<Transform>()->position.x, 3.0f, 0.001f);
     CHECK_INT_EQ(first->getComponent<HealthComponent>()->currentHp, 25);
@@ -153,7 +156,7 @@ TEST_CASE(actor_schema_one_remains_readable)
         std::ifstream migrated(path);
         const std::string serialized((std::istreambuf_iterator<char>(migrated)),
                                      std::istreambuf_iterator<char>());
-        CHECK(serialized.find("\"schemaVersion\": 2")
+        CHECK(serialized.find("\"schemaVersion\": 3")
               != std::string::npos);
     }
     fs::remove_all(root);

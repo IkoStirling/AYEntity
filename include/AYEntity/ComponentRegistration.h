@@ -17,7 +17,8 @@ template<std::derived_from<IComponent> T>
 ComponentDescriptor makeComponentDescriptor(
     std::string_view name,
     std::string_view displayName,
-    std::string_view category)
+    std::string_view category,
+    ComponentMultiplicity multiplicity = ComponentMultiplicity::Single)
 {
     ComponentDescriptor descriptor;
     descriptor.name = std::string(name);
@@ -25,13 +26,14 @@ ComponentDescriptor makeComponentDescriptor(
         ? descriptor.name
         : std::string(displayName);
     descriptor.category = category.empty() ? "General" : std::string(category);
+    descriptor.multiplicity = multiplicity;
     descriptor.type = std::type_index(typeid(T));
     descriptor.size = sizeof(T);
     descriptor.alignment = alignof(T);
     descriptor.editorAddable = true;
-    descriptor.add = [](Entity& entity) -> IComponent* {
-        return entity.addComponent<T>();
-    };
+    descriptor.add = multiplicity == ComponentMultiplicity::Multiple
+        ? +[](Entity& entity) -> IComponent* { return entity.createComponent<T>(); }
+        : +[](Entity& entity) -> IComponent* { return entity.addComponent<T>(); };
     descriptor.get = [](Entity& entity) -> IComponent* {
         return entity.getComponent<T>();
     };
@@ -52,12 +54,13 @@ template<std::derived_from<IComponent> T>
     ComponentRegistry& registry,
     std::string_view name,
     std::string_view displayName = {},
-    std::string_view category = {})
+    std::string_view category = {},
+    ComponentMultiplicity multiplicity = ComponentMultiplicity::Single)
 {
     return registry.registerComponent(detail::makeComponentDescriptor<T>(
         name,
         displayName,
-        category));
+        category, multiplicity));
 }
 
 // Explicit registration for a component supported by .ayscene dispatch.
@@ -67,12 +70,13 @@ template<std::derived_from<IComponent> T>
     std::string_view name,
     std::string_view displayName = {},
     std::string_view category = {},
-    ComponentAfterSceneDeserializeFn afterSceneDeserialize = nullptr)
+    ComponentAfterSceneDeserializeFn afterSceneDeserialize = nullptr,
+    ComponentMultiplicity multiplicity = ComponentMultiplicity::Single)
 {
     ComponentDescriptor descriptor = detail::makeComponentDescriptor<T>(
         name,
         displayName,
-        category);
+        category, multiplicity);
     descriptor.sceneSerializable = true;
     descriptor.serialize = [](
         ayt::serializer::ISerializer& serializer,

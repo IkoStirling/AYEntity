@@ -42,6 +42,16 @@ bool identifier(const std::string& value)
     });
 }
 
+std::string slotId(const ActorComponentDefault& component) {
+    return component.instanceId.empty()
+        ? legacyComponentInstanceId(component.type) : component.instanceId;
+}
+
+std::string removedSlotId(const std::string& value) {
+    return isValidComponentInstanceId(value)
+        ? value : legacyComponentInstanceId(value);
+}
+
 bool portablePath(const std::string& value, const std::string& suffix)
 {
     if (value.empty() || value.find('\\') != std::string::npos
@@ -111,12 +121,19 @@ bool validate(const ActorClassAsset& asset, std::string* error)
             }
         }
         std::unordered_set<std::string> types;
+        std::unordered_set<std::string> ids;
         for (const auto& component : asset.components) {
             const auto* descriptor = ComponentRegistry::instance().find(component.type);
-            if (!types.insert(component.type).second || descriptor == nullptr
-                || !descriptor->sceneSerializable
+            if (descriptor == nullptr || !descriptor->sceneSerializable
                 || component.type == "ActorInstanceComponent") {
-                throw std::runtime_error("duplicate or unsupported Actor component: "
+                throw std::runtime_error("unsupported Actor component: "
+                    + component.type);
+            }
+            if (!isValidComponentInstanceId(slotId(component))
+                || !ids.insert(slotId(component)).second
+                || (descriptor->multiplicity == ComponentMultiplicity::Single
+                    && !types.insert(component.type).second)) {
+                throw std::runtime_error("duplicate or invalid Actor component identity: "
                     + component.type);
             }
             if (!Json::parse(component.payloadJson).is_object()) {
@@ -124,10 +141,13 @@ bool validate(const ActorClassAsset& asset, std::string* error)
                     + component.type);
             }
         }
-        for (const auto& type : asset.removedComponents) {
-            if (type == "Transform" || type == "ActorInstanceComponent"
-                || !types.insert(type).second) {
-                throw std::runtime_error("duplicate or invalid removed Actor component: " + type);
+        std::unordered_set<std::string> removals;
+        for (const auto& removed : asset.removedComponents) {
+            const std::string id = removedSlotId(removed);
+            if (removed == "Transform" || removed == "ActorInstanceComponent"
+                || !isValidComponentInstanceId(id) || ids.contains(id)
+                || !removals.insert(id).second) {
+                throw std::runtime_error("duplicate or invalid removed Actor component: " + removed);
             }
         }
         std::unordered_set<std::string> propertyRemovals;
@@ -174,7 +194,8 @@ bool validatePropertyOverrides(const ActorClassAsset& asset,
 }
 
 bool readComponent(Entity& entity, const std::string& type,
-                   const std::string& payload, std::string* error)
+                   const std::string& payload, const std::string& instanceId,
+                   const std::string& displayName, std::string* error)
 {
     const auto* descriptor = ComponentRegistry::instance().find(type);
     if (!descriptor || !descriptor->sceneSerializable) {
@@ -186,6 +207,12 @@ bool readComponent(Entity& entity, const std::string& type,
         fail(error, "cannot add Actor component: " + type);
         return false;
     }
+    if (!instanceId.empty()
+        && !entity.setComponentInstanceId(component, instanceId)) {
+        fail(error, "invalid Actor component instance ID: " + instanceId);
+        return false;
+    }
+    if (!entity.setComponentDisplayName(component, displayName)) return false;
     auto reader = ayt::serializer::createSerializer(
         ayt::serializer::Format::Json);
     reader->deserialize(payload);
@@ -240,12 +267,15 @@ bool collectSerializableComponents(const Entity& entity, Json& out,
 bool applyDefaults(Entity& entity, const ActorClassAsset& asset,
                    std::string* error)
 {
-    if (!entity.addComponent<Transform>()) {
+    auto* transform = entity.addComponent<Transform>();
+    if (!transform || !entity.setComponentInstanceId(
+            transform, legacyComponentInstanceId("Transform"))) {
         fail(error, "Actor requires registered Transform component");
         return false;
     }
     for (const auto& entry : asset.components) {
-        if (!readComponent(entity, entry.type, entry.payloadJson, error)) return false;
+        if (!readComponent(entity, entry.type, entry.payloadJson,
+                           slotId(entry), entry.displayName, error)) return false;
     }
     return true;
 }
@@ -272,7 +302,8 @@ bool applyOverrides(Entity& entity, const std::string& encoded,
                 descriptor->remove(entity);
             } else if (op == "add") {
                 if (!change.contains("value") || !change["value"].is_object()
-                    || !readComponent(entity, type, change["value"].dump(), error)) return false;
+                    || !readComponent(entity, type, change["value"].dump(),
+                                      legacyComponentInstanceId(type), {}, error)) return false;
             } else if (op == "patch") {
                 if (!change.contains("value") || !change["value"].is_array()
                     || !descriptor->get) throw std::runtime_error("invalid patch: " + type);
@@ -282,7 +313,7 @@ bool applyOverrides(Entity& entity, const std::string& encoded,
                     throw std::runtime_error("missing patch base: " + type);
                 }
                 const Json patched = base.patch(change["value"]);
-                if (!readComponent(entity, type, patched.dump(), error)) return false;
+                if (!readComponent(entity, type, patched.dump(), {}, {}, error)) return false;
             } else {
                 throw std::runtime_error("unknown Actor override operation: " + op);
             }
@@ -333,25 +364,32 @@ bool mergeActorClass(const ActorClassAsset& parent,
         }
         result.propertiesJson = properties.dump();
 
-        for (const auto& type : child.removedComponents) {
+        for (const auto& removed : child.removedComponents) {
+            const std::string id = removedSlotId(removed);
             const auto found = std::find_if(result.components.begin(),
-                result.components.end(), [&](const auto& item) { return item.type == type; });
+                result.components.end(), [&](const auto& item) { return slotId(item) == id; });
             if (found == result.components.end()) {
-                throw std::runtime_error("Actor removes unknown inherited component: " + type);
+                throw std::runtime_error("Actor removes unknown inherited component: " + removed);
             }
             result.components.erase(found);
         }
         for (const auto& component : child.components) {
             const auto found = std::find_if(result.components.begin(),
                 result.components.end(), [&](const auto& item) {
-                    return item.type == component.type;
+                    return slotId(item) == slotId(component);
                 });
             if (found == result.components.end()) {
                 result.components.push_back(component);
             } else {
+                if (found->type != component.type) {
+                    throw std::runtime_error("Actor changes an inherited component type: "
+                        + slotId(component));
+                }
                 Json payload = Json::parse(found->payloadJson);
                 payload.merge_patch(Json::parse(component.payloadJson));
                 found->payloadJson = payload.dump();
+                if (!component.displayName.empty())
+                    found->displayName = component.displayName;
             }
         }
         if (!validate(result, error)) return false;
@@ -409,15 +447,19 @@ bool parseActorClassAsset(const std::string& source,
         const Json wire = Json::parse(source);
         const int schema = wire.value("schemaVersion", 0);
         if (!wire.is_object() || wire.value("type", std::string{}) != "ay.actorClass"
-            || (schema != 1 && schema != 2)) {
+            || (schema != 1 && schema != 2 && schema != 3)) {
             throw std::runtime_error("unsupported Actor class type or schema");
         }
         ActorClassAsset candidate;
         candidate.id = wire.at("id").get<std::string>();
-        if (schema == 2) {
+        if (schema >= 2) {
             candidate.parentPath = wire.value("parent", std::string{});
             candidate.removedComponents = wire.value("removeComponents",
                 std::vector<std::string>{});
+            if (schema == 2) {
+                for (auto& removed : candidate.removedComponents)
+                    removed = removedSlotId(removed);
+            }
             candidate.removedProperties = wire.value("removeProperties",
                 std::vector<std::string>{});
         }
@@ -429,8 +471,15 @@ bool parseActorClassAsset(const std::string& source,
                 if (!item.is_object()) throw std::runtime_error("component must be an object");
                 ActorComponentDefault entry;
                 entry.type = item.at("$type").get<std::string>();
+                entry.instanceId = schema >= 3
+                    ? item.at("$instanceId").get<std::string>()
+                    : legacyComponentInstanceId(entry.type);
+                entry.displayName = schema >= 3
+                    ? item.value("$displayName", std::string{}) : std::string{};
                 Json payload = item;
                 payload.erase("$type");
+                payload.erase("$instanceId");
+                payload.erase("$displayName");
                 entry.payloadJson = payload.dump();
                 candidate.components.push_back(std::move(entry));
             }
@@ -468,18 +517,23 @@ bool saveActorClassAsset(const std::string& absolutePath,
     if (std::filesystem::path(absolutePath).extension() != ".ayactor"
         || !validate(asset, error)) return false;
     try {
-        Json wire = {{"type", "ay.actorClass"}, {"schemaVersion", 2},
+        Json wire = {{"type", "ay.actorClass"}, {"schemaVersion", 3},
                      {"id", asset.id}, {"script", asset.scriptPath},
                      {"properties", Json::parse(asset.propertiesJson)}};
         if (!asset.parentPath.empty()) wire["parent"] = asset.parentPath;
-        if (!asset.removedComponents.empty())
-            wire["removeComponents"] = asset.removedComponents;
+        if (!asset.removedComponents.empty()) {
+            wire["removeComponents"] = Json::array();
+            for (const auto& removed : asset.removedComponents)
+                wire["removeComponents"].push_back(removedSlotId(removed));
+        }
         if (!asset.removedProperties.empty())
             wire["removeProperties"] = asset.removedProperties;
         wire["components"] = Json::array();
         for (const auto& entry : asset.components) {
             Json payload = Json::parse(entry.payloadJson);
             payload["$type"] = entry.type;
+            payload["$instanceId"] = slotId(entry);
+            payload["$displayName"] = entry.displayName;
             wire["components"].push_back(std::move(payload));
         }
         const std::string encoded = wire.dump(2) + '\n';

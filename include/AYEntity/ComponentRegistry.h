@@ -34,6 +34,11 @@ using ComponentDeserializeFn = void (*)(
     IComponent&);
 using ComponentAfterSceneDeserializeFn = void (*)(Entity&, IComponent&);
 
+enum class ComponentMultiplicity : unsigned char {
+    Single,
+    Multiple,
+};
+
 // Stable component identity is the name. type is process-local and is used
 // only for fast typed lookup; it must never be serialized.
 struct ComponentDescriptor
@@ -46,6 +51,7 @@ struct ComponentDescriptor
     std::size_t alignment = 0;
     bool editorAddable = false;
     bool sceneSerializable = false;
+    ComponentMultiplicity multiplicity = ComponentMultiplicity::Single;
 
     ComponentAddFn add = nullptr;
     ComponentGetFn get = nullptr;

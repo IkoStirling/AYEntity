@@ -20,6 +20,7 @@ bool equivalent(
         && left.alignment == right.alignment
         && left.editorAddable == right.editorAddable
         && left.sceneSerializable == right.sceneSerializable
+        && left.multiplicity == right.multiplicity
         && left.add == right.add
         && left.get == right.get
         && left.has == right.has

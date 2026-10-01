@@ -108,8 +108,10 @@ public:
     virtual bool has(uint32_t entityId) const = 0;
     virtual void add(uint32_t entityId, void* component) = 0;
     virtual void remove(uint32_t entityId) = 0;
+    virtual bool removeInstance(uint32_t entityId, void* component) = 0;
     virtual size_t size() const = 0;
     virtual void clear() = 0;
+    virtual const std::vector<uint32_t>& getEntityIds() const = 0;
 
     virtual void forEach(std::function<void(uint32_t entityId, void* component)> callback) = 0;
 };

@@ -3,6 +3,7 @@
 
 #include <AYEntity/IEntity.h>
 #include <AYEntity/SparseSet.h>
+#include <AYEntity/MultiSparseSet.h>
 #include <AYEntity/EntityHandle.h>
 #include <AYEntity/EntityImpl.h>
 #include <AYEntity/World.h>
@@ -99,7 +100,7 @@ private:
                 _candidateIds = &storage->getEntityIds();
             }
         };
-        (addStorage(_world->getStorage<Components>()), ...);
+        (addStorage(_world->getStorageBase<Components>()), ...);
 
         if (!allStoragesPresent) {
             _candidateIds = nullptr;
@@ -125,40 +126,45 @@ private:
 template<typename T>
 bool Entity::hasComponent() const {
     size_t typeHash = typeid(T).hash_code();
-    for (size_t h : _componentTypeHashes) {
-        if (h == typeHash) return true;
+    for (const auto& instance : _componentInstances) {
+        if (instance.typeHash == typeHash) return true;
     }
     return false;
 }
 
 template<typename T, typename... Args>
 T* Entity::addComponent(Args&&... args) {
+    const auto* descriptor = ComponentRegistry::instance().find<T>();
+    if (!descriptor || descriptor->multiplicity != ComponentMultiplicity::Single)
+        return nullptr;
+    if (hasComponent<T>()) return getComponent<T>();
+    return createComponent<T>(std::forward<Args>(args)...);
+}
+
+template<typename T, typename... Args>
+T* Entity::createComponent(Args&&... args) {
     World* world = getWorld();
-    if (!world) return nullptr;
+    const auto* descriptor = ComponentRegistry::instance().find<T>();
+    if (!world || !descriptor) return nullptr;
+    if (descriptor->multiplicity == ComponentMultiplicity::Single
+        && hasComponent<T>()) return nullptr;
 
     size_t typeHash = typeid(T).hash_code();
-    if (hasComponent<T>()) return getComponent<T>();
-
     IComponentStorage* storage = world->getStorageBase<T>();
     if (!storage) {
-        // Explicit startup registration is checked only on the slow path:
-        // once per component type for each World, when its storage is first
-        // created. Normal add/get/query calls do not pay a registry lookup.
-        if (!World::isComponentTypeRegistered<T>()) {
-            return nullptr;
-        }
-        auto newStorage = SparseSetFactory::create<T>();
-        size_t newHash = typeid(T).hash_code();
-        world->_componentStorages[newHash] = std::move(newStorage);
-        storage = world->_componentStorages[newHash].get();
+        std::unique_ptr<IComponentStorage> newStorage;
+        if (descriptor->multiplicity == ComponentMultiplicity::Multiple)
+            newStorage = std::make_unique<MultiSparseSet<T>>();
+        else
+            newStorage = SparseSetFactory::create<T>();
+        world->_componentStorages[typeHash] = std::move(newStorage);
+        storage = world->_componentStorages[typeHash].get();
     }
 
     T* component = new T(std::forward<Args>(args)...);
-    component->onAttach(this);
-
     storage->add(_id, component);
-    _componentTypeHashes.push_back(typeHash);
-    _components.push_back(component);
+    _componentInstances.push_back({component, typeHash, makeComponentInstanceId(), {}});
+    component->onAttach(this);
     return component;
 }
 
@@ -172,36 +178,43 @@ T* Entity::getComponent() {
 }
 
 template<typename T>
+std::vector<T*> Entity::getComponents() const {
+    std::vector<T*> result;
+    const size_t typeHash = typeid(T).hash_code();
+    for (const auto& instance : _componentInstances) {
+        if (instance.typeHash == typeHash)
+            result.push_back(static_cast<T*>(instance.component));
+    }
+    return result;
+}
+
+template<typename T>
 void Entity::removeComponent() {
     World* world = getWorld();
     if (!world) return;
+    const auto* descriptor = ComponentRegistry::instance().find<T>();
+    if (!descriptor || descriptor->multiplicity != ComponentMultiplicity::Single)
+        return;
 
     size_t typeHash = typeid(T).hash_code();
     IComponentStorage* storage = world->getStorageBase<T>();
     if (!storage) return;
 
-    // _componentTypeHashes and _components are pushed in lockstep by
-    // addComponent<T> (same index = same type). Reuse the hash we
-    // already cached in _componentTypeHashes instead of recomputing
-    // typeid(*_components[i]).hash_code() per element — both vectors
-    // stay in sync, the hash lookup is O(N) either way.
     size_t matchIndex = static_cast<size_t>(-1);
-    for (size_t i = 0; i < _componentTypeHashes.size(); ++i) {
-        if (_componentTypeHashes[i] == typeHash) {
+    for (size_t i = 0; i < _componentInstances.size(); ++i) {
+        if (_componentInstances[i].typeHash == typeHash) {
             matchIndex = i;
             break;
         }
     }
     if (matchIndex == static_cast<size_t>(-1)) return;
 
-    _componentTypeHashes.erase(_componentTypeHashes.begin() + static_cast<long>(matchIndex));
-
-    IComponent* component = _components[matchIndex];
+    IComponent* component = _componentInstances[matchIndex].component;
     component->onDetach();
     delete component;
-    _components.erase(_components.begin() + static_cast<long>(matchIndex));
+    _componentInstances.erase(_componentInstances.begin() + static_cast<long>(matchIndex));
 
-    storage->remove(_id);
+    storage->removeInstance(_id, component);
 }
 
 inline Entity* createEntity() { return World::instance().createEntity(); }

@@ -1,6 +1,7 @@
 #include <AYEntity.h>
 #include <AYEntity/SceneSerializer.h>
 #include <AYEntity/ComponentFactory.h>
+#include <AYEntity/ComponentRegistry.h>
 #include <AYEntity/EntityModule.h>
 #include <AYEntity/components/AnimationComponent.h>
 #include <AYEntity/components/ColliderComponent.h>
@@ -16,6 +17,41 @@
 using namespace ayt::entity;
 
 namespace {
+
+class MultiSceneProbe final : public IComponent {
+public:
+    const char* getName() const override { return "MultiSceneProbe"; }
+    Int32 value = 0;
+};
+
+bool registerMultiSceneProbe() {
+    ComponentDescriptor descriptor;
+    descriptor.name = "test.MultiSceneProbe";
+    descriptor.displayName = "Multi Scene Probe";
+    descriptor.type = typeid(MultiSceneProbe);
+    descriptor.size = sizeof(MultiSceneProbe);
+    descriptor.alignment = alignof(MultiSceneProbe);
+    descriptor.multiplicity = ComponentMultiplicity::Multiple;
+    descriptor.sceneSerializable = true;
+    descriptor.add = [](Entity& entity) -> IComponent* {
+        return entity.createComponent<MultiSceneProbe>();
+    };
+    descriptor.get = [](Entity& entity) -> IComponent* {
+        return entity.getComponent<MultiSceneProbe>();
+    };
+    descriptor.has = [](const Entity& entity) -> bool {
+        return entity.hasComponent<MultiSceneProbe>();
+    };
+    descriptor.remove = [](Entity& entity) { entity.removeComponent<MultiSceneProbe>(); };
+    descriptor.serialize = [](ayt::serializer::ISerializer& s, const IComponent& c) {
+        Int32 value = static_cast<const MultiSceneProbe&>(c).value;
+        s.field("value", value);
+    };
+    descriptor.deserialize = [](ayt::serializer::ISerializer& s, IComponent& c) {
+        s.field("value", static_cast<MultiSceneProbe&>(c).value);
+    };
+    return ComponentRegistry::instance().registerComponent(std::move(descriptor)).succeeded();
+}
 
 Entity* createCharacterAuthoringEntity(const char* name)
 {
@@ -46,6 +82,68 @@ Entity* createCharacterAuthoringEntity(const char* name)
 } // namespace
 
 TEST_SUITE(SceneSerializer)
+
+TEST_CASE(multiple_same_type_components_survive_scene_roundtrip)
+{
+    World& world = World::instance();
+    world.initialize();
+    CHECK(registerMultiSceneProbe());
+    Entity* entity = world.createEntity();
+    entity->setName("Multi");
+    auto* first = entity->createComponent<MultiSceneProbe>();
+    auto* second = entity->createComponent<MultiSceneProbe>();
+    first->value = 11;
+    second->value = 22;
+    const std::string firstId = entity->componentInstance(first)->id;
+    const std::string secondId = entity->componentInstance(second)->id;
+    CHECK(entity->setComponentDisplayName(second, "Secondary"));
+    const char* path = "test_scene_multi_instance.ayscene";
+    CHECK(saveScene(world, path));
+    ayt::serializer::SerializeError error;
+    CHECK(loadScene(world, path, &error));
+    CHECK(error.ok());
+    Entity* loaded = world.findEntity("Multi");
+    CHECK_NOT_NULL(loaded);
+    const auto values = loaded->getComponents<MultiSceneProbe>();
+    CHECK_INT_EQ(static_cast<int>(values.size()), 2);
+    CHECK_INT_EQ(values[0]->value, 11);
+    CHECK_INT_EQ(values[1]->value, 22);
+    CHECK(loaded->componentInstance(values[0])->id == firstId);
+    CHECK(loaded->componentInstance(values[1])->id == secondId);
+    CHECK(loaded->componentInstance(values[1])->displayName == "Secondary");
+    std::remove(path);
+    world.shutdown();
+}
+
+TEST_CASE(component_instance_identity_survives_scene_roundtrip)
+{
+    World& world = World::instance();
+    world.initialize();
+    registerEntityComponents();
+    Entity* entity = world.createEntity();
+    entity->setName("Identity");
+    auto* health = entity->addComponent<HealthComponent>();
+    CHECK_NOT_NULL(health);
+    const std::string id = entity->componentInstance(health)->id;
+    CHECK(isValidComponentInstanceId(id));
+    CHECK(entity->setComponentDisplayName(health, "Boss health"));
+    const char* path = "test_scene_component_identity.ayscene";
+    CHECK(saveScene(world, path));
+
+    ayt::serializer::SerializeError error;
+    CHECK(loadScene(world, path, &error));
+    CHECK(error.ok());
+    Entity* loaded = world.findEntity("Identity");
+    CHECK_NOT_NULL(loaded);
+    auto* restored = loaded->getComponent<HealthComponent>();
+    CHECK_NOT_NULL(restored);
+    const auto* info = loaded->componentInstance(restored);
+    CHECK_NOT_NULL(info);
+    CHECK(info->id == id);
+    CHECK(info->displayName == "Boss health");
+    std::remove(path);
+    world.shutdown();
+}
 
 TEST_CASE(scene_save_load_character_paths_roundtrip)
 {

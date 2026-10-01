@@ -2,6 +2,7 @@
 
 #include "AYEntity/SceneSerializer.h"
 #include "AYEntity/ComponentFactory.h"
+#include "AYEntity/ComponentRegistry.h"
 #include "AYEntity/EntityImpl.h"
 #include "AYEntity/World.h"
 #include "AYEntity/ActorClassAsset.h"
@@ -23,6 +24,17 @@ namespace
 {
 
 constexpr const char* kTypeField = "$type";
+constexpr const char* kInstanceIdField = "$instanceId";
+constexpr const char* kDisplayNameField = "$displayName";
+
+void writeIdentity(ayt::serializer::ISerializer& s, const Entity& entity,
+                   const IComponent& component) {
+    const auto* instance = entity.componentInstance(&component);
+    std::string id = instance ? instance->id : std::string{};
+    std::string label = instance ? instance->displayName : std::string{};
+    s.field(kInstanceIdField, id);
+    s.field(kDisplayNameField, label);
+}
 
 struct SceneMigKey {
     uint32_t from = 0;
@@ -105,6 +117,7 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world,
             s.beginObject(nullptr);
             std::string typeName = "ActorInstanceComponent";
             s.field(kTypeField, typeName);
+            writeIdentity(s, *entity, *actor);
             ComponentFactory::serializeComponent(s, snapshot);
             s.endObject();
             s.endArray();
@@ -125,6 +138,7 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world,
             s.beginObject(nullptr);
             std::string typeName = registeredTypeName;
             s.field(kTypeField, typeName);
+            writeIdentity(s, *entity, *component);
             ComponentFactory::serializeComponent(s, *component);
             s.endObject();
         }
@@ -235,16 +249,32 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
 
             std::string typeName;
             s.field(kTypeField, typeName);
+            std::string instanceId;
+            std::string displayName;
+            if (wireVersion >= 4) {
+                s.field(kInstanceIdField, instanceId);
+                s.field(kDisplayNameField, displayName);
+            } else {
+                instanceId = legacyComponentInstanceId(typeName);
+            }
             if (typeName.empty()) {
                 s.reportError(ayt::serializer::SerializeError::Code::UnknownType,
                               "component entry missing $type");
             } else {
-                IComponent* component =
-                    ComponentFactory::addComponent(*entity, typeName.c_str());
+                const auto* descriptor = ComponentRegistry::instance().find(typeName);
+                const bool duplicateSingle = descriptor
+                    && descriptor->multiplicity == ComponentMultiplicity::Single
+                    && entity->hasComponentByName(typeName.c_str());
+                IComponent* component = duplicateSingle
+                    ? nullptr : ComponentFactory::addComponent(*entity, typeName.c_str());
                 if (component == nullptr) {
                     s.reportError(ayt::serializer::SerializeError::Code::UnknownType,
-                                  std::string("unknown scene component type: \"") + typeName
+                                  std::string("duplicate or unknown scene component type: \"") + typeName
                                       + '"');
+                } else if (!entity->setComponentInstanceId(component, instanceId)
+                           || !entity->setComponentDisplayName(component, displayName)) {
+                    s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
+                                  "invalid or duplicate component instance identity: " + typeName);
                 } else {
                     if (ComponentFactory::deserializeComponent(
                             s, typeName.c_str(), *component)) {

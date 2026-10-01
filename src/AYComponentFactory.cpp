@@ -55,6 +55,7 @@ bool ComponentFactory::removeComponent(
 {
     const ComponentDescriptor* entry = findEntry(typeName);
     if (entry == nullptr
+        || entry->multiplicity != ComponentMultiplicity::Single
         || entry->has == nullptr
         || entry->remove == nullptr
         || !entry->has(entity)) {
