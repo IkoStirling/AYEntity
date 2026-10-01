@@ -4,6 +4,8 @@
 #include "AYEntity/ComponentFactory.h"
 #include "AYEntity/EntityImpl.h"
 #include "AYEntity/World.h"
+#include "AYEntity/ActorClassAsset.h"
+#include "AYEntity/components/ActorInstanceComponent.h"
 
 #include <AYSerializer.h>
 #include <AYIO/File.h>
@@ -58,7 +60,9 @@ void clearWorldEntities(World& world)
     }
 }
 
-bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world)
+bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world,
+                        const std::string& scenePath,
+                        const std::string& actorAssetsRoot)
 {
     s.beginObject(nullptr);
     Int32 schemaVersion = static_cast<Int32>(kSceneSchemaVersion);
@@ -83,6 +87,30 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world)
         s.field("name", name);
 
         s.beginArray("components");
+        if (auto* actor = entity->getComponent<ActorInstanceComponent>()) {
+            ActorInstanceComponent snapshot;
+            snapshot.classPath = actor->classPath;
+            snapshot.instanceId = actor->instanceId;
+            snapshot.propertyOverridesJson = actor->propertyOverridesJson;
+            snapshot.classDefaultsJson = actor->classDefaultsJson;
+            snapshot.assetsRoot = actorAssetsRoot.empty()
+                ? assetsRootForScene(scenePath) : actorAssetsRoot;
+            std::string error;
+            if (snapshot.assetsRoot.empty()
+                || !captureActorOverrides(*entity, snapshot, &error)) {
+                std::fprintf(stderr, "[AYSceneSerializer] Actor save failed: %s\n",
+                             error.empty() ? "Scene must be under Assets" : error.c_str());
+                return false;
+            }
+            s.beginObject(nullptr);
+            std::string typeName = "ActorInstanceComponent";
+            s.field(kTypeField, typeName);
+            ComponentFactory::serializeComponent(s, snapshot);
+            s.endObject();
+            s.endArray();
+            s.endObject();
+            continue;
+        }
         for (IComponent* component : entity->getComponents()) {
             if (component == nullptr) {
                 continue;
@@ -110,6 +138,8 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world)
 }
 
 bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
+                       const std::string& scenePath,
+                       const std::string& actorAssetsRoot,
                        ayt::serializer::SerializeError* outError)
 {
     s.beginObject(nullptr);
@@ -220,6 +250,17 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                             s, typeName.c_str(), *component)) {
                         ComponentFactory::afterSceneDeserialize(
                             *entity, typeName.c_str(), *component);
+                        if (typeName == "ActorInstanceComponent") {
+                            auto& actor = static_cast<ActorInstanceComponent&>(*component);
+                            actor.assetsRoot = actorAssetsRoot.empty()
+                                ? assetsRootForScene(scenePath) : actorAssetsRoot;
+                            std::string actorError;
+                            if (!expandActorInstance(*entity, actor, &actorError)) {
+                                s.reportError(
+                                    ayt::serializer::SerializeError::Code::InvalidInput,
+                                    "Actor instance expansion failed: " + actorError);
+                            }
+                        }
                     }
                 }
             }
@@ -278,14 +319,15 @@ bool migrateSceneSchemaToCurrent(uint32_t loadedVersion)
     return true;
 }
 
-bool saveScene(const World& world, const std::string& path, ayt::serializer::Format format)
+bool saveScene(const World& world, const std::string& path,
+               ayt::serializer::Format format, const std::string& actorAssetsRoot)
 {
     auto serializer = ayt::serializer::createSerializer(format, true);
     if (!serializer) {
         return false;
     }
 
-    if (!writeSceneEnvelope(*serializer, world)) {
+    if (!writeSceneEnvelope(*serializer, world, path, actorAssetsRoot)) {
         return false;
     }
 
@@ -310,7 +352,9 @@ bool saveScene(const World& world, const std::string& path, ayt::serializer::For
     return ayt::io::File::atomicWrite(path, serialized.data(), serialized.size());
 }
 
-bool loadScene(World& world, const std::string& path, ayt::serializer::SerializeError* outError)
+bool loadScene(World& world, const std::string& path,
+               ayt::serializer::SerializeError* outError,
+               const std::string& actorAssetsRoot)
 {
     auto serializer = ayt::serializer::createSerializer(ayt::serializer::Format::Json);
     if (!serializer) {
@@ -329,8 +373,28 @@ bool loadScene(World& world, const std::string& path, ayt::serializer::Serialize
         return false;
     }
 
+    // Keep a restorable in-memory snapshot before changing the live World.
+    // Malformed or missing Actor dependencies must not leave a half-loaded Scene.
+    auto backup = ayt::serializer::createSerializer(ayt::serializer::Format::Json, true);
+    if (!backup || !writeSceneEnvelope(*backup, world, path, actorAssetsRoot)) {
+        if (outError) {
+            outError->code = ayt::serializer::SerializeError::Code::InvalidInput;
+            outError->message = "failed to snapshot current scene before load";
+        }
+        return false;
+    }
+    const std::string snapshot = backup->output();
     clearWorldEntities(world);
-    return readSceneEnvelope(*serializer, world, outError);
+    if (readSceneEnvelope(*serializer, world, path, actorAssetsRoot, outError))
+        return true;
+    clearWorldEntities(world);
+    auto restore = ayt::serializer::createSerializer(ayt::serializer::Format::Json);
+    if (restore) restore->deserialize(snapshot);
+    if (!restore || !restore->lastError().ok()
+        || !readSceneEnvelope(*restore, world, path, actorAssetsRoot, nullptr)) {
+        if (outError) outError->message += "; previous scene restoration failed";
+    }
+    return false;
 }
 
 } // namespace ayt::entity

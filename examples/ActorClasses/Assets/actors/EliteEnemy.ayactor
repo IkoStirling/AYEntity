@@ -1,0 +1,17 @@
+{
+  "type": "ay.actorClass",
+  "schemaVersion": 2,
+  "id": "EliteEnemy",
+  "parent": "actors/EnemyActor.ayactor",
+  "script": "",
+  "properties": {
+    "hp": 150,
+    "speed": 1.5
+  },
+  "components": [
+    {
+      "$type": "HealthComponent",
+      "maxHp": 150
+    }
+  ]
+}

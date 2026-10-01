@@ -3,6 +3,7 @@
 #include <AYEntity/ComponentRegistration.h>
 #include <AYEntity/EntityComponentModule.h>
 #include <AYEntity/components/ScriptComponent.h>
+#include <AYEntity/components/ActorInstanceComponent.h>
 
 #include <string>
 
@@ -12,8 +13,13 @@ namespace ayt::entity
 ComponentRegistryResult registerEntityScriptComponents(
     ComponentRegistry& registry)
 {
-    return registerComponent<ScriptComponent>(
+    auto result = registerComponent<ScriptComponent>(
         registry, "ScriptComponent", "Script", "Scripting");
+    if (!result) return result;
+    auto actorScript = detail::makeComponentDescriptor<ActorScriptComponent>(
+        "ActorScriptComponent", "Actor Script", "Scripting");
+    actorScript.editorAddable = false;
+    return registry.registerComponent(std::move(actorScript));
 }
 
 EntityScriptIntegrationModule::EntityScriptIntegrationModule()

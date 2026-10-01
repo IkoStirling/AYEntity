@@ -19,6 +19,9 @@
 #include <AYEntity/EntityNetworkIntegrationModule.h>
 #endif
 
+#if AY_ENTITY_HAS_PARTICLE_INTEGRATION
+#include <AYEntity/EntityParticleIntegrationModule.h>
+#endif
 #include <cstdio>
 
 namespace ayt::entity
@@ -63,6 +66,9 @@ void registerEntityComponents()
 
 void registerEntityPresentationSystems()
 {
+#if AY_ENTITY_HAS_PARTICLE_INTEGRATION
+    registerEntityParticleSystems();
+#endif
 #if AY_ENTITY_HAS_ANIMATION_INTEGRATION
     registerEntityAnimationSystems();
 #endif

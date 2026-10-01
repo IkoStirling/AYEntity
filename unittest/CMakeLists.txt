@@ -15,6 +15,7 @@ set(SOURCES
     SkinnedAnimationTest.cpp
     CharacterEntityTest.cpp
     AYTest_SceneSerializer.cpp
+    AYTest_ActorClass.cpp
     # P2.1 (2026-07-27) — BlendSpaceSystem ECS integration tests
     # (priority wiring + skinMatricesBlendSpace handoff to renderer).
     AYTest_BlendSpaceSystem.cpp
@@ -44,6 +45,9 @@ set(SOURCES
     EntityPhysicsBridgeTest.cpp
 )
 
+if(TARGET AYEntityParticleIntegration)
+    list(APPEND SOURCES AYTest_ParticleSystems.cpp)
+endif()
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -134,3 +138,17 @@ target_compile_options(AYEntityComponentModuleTest PRIVATE
 )
 
 ay_add_test(AYEntityComponentModuleTest)
+
+# Focused particle bridge regressions avoid rebuilding unrelated Entity suites.
+if(TARGET AYEntityParticleIntegration)
+    add_executable(AYEntity_ParticleTests TestMain.cpp AYTest_ParticleSystems.cpp)
+    target_link_libraries(AYEntity_ParticleTests PRIVATE AYEntity AYTest AYCore AYSerializer)
+    target_compile_definitions(AYEntity_ParticleTests PRIVATE
+        AY_SHADER_SHADERC_HINT="${AY_SHADER_SHADERC_PATH}"
+        AY_SHADER_BGFX_COMMON_HINT="${AY_SHADER_BGFX_COMMON_DIR}"
+        AY_SHADER_BGFX_SRC_HINT="${AY_SHADER_BGFX_SRC_DIR}")
+    if(MSVC)
+        target_link_options(AYEntity_ParticleTests PRIVATE /DEBUG:NONE /INCREMENTAL:NO)
+    endif()
+    ay_add_test(AYEntity_ParticleTests)
+endif()

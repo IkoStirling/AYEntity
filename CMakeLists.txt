@@ -55,6 +55,7 @@ add_library(AYEntityCore STATIC
     src/AYSimToPresentBridgeSystem.cpp
     src/AYComponentFactory.cpp
     src/AYSceneSerializer.cpp
+    src/AYActorClassAsset.cpp
     src/detail/AYEntityPrecompile.cpp
 )
 add_library(AYEntity::Core ALIAS AYEntityCore)
@@ -65,6 +66,7 @@ target_link_libraries(AYEntityCore PUBLIC
     AYGameLoop
     AYReflect
     AYSerializer
+    AYIO
     AYMath
 )
 target_compile_definitions(AYEntityCore PUBLIC
@@ -73,6 +75,15 @@ target_compile_definitions(AYEntityCore PUBLIC
 if(AY_ENTITY_PRECOMPILE_COMPONENTS)
     target_compile_definitions(AYEntityCore PUBLIC
         AY_ENTITY_PRECOMPILE_COMPONENTS)
+endif()
+
+# CPU particle metadata remains usable in headless scene loading.
+if(TARGET AYParticle)
+    target_sources(AYEntityCore PRIVATE src/AYParticleEmitterComponent.cpp)
+    target_link_libraries(AYEntityCore PUBLIC AYParticle AYParticleAssets)
+    target_compile_definitions(AYEntityCore PRIVATE AY_ENTITY_HAS_PARTICLE=1)
+else()
+    target_compile_definitions(AYEntityCore PRIVATE AY_ENTITY_HAS_PARTICLE=0)
 endif()
 
 set(_ay_entity_integrations)
@@ -200,6 +211,20 @@ if(AY_ENABLE_NETWORK)
     list(APPEND _ay_entity_integrations AYEntityNetworkIntegration)
 endif()
 
+if(AY_ENABLE_RENDERER AND TARGET AYParticle)
+    add_library(AYEntityParticleIntegration STATIC
+        src/AYParticleSystem.cpp src/AYEntityParticleIntegrationModule.cpp)
+    add_library(AYEntity::ParticleIntegration ALIAS AYEntityParticleIntegration)
+    ay_configure_entity_target(AYEntityParticleIntegration)
+    target_link_libraries(AYEntityParticleIntegration PUBLIC AYEntityCore AYParticle AYParticleResources AYRenderer AYMath)
+    target_sources(AYEntityParticleIntegration PRIVATE src/ParticleGpuState.cpp)
+    if(TARGET AYParticleGpu)
+        target_compile_definitions(AYEntityParticleIntegration PRIVATE AY_ENTITY_PARTICLE_GPU=1)
+        target_link_libraries(AYEntityParticleIntegration PRIVATE AYParticleGpu)
+    endif()
+    list(APPEND _ay_entity_integrations AYEntityParticleIntegration)
+endif()
+
 # Compatibility facade. Existing consumers that link AYEntity keep the full
 # default feature surface; new hosts should link AYEntityCore and only the
 # integration targets they assemble.
@@ -211,6 +236,7 @@ target_link_libraries(AYEntity PUBLIC
     ${_ay_entity_integrations}
 )
 target_compile_definitions(AYEntity PRIVATE
+    AY_ENTITY_HAS_PARTICLE_INTEGRATION=$<BOOL:$<TARGET_EXISTS:AYEntityParticleIntegration>>
     AY_ENTITY_HAS_ANIMATION_INTEGRATION=$<BOOL:${AY_ENABLE_ANIMATION}>
     AY_ENTITY_HAS_RENDER_INTEGRATION=$<BOOL:${AY_ENABLE_RENDERER}>
     AY_ENTITY_HAS_2D_COMPONENTS=$<BOOL:${AY_ENABLE_ENTITY_2D_SCHEMA}>

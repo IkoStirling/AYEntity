@@ -33,8 +33,10 @@ void registerSceneSchemaMigration(uint32_t fromVersion, uint32_t toVersion,
 bool migrateSceneSchemaToCurrent(uint32_t loadedVersion);
 
 bool saveScene(const World& world, const std::string& path,
-               ayt::serializer::Format format = ayt::serializer::Format::Json);
+               ayt::serializer::Format format = ayt::serializer::Format::Json,
+               const std::string& actorAssetsRoot = {});
 bool loadScene(World& world, const std::string& path,
-               ayt::serializer::SerializeError* outError = nullptr);
+               ayt::serializer::SerializeError* outError = nullptr,
+               const std::string& actorAssetsRoot = {});
 
 } // namespace ayt::entity

@@ -1,0 +1,10 @@
+script EnemyActor {
+    on_start() {
+        self.hp = self.hp - 1
+    }
+
+    on_update(dt: float) {
+        self.transform.position.x = self.transform.position.x
+            + self.speed * dt
+    }
+}

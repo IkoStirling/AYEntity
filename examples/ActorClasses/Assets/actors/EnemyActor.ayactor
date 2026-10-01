@@ -1,0 +1,17 @@
+{
+  "type": "ay.actorClass",
+  "schemaVersion": 2,
+  "id": "EnemyActor",
+  "script": "actors/EnemyActor.logia",
+  "properties": {
+    "hp": 100,
+    "speed": 1.0
+  },
+  "components": [
+    {
+      "$type": "HealthComponent",
+      "currentHp": 100,
+      "maxHp": 100
+    }
+  ]
+}
