@@ -451,7 +451,7 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     spriteAnimation->playbackMode = 1;
     spriteAnimation->playing = false;
 
-    OrthoCameraComponent* cam = original->addComponent<OrthoCameraComponent>();
+    OrthoCameraComponent* cam = original->createComponent<OrthoCameraComponent>();
     cam->positionX       = 5.0f;
     cam->positionY       = -3.0f;
     cam->zoom            = 2.0f;
@@ -555,7 +555,7 @@ TEST_CASE(cm3_2d_components_ayscene_roundtrip)
     CHECK_INT_EQ(loadedAnimation->elapsedMicroseconds, 0u);
     CHECK_FALSE(loadedAnimation->finished);
 
-    const OrthoCameraComponent* lcam = loaded->getComponent<OrthoCameraComponent>();
+    const OrthoCameraComponent* lcam = loaded->getComponents<OrthoCameraComponent>().front();
     CHECK_FLOAT_EQ(lcam->positionX, 5.0f, 1e-5f);
     CHECK_FLOAT_EQ(lcam->positionY, -3.0f, 1e-5f);
     CHECK_FLOAT_EQ(lcam->zoom, 2.0f, 1e-5f);

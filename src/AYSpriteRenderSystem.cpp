@@ -135,11 +135,14 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 selected.transform->interpolatedPosition(interpolationAlpha);
             const math::FQuaternion cameraRotation =
                 selected.transform->interpolatedRotation(interpolationAlpha);
-            const float angle = cameraRotation.toEulerAngles().z;
+            const float entityAngle = cameraRotation.toEulerAngles().z;
+            const float angle = selected.camera->worldRotation(entityAngle);
+            const auto center = selected.camera->worldCenter(
+                cameraPosition, entityAngle);
             const float c = std::fabs(std::cos(angle));
             const float s = std::fabs(std::sin(angle));
-            camCx = cameraPosition.x;
-            camCy = cameraPosition.y;
+            camCx = center.x;
+            camCy = center.y;
             camHalfW = c * viewHalf.x + s * viewHalf.y;
             camHalfH = s * viewHalf.x + c * viewHalf.y;
             cameraLayerMask = selected.camera->layerMask;

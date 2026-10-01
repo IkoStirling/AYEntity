@@ -49,9 +49,11 @@ void OrthoCameraUpdateSystem::buildCamera(ayt::render::RenderScene& scene)
         selected.transform->interpolatedPosition(interpolationAlpha);
     const math::FQuaternion rotation =
         selected.transform->interpolatedRotation(interpolationAlpha);
+    const float angle = rotation.toEulerAngles().z;
+    const auto center = selected.camera->worldCenter(position, angle);
     scene.setOverlayCamera2D(
         selected.camera->viewMatrix(
-            position.x, position.y, rotation.toEulerAngles().z),
+            center.x, center.y, selected.camera->worldRotation(angle)),
         selected.camera->projectionMatrix(aspect),
         selected.camera->layerMask);
 }

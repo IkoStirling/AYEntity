@@ -25,6 +25,7 @@
 
 #include <AYEntity/2DUvMath.h>
 #include <AYEntity/OrthoCameraUpdateSystem.h>
+#include <AYEntity/OrthoCameraSelection.h>
 #include <AYRenderer/RendererSubSystem.h>
 #include <AYEntity/SpriteAnimationSystem.h>
 #include <AYEntity/SpriteRenderSystem.h>
@@ -273,7 +274,7 @@ TEST_CASE(ortho_camera_is_recorded_as_an_independent_scene_overlay)
         {17.0f, -9.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f});
     transform->applySimulationPose(
         {117.0f, -9.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f});
-    OrthoCameraComponent* camera = entity->addComponent<OrthoCameraComponent>();
+    OrthoCameraComponent* camera = entity->createComponent<OrthoCameraComponent>();
     CHECK_NOT_NULL(camera);
     camera->viewSize = 24.0f;
     camera->viewportAspect = 4.0f / 3.0f;
@@ -321,14 +322,14 @@ TEST_CASE(ortho_camera_selection_uses_active_priority_and_viewport_aspect)
     Transform* lowTransform = low->addComponent<Transform>();
     lowTransform->position = {2.0f, 0.0f, 0.0f};
     OrthoCameraComponent* lowCamera =
-        low->addComponent<OrthoCameraComponent>();
+        low->createComponent<OrthoCameraComponent>();
     lowCamera->priority = 1;
 
     Entity* high = world.createEntity();
     Transform* highTransform = high->addComponent<Transform>();
     highTransform->position = {8.0f, 0.0f, 0.0f};
     OrthoCameraComponent* highCamera =
-        high->addComponent<OrthoCameraComponent>();
+        high->createComponent<OrthoCameraComponent>();
     highCamera->priority = 9;
     highCamera->viewSize = 600.0f;
     highCamera->designWidth = 960.0f;
@@ -338,7 +339,7 @@ TEST_CASE(ortho_camera_selection_uses_active_priority_and_viewport_aspect)
     Entity* inactive = world.createEntity();
     inactive->addComponent<Transform>();
     OrthoCameraComponent* inactiveCamera =
-        inactive->addComponent<OrthoCameraComponent>();
+        inactive->createComponent<OrthoCameraComponent>();
     inactiveCamera->priority = 100;
     inactiveCamera->active = false;
 
@@ -358,6 +359,36 @@ TEST_CASE(ortho_camera_selection_uses_active_priority_and_viewport_aspect)
 
     rss->shutdown();
     unregisterTestRenderer();
+    world.shutdown();
+}
+
+TEST_CASE(ortho_camera_instances_share_transform_but_keep_independent_poses)
+{
+    World& world = World::instance();
+    world.shutdown();
+    world.initialize();
+    Entity* entity = world.createEntity();
+    Transform* transform = entity->addComponent<Transform>();
+    CHECK_NOT_NULL(transform);
+    transform->position = {10.0f, 20.0f, 0.0f};
+    OrthoCameraComponent* first = entity->createComponent<OrthoCameraComponent>();
+    OrthoCameraComponent* second = entity->createComponent<OrthoCameraComponent>();
+    CHECK_NOT_NULL(first);
+    CHECK_NOT_NULL(second);
+    CHECK_INT_EQ(entity->getComponents<OrthoCameraComponent>().size(), 2u);
+    first->priority = 1;
+    second->priority = 2;
+    second->offsetX = 3.0f;
+    second->offsetY = -4.0f;
+    second->localRotationRadians = 0.25f;
+    CHECK(ayt::entity::selectOrthoCamera2D(world).camera == second);
+    const auto view = second->viewMatrix(*transform);
+    const auto expected = second->viewMatrix(13.0f, 16.0f, 0.25f);
+    CHECK_FLOAT_EQ(view.row[0].w, expected.row[0].w, 1e-6f);
+    CHECK_FLOAT_EQ(view.row[1].w, expected.row[1].w, 1e-6f);
+    const std::string secondId = entity->componentInstance(second)->id;
+    CHECK(entity->removeComponentById(secondId));
+    CHECK(ayt::entity::selectOrthoCamera2D(world).camera == first);
     world.shutdown();
 }
 
@@ -566,7 +597,7 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     camEntity->setName("cam");
     CHECK_NOT_NULL(camEntity);
     CHECK_NOT_NULL(camEntity->addComponent<Transform>());
-    OrthoCameraComponent* cam = camEntity->addComponent<OrthoCameraComponent>();
+    OrthoCameraComponent* cam = camEntity->createComponent<OrthoCameraComponent>();
     CHECK_NOT_NULL(cam);
     cam->viewSize       = 10.0f;
     cam->viewportAspect = 1.0f;

@@ -19,8 +19,8 @@ struct SelectedOrthoCamera2D {
 };
 
 // Select the enabled camera with the greatest serialized priority. Entity id
-// breaks ties so every 2D system observes the same camera regardless of query
-// storage order.
+// then component instance id break ties so every 2D system observes the same
+// camera regardless of query storage order.
 [[nodiscard]] SelectedOrthoCamera2D selectOrthoCamera2D(World& world) noexcept;
 
 } // namespace ayt::entity

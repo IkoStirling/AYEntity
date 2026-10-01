@@ -59,6 +59,10 @@ struct OrthoCameraComponent : public IComponent {
     AY_PROPERTY(int32_t, aspectPolicy, kAttrSerialize)
     AY_PROPERTY(bool, active, kAttrSerialize)
     AY_PROPERTY(int32_t, priority, kAttrSerialize)
+    // Local pose allows several cameras to share one Entity Transform.
+    AY_PROPERTY(float, offsetX, kAttrSerialize)
+    AY_PROPERTY(float, offsetY, kAttrSerialize)
+    AY_PROPERTY(float, localRotationRadians, kAttrSerialize)
 
     // Runtime-only compatibility gate. Serialized active/priority determine
     // normal selection; legacy hosts can still suppress a camera here.
@@ -79,6 +83,9 @@ struct OrthoCameraComponent : public IComponent {
         aspectPolicy    = 0;
         active          = true;
         priority        = 0;
+        offsetX         = 0.0f;
+        offsetY         = 0.0f;
+        localRotationRadians = 0.0f;
     }
 
     [[nodiscard]] float viewportAspectOr() const noexcept {
@@ -121,6 +128,20 @@ struct OrthoCameraComponent : public IComponent {
         return active && isPrimary;
     }
 
+    [[nodiscard]] math::FVector2 worldCenter(
+        const math::FVector3& entityPosition, float entityRotation) const noexcept {
+        return {
+            entityPosition.x + std::cos(entityRotation) * offsetX
+                - std::sin(entityRotation) * offsetY,
+            entityPosition.y + std::sin(entityRotation) * offsetX
+                + std::cos(entityRotation) * offsetY
+        };
+    }
+
+    [[nodiscard]] float worldRotation(float entityRotation) const noexcept {
+        return entityRotation + localRotationRadians;
+    }
+
     // Mirror of ayt::ay2d::OrthographicCamera::viewMatrix()
     // (AY2D/OrthographicCamera.h:116-152). Translate by -position,
     // rotate by -rotationRadians about +z, scale by zoom. Y axis
@@ -147,8 +168,9 @@ struct OrthoCameraComponent : public IComponent {
 
     [[nodiscard]] math::Float4x4 viewMatrix(
         const Transform& transform) const noexcept {
-        return viewMatrix(transform.position.x, transform.position.y,
-                          transform.rotation.toEulerAngles().z);
+        const float angle = transform.rotation.toEulerAngles().z;
+        const auto center = worldCenter(transform.position, angle);
+        return viewMatrix(center.x, center.y, worldRotation(angle));
     }
 
     // Legacy/headless compatibility overload. Runtime systems use Transform.

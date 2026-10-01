@@ -80,7 +80,8 @@ ComponentRegistryResult registerEntity2DComponents(ComponentRegistry& registry)
         "OrthoCameraComponent",
         "Orthographic Camera",
         "2D",
-        migrateLegacyCameraTransform);
+        migrateLegacyCameraTransform,
+        ComponentMultiplicity::Multiple);
 }
 
 } // namespace ayt::entity

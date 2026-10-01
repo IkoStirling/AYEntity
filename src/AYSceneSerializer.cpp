@@ -265,8 +265,12 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                 const bool duplicateSingle = descriptor
                     && descriptor->multiplicity == ComponentMultiplicity::Single
                     && entity->hasComponentByName(typeName.c_str());
+                // A legacy Sprite/Camera may synthesize Transform before an
+                // explicit Transform entry later in the same old Scene.
                 IComponent* component = duplicateSingle
-                    ? nullptr : ComponentFactory::addComponent(*entity, typeName.c_str());
+                    ? (wireVersion < 4 && typeName == "Transform"
+                        ? entity->getComponentByName(typeName.c_str()) : nullptr)
+                    : ComponentFactory::addComponent(*entity, typeName.c_str());
                 if (component == nullptr) {
                     s.reportError(ayt::serializer::SerializeError::Code::UnknownType,
                                   std::string("duplicate or unknown scene component type: \"") + typeName
