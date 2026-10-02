@@ -167,12 +167,19 @@ void ParticleRenderSystem::buildRenderScene(render::RenderScene& scene) {
     // The editor applies its viewport override after scene builders; cull against it now.
     (void)subsystem->overlayCamera2DOverride(camera);
     const auto drawGpu=[&](uint64_t key,int32_t layer,int32_t sortingKey) {
-        if(camera.valid&&!(camera.layerMask&(1u<<(uint32_t(layer)&31)))) return;
         auto gpu=_gpuState.lock(); if(!gpu) return;
         for(auto& data:gpu->draws(key)) {
+            if(data.world3D ? !have3D
+                : camera.valid&&!(camera.layerMask&(1u<<(uint32_t(layer)&31)))) continue;
             _batches.emplace_back(); auto& batch=_batches.back(); batch.geometry=std::move(data);
             batch.payload.packedSortKey=(uint32_t(layer)&255)<<24|(uint32_t(sortingKey)&0xFFFFFF);
             render::DrawItem item; item.particleBatch=&batch.geometry; item.payload=&batch.payload;
+            if(batch.geometry.world3D) {
+                item.payload=nullptr; item.sortKey=sortingKey;
+                item.world(0,3)=batch.geometry.sortPosition[0];
+                item.world(1,3)=batch.geometry.sortPosition[1];
+                item.world(2,3)=batch.geometry.sortPosition[2];
+            }
             item.shadowFlags=render::ShadowFlags::None; scene.add(item);
         }
     };

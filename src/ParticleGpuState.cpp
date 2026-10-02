@@ -19,6 +19,7 @@ struct ParticleGpuState::Impl {
         std::vector<std::shared_ptr<resource::ITexture>> textures;
         std::vector<bool> started,enabled;
         std::vector<float> delays;
+        std::vector<particle::Vec3> centers;
         uint64_t cycle=0;
         uint64_t restart=0,clear=0;
         double phase=0;
@@ -61,7 +62,7 @@ bool ParticleGpuState::select(uint64_t key,const particle::EffectAsset& asset,in
         if(!state.context) state.context=std::make_unique<particle::GpuParticleContext>();
         auto found=state.entries.find(key);
         if(found==state.entries.end() || !(found->second.asset==asset)) {
-            Impl::Entry entry; entry.asset=asset; entry.started.resize(asset.emitters.size(),false); entry.enabled.resize(asset.emitters.size(),true); entry.delays.resize(asset.emitters.size());
+            Impl::Entry entry; entry.asset=asset; entry.started.resize(asset.emitters.size(),false); entry.enabled.resize(asset.emitters.size(),true); entry.delays.resize(asset.emitters.size()); entry.centers.resize(asset.emitters.size());
             for(const auto& emitter:asset.emitters) {
                 entry.emitters.push_back(std::make_unique<particle::GpuEmitter>(*state.context,particle::layerEffect(emitter)));
                 entry.textures.push_back(nullptr);
@@ -130,6 +131,7 @@ void ParticleGpuState::update(uint64_t key,float dt,const particle::Pose& parent
         }
         if(paused) emitter.pause(); else emitter.resume();
         auto pose=parent; pose.position=parent.point(source.offset);
+        entry.centers[index]=pose.position;
         emitter.updatePose(computeView,active,pose,entry.started[index]?UINT32_MAX:0);
     }
     if(entry.playing&&!entry.asset.looping) {
@@ -162,9 +164,13 @@ std::vector<render::ParticleDrawData> ParticleGpuState::draws(uint64_t key) cons
     std::vector<render::ParticleDrawData> result;
 #if defined(AY_ENTITY_PARTICLE_GPU)
     auto found=_impl->entries.find(key); if(found==_impl->entries.end()) return result;
-    for(const auto& emitter:found->second.emitters) {
+    for(size_t index=0;index<found->second.emitters.size();++index) {
+        const auto& emitter=found->second.emitters[index];
         render::ParticleDrawData data; data.gpuStream=emitter.get();
         data.submitGpu=[](void* pointer,uint16_t view){ static_cast<particle::GpuEmitter*>(pointer)->draw(view); };
+        data.world3D=particle::layerEffect(found->second.asset.emitters[index]).dimension==particle::Dimension::ThreeD;
+        const auto center=found->second.centers[index];
+        data.sortPosition[0]=center.x;data.sortPosition[1]=center.y;data.sortPosition[2]=center.z;
         result.push_back(std::move(data));
     }
 #else
