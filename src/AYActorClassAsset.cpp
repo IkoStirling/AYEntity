@@ -277,7 +277,7 @@ bool collectSerializableComponents(const Entity& entity, Json& out,
                              {"$displayName", instance->displayName},
                              {"data", std::move(payload)}};
     }
-    if (!out.contains(legacyComponentInstanceId("Transform"))) {
+    if (!entity.hasComponent<Transform>()) {
         fail(error, "Actor is missing Transform");
         return false;
     }
@@ -287,13 +287,22 @@ bool collectSerializableComponents(const Entity& entity, Json& out,
 bool applyDefaults(Entity& entity, const ActorClassAsset& asset,
                    std::string* error)
 {
-    auto* transform = entity.addComponent<Transform>();
-    if (!transform || !entity.setComponentInstanceId(
-            transform, legacyComponentInstanceId("Transform"))) {
-        fail(error, "Actor requires registered Transform component");
-        return false;
+    const auto authoredTransform = std::find_if(asset.components.begin(),
+        asset.components.end(), [](const auto& entry) { return entry.type == "Transform"; });
+    if (authoredTransform != asset.components.end()) {
+        if (!readComponent(entity, authoredTransform->type, authoredTransform->payloadJson,
+                           slotId(*authoredTransform), authoredTransform->displayName, error))
+            return false;
+    } else {
+        auto* transform = entity.addComponent<Transform>();
+        if (!transform || !entity.setComponentInstanceId(
+                transform, legacyComponentInstanceId("Transform"))) {
+            fail(error, "Actor requires registered Transform component");
+            return false;
+        }
     }
     for (const auto& entry : asset.components) {
+        if (entry.type == "Transform") continue;
         if (!readComponent(entity, entry.type, entry.payloadJson,
                            slotId(entry), entry.displayName, error)) return false;
     }
@@ -404,6 +413,9 @@ bool mergeActorClass(const ActorClassAsset& parent,
                 result.components.end(), [&](const auto& item) { return slotId(item) == id; });
             if (found == result.components.end()) {
                 throw std::runtime_error("Actor removes unknown inherited component: " + removed);
+            }
+            if (found->type == "Transform") {
+                throw std::runtime_error("Actor cannot remove inherited Transform");
             }
             result.components.erase(found);
         }

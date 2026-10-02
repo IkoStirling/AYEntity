@@ -180,6 +180,32 @@ TEST_CASE(multiple_instances_keep_distinct_identity_and_one_query_membership)
     world.shutdown();
 }
 
+TEST_CASE(restored_identity_rejects_collisions_on_either_side_without_mutation)
+{
+    auto& registry = ComponentRegistry::instance();
+    CHECK(registerComponent<MultiProbeComponent>(registry, "test.MultiProbe",
+        "Multi Probe", "Tests", ComponentMultiplicity::Multiple).succeeded());
+    World& world = World::processWorld();
+    world.initialize();
+    auto* entity = world.createEntity();
+    auto* first = entity->createComponent<MultiProbeComponent>();
+    auto* second = entity->createComponent<MultiProbeComponent>();
+    const auto firstId = entity->componentInstance(first)->id;
+    const auto secondId = entity->componentInstance(second)->id;
+    CHECK_FALSE(entity->setComponentInstanceId(first, secondId));
+    CHECK_FALSE(entity->setComponentInstanceId(second, firstId));
+    CHECK(entity->componentInstance(first)->id == firstId);
+    CHECK(entity->componentInstance(second)->id == secondId);
+    CHECK_FALSE(entity->componentInstance(first)->restoredIdentity);
+    const auto restored = makeComponentInstanceId();
+    CHECK(entity->setComponentInstanceId(first, restored));
+    CHECK(entity->setComponentInstanceId(first, restored));
+    CHECK_FALSE(entity->setComponentInstanceId(first, firstId));
+    CHECK(entity->findComponentById(restored) == first);
+    CHECK(entity->findComponentById(secondId) == second);
+    world.shutdown();
+}
+
 TEST_SUITE_END
 
 } // namespace ayt::entity::test

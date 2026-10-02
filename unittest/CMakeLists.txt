@@ -15,6 +15,7 @@ set(SOURCES
     SkinnedAnimationTest.cpp
     CharacterEntityTest.cpp
     AYTest_SceneSerializer.cpp
+    AYTest_ComponentIdentity.cpp
     AYTest_ActorClass.cpp
     # P2.1 (2026-07-27) — BlendSpaceSystem ECS integration tests
     # (priority wiring + skinMatricesBlendSpace handoff to renderer).

@@ -243,6 +243,7 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
         }
         (void)fileId;
 
+        std::vector<std::pair<std::string, std::string>> deserializedComponents;
         s.beginArray("components");
         while (s.hasMoreArrayElements()) {
             s.beginObject(nullptr);
@@ -265,11 +266,8 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                 const bool duplicateSingle = descriptor
                     && descriptor->multiplicity == ComponentMultiplicity::Single
                     && entity->hasComponentByName(typeName.c_str());
-                // A legacy Sprite/Camera may synthesize Transform before an
-                // explicit Transform entry later in the same old Scene.
                 IComponent* component = duplicateSingle
-                    ? (wireVersion < 4 && typeName == "Transform"
-                        ? entity->getComponentByName(typeName.c_str()) : nullptr)
+                    ? nullptr
                     : ComponentFactory::addComponent(*entity, typeName.c_str());
                 if (component == nullptr) {
                     s.reportError(ayt::serializer::SerializeError::Code::UnknownType,
@@ -287,19 +285,7 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                 } else {
                     if (ComponentFactory::deserializeComponent(
                             s, typeName.c_str(), *component)) {
-                        ComponentFactory::afterSceneDeserialize(
-                            *entity, typeName.c_str(), *component);
-                        if (typeName == "ActorInstanceComponent") {
-                            auto& actor = static_cast<ActorInstanceComponent&>(*component);
-                            actor.assetsRoot = actorAssetsRoot.empty()
-                                ? assetsRootForScene(scenePath) : actorAssetsRoot;
-                            std::string actorError;
-                            if (!expandActorInstance(*entity, actor, &actorError)) {
-                                s.reportError(
-                                    ayt::serializer::SerializeError::Code::InvalidInput,
-                                    "Actor instance expansion failed: " + actorError);
-                            }
-                        }
+                        deserializedComponents.emplace_back(instanceId, typeName);
                     }
                 }
             }
@@ -307,6 +293,28 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
             s.endObject();
         }
         s.endArray();
+
+        // Dependencies synthesized by migration hooks must not shadow an
+        // explicit component later in the file (including legacy Scenes).
+        if (s.lastError().ok()) {
+            for (const auto& [instanceId, typeName] : deserializedComponents) {
+                auto* component = entity->findComponentById(instanceId);
+                if (!component) continue;
+                ComponentFactory::afterSceneDeserialize(
+                    *entity, typeName.c_str(), *component);
+                if (typeName == "ActorInstanceComponent") {
+                    auto& actor = static_cast<ActorInstanceComponent&>(*component);
+                    actor.assetsRoot = actorAssetsRoot.empty()
+                        ? assetsRootForScene(scenePath) : actorAssetsRoot;
+                    std::string actorError;
+                    if (!expandActorInstance(*entity, actor, &actorError)) {
+                        s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
+                                      "Actor instance expansion failed: " + actorError);
+                        break;
+                    }
+                }
+            }
+        }
 
         s.endObject();
     }

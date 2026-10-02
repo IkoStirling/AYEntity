@@ -35,6 +35,8 @@ bool migrateSceneSchemaToCurrent(uint32_t loadedVersion);
 bool saveScene(const World& world, const std::string& path,
                ayt::serializer::Format format = ayt::serializer::Format::Json,
                const std::string& actorAssetsRoot = {});
+/// Read explicit components before running their post-deserialization hooks,
+/// so dependency synthesis does not depend on the component order in the file.
 bool loadScene(World& world, const std::string& path,
                ayt::serializer::SerializeError* outError = nullptr,
                const std::string& actorAssetsRoot = {});

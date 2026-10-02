@@ -81,6 +81,8 @@ public:
     const ComponentInstance* componentInstance(const IComponent* component) const noexcept;
     const ComponentInstance* findComponentInstance(const std::string& id) const noexcept;
     /// Restore a persisted ID before exposing a newly loaded component.
+    /// Rejects IDs owned by any other component without changing either identity.
+    /// Once restored, only an idempotent assignment of the same ID succeeds.
     /// Ordinary gameplay must not change an existing component's identity.
     bool setComponentInstanceId(const IComponent* component, const std::string& id);
     /// Rename the authoring label without changing the component's identity.

@@ -6,6 +6,14 @@ AYEntity 是 AY Engine 的实体组件系统。`AYEntityCore` 负责 Entity/Comp
 
 ## 公开接口
 
+组件实例 ID 在同一 Entity 内唯一；恢复 ID 时，冲突或已恢复后的改号均被拒绝。
+Scene 先读取实体全部显式组件，再执行依赖补建回调，Sprite/Camera 与 Transform
+在文件中的顺序不影响装载。Actor schema 3 保留显式 Transform 的槽位 ID；
+仅当类未声明 Transform 时才补建兼容旧资产的默认槽位，继承不能删除根 Transform。
+
+`AYEntity_IdentityTests` 覆盖注册表、Actor 和组件身份场景回归；启用
+`AY_ENABLE_ENTITY_2D_SCHEMA` 即可在关闭 Renderer/AY2D/Particle 的配置中运行。
+
 ```cpp
 #include <AYEntity.h>
 #include <AYEntity/IEntity.h>

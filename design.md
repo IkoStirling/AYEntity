@@ -1,5 +1,12 @@
 # AYEntity Design
 
+> **2026-10-02 — 组件身份与装载顺序**：组件 ID 恢复先检查实体全部槽位的冲突，
+> 再修改目标，失败不消耗恢复机会。Scene 在每个实体显式组件读取完成后按文件
+> 顺序执行 `afterSceneDeserialize`，避免 Sprite/Camera 补建 Transform 遮蔽后续
+> 显式数据；真正重复的 Single 组件仍拒绝。Actor 优先初始化资产声明的 Transform
+> 和槽位 ID，只有未声明时使用旧版确定性 ID；快照按实际组件类型确认根 Transform，
+> 同一 ID 贯穿继承、字段覆盖与 Scene 往返。根 Transform 不允许通过继承删除。
+
 > **2026-09-29 — 外部骨骼姿势控制权**：`SkeletonComponent::externalPoseOwner`
 > 是主线程、非序列化的独占 lease，非空时 AnimationSystem、BlendSpaceSystem 和
 > StateMachineSystem 在加载、参数同步、tick、Notify 与姿势写入之前跳过对象。

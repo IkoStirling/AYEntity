@@ -64,6 +64,8 @@ bool resolveActorScriptPath(const std::string& assetsRoot,
 
 /// Add the class defaults and an instance identity to a new ECS Entity.
 /// `classPath` is relative to `assetsRoot` and survives Scene serialization.
+/// An authored Transform keeps its declared slot ID; an omitted Transform is
+/// synthesized with its deterministic legacy ID. Inheritance cannot remove it.
 bool instantiateActorClass(Entity& entity, const ActorClassAsset& asset,
                            const std::string& classPath,
                            const std::string& assetsRoot,

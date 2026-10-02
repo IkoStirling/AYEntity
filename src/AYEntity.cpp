@@ -178,8 +178,10 @@ const Entity::ComponentInstance* Entity::findComponentInstance(
 
 bool Entity::setComponentInstanceId(const IComponent* component, const std::string& id) {
     if (!isValidComponentInstanceId(id)) return false;
-    for (auto& instance : _componentInstances) {
+    for (const auto& instance : _componentInstances) {
         if (instance.id == id && instance.component != component) return false;
+    }
+    for (auto& instance : _componentInstances) {
         if (instance.component == component) {
             if (instance.restoredIdentity) return instance.id == id;
             instance.id = id;

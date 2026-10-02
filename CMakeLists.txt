@@ -247,6 +247,17 @@ target_compile_definitions(AYEntity PRIVATE
     AY_ENTITY_HAS_NETWORK_INTEGRATION=$<BOOL:${AY_ENABLE_NETWORK}>
 )
 
+# Identity and Scene authoring regressions also run without visual integrations.
+if(BUILD_TESTING AND AY_ENABLE_ENTITY_2D_SCHEMA)
+    add_executable(AYEntity_IdentityTests
+        unittest/TestMain.cpp
+        unittest/ComponentRegistryTest.cpp
+        unittest/AYTest_ActorClass.cpp
+        unittest/AYTest_ComponentIdentity.cpp)
+    target_link_libraries(AYEntity_IdentityTests PRIVATE AYEntity AYTest)
+    ay_add_test(AYEntity_IdentityTests LABELS "ayentity;entity-identity" TIMEOUT 60 RUN_SERIAL)
+endif()
+
 if(BUILD_TESTING AND AY_ENABLE_AY2D AND AY_ENABLE_PHYSICS)
     enable_testing()
     add_subdirectory(unittest)

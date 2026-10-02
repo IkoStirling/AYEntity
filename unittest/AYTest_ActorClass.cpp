@@ -56,6 +56,59 @@ bool registerActorMultiProbe() {
 
 TEST_SUITE(ActorClass)
 
+TEST_CASE(authored_transform_slot_survives_inheritance_and_scene_overrides)
+{
+    namespace fs = std::filesystem;
+    auto& world = World::instance();
+    world.initialize();
+    registerEntityComponents();
+    const fs::path root = fs::temp_directory_path() / "ay_actor_transform_slot" / "Assets";
+    fs::create_directories(root / "actors");
+    const std::string slot = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    ActorClassAsset base;
+    std::string error;
+    CHECK(parseActorClassAsset(R"({"type":"ay.actorClass","schemaVersion":3,"id":"RootActor",
+        "components":[{"$type":"Transform","$instanceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]})",
+        base, &error));
+    CHECK(saveActorClassAsset((root / "actors/Base.act").string(), base, &error));
+    ActorClassAsset child;
+    child.id = "ChildActor";
+    child.parentPath = "actors/Base.act";
+    child.components.push_back({"Transform", R"({"position":[4,5,6]})", slot, "Root"});
+    CHECK(saveActorClassAsset((root / "actors/Child.act").string(), child, &error));
+    auto* entity = world.createEntity();
+    entity->setName("AuthoredRoot");
+    CHECK(instantiateActorClass(*entity, child, "actors/Child.act", root.string(), &error));
+    auto* transform = entity->getComponent<Transform>();
+    CHECK_NOT_NULL(transform);
+    if (transform) {
+        CHECK(entity->findComponentById(slot) == transform);
+        CHECK_FLOAT_EQ(transform->position.x, 4.0f, 0.001f);
+        transform->position.x = 42;
+    }
+    const auto scene = root / "roundtrip.scn";
+    CHECK(saveScene(world, scene.string()));
+    ayt::serializer::SerializeError sceneError;
+    CHECK(loadScene(world, scene.string(), &sceneError));
+    entity = world.findEntity("AuthoredRoot");
+    CHECK_NOT_NULL(entity);
+    if (entity) {
+        transform = entity->getComponent<Transform>();
+        CHECK_NOT_NULL(transform);
+        if (transform) {
+            CHECK(entity->findComponentById(slot) == transform);
+            CHECK_FLOAT_EQ(transform->position.x, 42.0f, 0.001f);
+        }
+    }
+    child.components.clear();
+    child.removedComponents.push_back(slot);
+    CHECK(saveActorClassAsset((root / "actors/Child.act").string(), child, &error));
+    ActorClassAsset resolved;
+    CHECK_FALSE(resolveActorClassAsset(root.string(), "actors/Child.act", resolved, &error));
+    world.shutdown();
+    fs::remove_all(root.parent_path());
+}
+
 TEST_CASE(actor_multi_slots_inherit_override_and_roundtrip)
 {
     namespace fs = std::filesystem;
