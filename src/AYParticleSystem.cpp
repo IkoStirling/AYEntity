@@ -4,6 +4,7 @@
 #include <AYEntity/World.h>
 #include <AYEntity/components/ParticleEmitterComponent.h>
 #include <AYEntity/components/ParticleEffectComponent.h>
+#include <AYEntity/components/ParticleSurface2DComponent.h>
 #include <AYParticle/EffectResource.h>
 #include <AYResource/ResourceManager.h>
 #include <AYResource/AssetPath.h>
@@ -46,9 +47,88 @@ bool visible2D(const particle::ParticleSample& s,const render::OverlayCamera2D& 
     return std::fabs(clip.x)<=std::fabs(clip.w)+padX
         && std::fabs(clip.y)<=std::fabs(clip.w)+padY;
 }
+class SceneParticleCollision2D final : public particle::CollisionQuery2D {
+    struct Surface {
+        float left,right,bottom,top,height;
+        uint32_t mask,tag;
+        bool ground,solid;
+    };
+    std::vector<Surface> surfaces;
+public:
+    explicit SceneParticleCollision2D(World& world) {
+        for(auto* entity:world.query<Transform,ParticleSurface2DComponent>()) {
+            const auto& transform=*entity->getComponent<Transform>();
+            const auto& source=*entity->getComponent<ParticleSurface2DComponent>();
+            const auto center=transform.position;
+            const float hx=source.halfExtent.x,hy=source.halfExtent.y;
+            if(!std::isfinite(center.x)||!std::isfinite(center.y)||!std::isfinite(hx)
+                ||!std::isfinite(hy)||!std::isfinite(source.height)||hx<=0||hy<=0||source.height<0) continue;
+            surfaces.push_back({center.x-hx,center.x+hx,center.y-hy,center.y+hy,source.height,
+                static_cast<uint32_t>(source.collisionMask),static_cast<uint32_t>(source.surfaceTag),
+                source.ground,source.solid});
+        }
+    }
+    bool ground(particle::Vec3 anchor,float maxHeight,uint32_t mask,particle::CollisionHit2D& hit) const override {
+        bool found=false;
+        for(const auto& s:surfaces) {
+            if(!s.ground || !(s.mask&mask) || s.height>maxHeight || anchor.x<s.left || anchor.x>s.right
+                || anchor.y<s.bottom || anchor.y>s.top || (found && s.height<=hit.height)) continue;
+            hit.position=anchor;hit.normal={0,1,0};hit.height=s.height;hit.surfaceTag=s.tag;hit.fraction=1;
+            found=true;
+        }
+        return found;
+    }
+    bool sweep(particle::Vec3 from,particle::Vec3 to,uint32_t mask,particle::CollisionHit2D& hit) const override {
+        bool found=false;
+        const auto delta=to-from;
+        for(const auto& s:surfaces) {
+            if(!s.solid || !(s.mask&mask)) continue;
+            if(from.x>=s.left&&from.x<=s.right&&from.y>=s.bottom&&from.y<=s.top) continue;
+            float enter=0,leave=1;
+            particle::Vec3 normal{};
+            const auto slab=[&](float start,float move,float low,float high,particle::Vec3 lowNormal,particle::Vec3 highNormal) {
+                if(std::fabs(move)<0.000001f) return start>=low&&start<=high;
+                float first=(low-start)/move,second=(high-start)/move;
+                auto firstNormal=lowNormal;
+                if(first>second){std::swap(first,second);firstNormal=highNormal;}
+                if(first>enter){enter=first;normal=firstNormal;}
+                leave=std::min(leave,second);
+                return enter<=leave;
+            };
+            if(!slab(from.x,delta.x,s.left,s.right,{-1,0,0},{1,0,0})
+                ||!slab(from.y,delta.y,s.bottom,s.top,{0,-1,0},{0,1,0})
+                ||enter<0||enter>1||enter>=leave|| (found&&enter>=hit.fraction)) continue;
+            hit.position=from+delta*enter;hit.normal=normal;hit.fraction=enter;
+            hit.height=s.height;hit.surfaceTag=s.tag;found=true;
+        }
+        return found;
+    }
+};
 }
 void ParticleSimulationSystem::onUpdate(float dt) {
     auto& world=World::instance();
+    const SceneParticleCollision2D collision(world);
+    for(auto& visual:_impactVisuals) visual.instance.update(dt,visual.pose);
+    std::erase_if(_impactVisuals,[](const ImpactVisual& visual){return visual.instance.finished();});
+    const auto collectImpacts=[&](const particle::ParticleInstance& source,int32_t layer,int32_t sortingKey) {
+        const auto& c=source.effect().collision2D;
+        if(c.impactSize<=0 || c.impactColor.a<=0) return;
+        for(const auto& hit:source.impacts()) {
+            if(_impactVisuals.size()>=256) break;
+            particle::ParticleEffect pulse;
+            pulse.capacity=1;pulse.burst=1;pulse.rate=0;pulse.duration=0.01f;pulse.looping=false;
+            pulse.velocityMin=pulse.velocityMax=pulse.gravity={};
+            pulse.lifetime={c.impactLifetime,c.impactLifetime};pulse.size={c.impactSize,c.impactSize};
+            pulse.endSizeScale=1.8f;pulse.startColor=c.impactColor;
+            pulse.endColor={c.impactColor.r,c.impactColor.g,c.impactColor.b,0};
+            particle::Pose pose;pose.position=hit.position;
+            if(c.mode==particle::CollisionMode2D::Ground)
+                pose.position.y+=hit.height*c.visualHeightScale;
+            ImpactVisual visual{particle::ParticleInstance(pulse),pose,layer,sortingKey};
+            visual.instance.play();visual.instance.update(0,pose);
+            _impactVisuals.push_back(std::move(visual));
+        }
+    };
     uint64_t used=0;
     uint64_t reserved=0;
     gpuEmitters=0;
@@ -116,7 +196,8 @@ void ParticleSimulationSystem::onUpdate(float dt) {
         const auto allowed=used+reserved<maxParticles ? static_cast<uint32_t>(maxParticles-used-reserved) : 0;
         emitter->runtime->update(dt,poseOf(*entity->getComponent<Transform>(),
             game::GameLoop::instance().getInterpolationFactor()),
-            allowed>before ? allowed-static_cast<uint32_t>(before) : 0);
+            allowed>before ? allowed-static_cast<uint32_t>(before) : 0,&collision);
+        collectImpacts(*emitter->runtime,emitter->layer,emitter->sortingKey);
         used+=emitter->runtime->particles().size();
     }
     for(auto* entity:world.query<Transform,ParticleEffectComponent>()) {
@@ -130,7 +211,9 @@ void ParticleSimulationSystem::onUpdate(float dt) {
         const auto allowed=used+reserved<maxParticles ? static_cast<uint32_t>(maxParticles-used-reserved) : 0;
         effect->runtime->update(dt,poseOf(*entity->getComponent<Transform>(),
             game::GameLoop::instance().getInterpolationFactor()),
-            allowed>before ? allowed-static_cast<uint32_t>(before) : 0);
+            allowed>before ? allowed-static_cast<uint32_t>(before) : 0,&collision);
+        for(const auto& child:effect->runtime->instances())
+            collectImpacts(child,effect->layer,effect->sortingKey);
         used+=effect->runtime->liveParticles();
     }
     liveParticles=static_cast<uint32_t>(std::min<uint64_t>(used,UINT32_MAX));
@@ -281,5 +364,8 @@ void ParticleRenderSystem::buildRenderScene(render::RenderScene& scene) {
         for(size_t i=0;i<instances.size();++i)
             drawInstance(instances[i],effect->runtime->emitterPose(i,pose),effect->layer,effect->sortingKey);
     }
+    if(auto* simulation=dynamic_cast<ParticleSimulationSystem*>(World::instance().findSystemByName("ParticleSimulationSystem")))
+        for(const auto& visual:simulation->impactVisuals())
+            drawInstance(visual.instance,visual.pose,visual.layer,visual.sortingKey);
 }
 }

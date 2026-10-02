@@ -1,11 +1,13 @@
 #include <AYEntity/components/ParticleEmitterComponent.h>
 #include <AYEntity/components/ParticleEffectComponent.h>
+#include <AYEntity/components/ParticleSurface2DComponent.h>
 #include <AYEntity/ComponentRegistration.h>
 #include <AYParticle/EffectAssetIO.h>
 #include <AYEntity/EntityParticleIntegrationModule.h>
 namespace ayt::entity {
 AY_FINALIZE_REGISTRATION_METADATA(ParticleEmitterComponent)
 AY_FINALIZE_REGISTRATION_METADATA(ParticleEffectComponent)
+AY_FINALIZE_REGISTRATION_METADATA(ParticleSurface2DComponent)
 namespace {
 particle::Vec3 v3(const math::FVector3& v) { return {v.x,v.y,v.z}; }
 particle::Color color(const math::FVector4& v) { return {v.x,v.y,v.z,v.w}; }
@@ -93,7 +95,10 @@ ComponentRegistryResult registerEntityParticleComponents(ComponentRegistry& regi
     const auto result=registerSceneComponent<ParticleEmitterComponent>(registry,
         "ParticleEmitterComponent","Particle Emitter","Effects");
     if(!result) return result;
-    return registerSceneComponent<ParticleEffectComponent>(registry,
+    const auto effect=registerSceneComponent<ParticleEffectComponent>(registry,
         "ParticleEffectComponent","Particle Effect","Effects");
+    if(!effect) return effect;
+    return registerSceneComponent<ParticleSurface2DComponent>(registry,
+        "ParticleSurface2DComponent","Particle Surface 2D","Effects");
 }
 }

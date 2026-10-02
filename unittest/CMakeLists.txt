@@ -142,6 +142,12 @@ ay_add_test(AYEntityComponentModuleTest)
 
 # Focused particle bridge regressions avoid rebuilding unrelated Entity suites.
 if(TARGET AYEntityParticleIntegration)
+    add_executable(AYEntity_ParticleCollisionSmoke ParticleCollisionSmoke.cpp)
+    target_link_libraries(AYEntity_ParticleCollisionSmoke PRIVATE AYEntityCore AYEntityParticleIntegration AYCore AYSerializer)
+    if(MSVC)
+        target_link_options(AYEntity_ParticleCollisionSmoke PRIVATE /DEBUG:NONE /INCREMENTAL:NO)
+    endif()
+    ay_add_test(AYEntity_ParticleCollisionSmoke)
     add_executable(AYEntity_ParticleTests TestMain.cpp AYTest_ParticleSystems.cpp)
     target_link_libraries(AYEntity_ParticleTests PRIVATE AYEntity AYTest AYCore AYSerializer)
     target_compile_definitions(AYEntity_ParticleTests PRIVATE

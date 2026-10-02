@@ -37,6 +37,7 @@ Scene 先读取实体全部显式组件，再执行依赖补建回调，Sprite/C
 | `AYEntityAnimationIntegration` | 动画组件与系统 | AYAnimation、AYResource、AYEventSystem |
 | `AYEntityRenderIntegration` | Mesh/SkinnedMesh 表现系统 | AYRenderer、Animation integration、AYResource |
 | `AYEntity2DIntegration` | Tilemap/Sprite/OrthoCamera 表现系统 | AYRenderer、AYResource |
+| `AYEntityParticleIntegration` | 粒子播放、2D 场景碰撞面与命中光斑 | AYParticle、AYRenderer、AYResource |
 | `AYEntityPhysicsIntegration` | 物理组件与固定步双向桥 | AYPhysics |
 | `AYEntityScriptIntegration` | ScriptComponent 类型注册 | 无具体脚本运行时依赖 |
 | `AYEntityNetworkIntegration` | NetworkComponent 类型注册 | 无具体网络运行时依赖 |
@@ -44,6 +45,19 @@ Scene 先读取实体全部显式组件，再执行依赖补建回调，Sprite/C
 
 新模块应链接 `AYEntityCore` 和自己确实使用的 integration；只有旧 Demo 或明确
 需要完整表面的产品才链接 `AYEntity`。
+
+## 2D 粒子碰撞面
+
+给带 `Transform` 的实体添加 `ParticleSurface2DComponent`，用 `halfExtent`
+在世界 XY 平面标记矩形。`ground` 允许俯视粒子按 `height` 选择最高落点；
+`solid` 允许横版粒子沿 XY 运动轨迹碰撞。`collisionMask` 过滤粒子，
+`surfaceTag` 随命中事件返回。场景会保存这些配置，但矩形本身不渲染；
+Sprite/Tilemap 美术和碰撞区域需要分别配置。当前仅支持轴对齐矩形，
+不应用 Transform 的旋转或缩放，也不作为游戏物理碰撞体。
+
+粒子系统每个表现帧读取场景碰撞面，CPU 粒子命中后可消失或反弹，
+并在启用时显示短暂光斑。`AYEntity_ParticleTests` 和
+`AYEntity_ParticleCollisionSmoke` 覆盖场景装载、落点选择及扫掠命中。
 
 ## 2D Sprite 序列帧
 

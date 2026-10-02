@@ -1241,6 +1241,21 @@ Render、2D、Physics、Script、Network 的类型和行为由对应
 兼容路径。生产 Host 在所有模块 `registerTypes()` 后封存上下文中的同一注册表，
 类型模块不得在模块路径中自行回退到另一份进程单例。
 
+### 2D 粒子碰撞面的表现层数据流
+
+`AYEntityParticleIntegration` 注册可序列化的
+`ParticleSurface2DComponent`。`ParticleSimulationSystem` 每个 Present 帧
+从 `Transform + ParticleSurface2DComponent` 建立临时世界 XY 矩形查询：
+Ground 查询返回落点上方出生高度以内的最高表面；Sweep 查询返回运动线段
+首先进入的 `solid` 矩形。场景查询对象仅在本帧粒子更新期间存活，粒子
+运行时只保存选中的高度和标签，不持有 Entity 或组件指针。命中光斑由
+表现系统持有，最多 256 个，同时每个粒子实例每帧最多报告 256 次命中。
+
+这些区域与物理碰撞体分离，运行在可变表现帧；其命中事件不驱动确定性
+Gameplay。当前矩形只使用 Transform 平移，不使用旋转或缩放。俯视模式
+将 XY 作为固定落点，另用视觉高度推进，因此粒子的 XY 初速度与重力必须
+为零。场景保存几何配置，不保存运行时粒子、命中事件或光斑。
+
 ---
 
 ## 16. 参考

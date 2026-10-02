@@ -1,6 +1,7 @@
 #pragma once
 #include <AYEntity/IEntity.h>
 #include <AYRenderer/RenderScene.h>
+#include <AYParticle/Particle.h>
 #include <deque>
 #include <unordered_map>
 #include <memory>
@@ -13,8 +14,16 @@ public:
     uint32_t maxParticles=100000;
     uint32_t liveParticles=0;
     uint32_t gpuEmitters=0,gpuReservedParticles=0;
+    struct ImpactVisual {
+        particle::ParticleInstance instance;
+        particle::Pose pose;
+        int32_t layer=0,sortingKey=0;
+    };
+    const std::deque<ImpactVisual>& impactVisuals() const noexcept { return _impactVisuals; }
     const char* getName() const override { return "ParticleSimulationSystem"; }
     void onUpdate(float dt) override;
+private:
+    std::deque<ImpactVisual> _impactVisuals;
 };
 class ParticleRenderSystem : public ISystem {
 public:

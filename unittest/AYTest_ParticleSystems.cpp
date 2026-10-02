@@ -5,6 +5,7 @@
 #include <AYEntity/SceneSerializer.h>
 #include <AYEntity/components/ParticleEmitterComponent.h>
 #include <AYEntity/components/ParticleEffectComponent.h>
+#include <AYEntity/components/ParticleSurface2DComponent.h>
 #include <AYParticle/EffectAssetIO.h>
 #include <AYParticle/EffectResource.h>
 #include <AYResource/ResourceManager.h>
@@ -13,6 +14,7 @@
 #include <AYGameLoop/SubSystemRegistry.h>
 #include <AYTest.h>
 #include <filesystem>
+#include <utility>
 
 using namespace ayt;
 namespace {
@@ -49,6 +51,72 @@ particle::ParticleEffect burst(uint32_t count=100) {
 }
 }
 TEST_SUITE(AYEntityParticles)
+TEST_CASE(particle_ground_surface_chooses_roof_and_spawns_impact_visual) {
+    Fixture fixture;
+    auto& world=entity::World::instance();
+    for(const auto [height,tag]:{std::pair{0.f,1},std::pair{.5f,7}}) {
+        auto* object=world.createEntity();object->addComponent<entity::Transform>();
+        auto* surface=object->addComponent<entity::ParticleSurface2DComponent>();
+        surface->halfExtent={2,2};surface->height=height;surface->surfaceTag=tag;
+    }
+    auto effect=burst(1);effect.collision2D.mode=particle::CollisionMode2D::Ground;
+    effect.collision2D.spawnHeight=1;effect.collision2D.fallSpeed=5;
+    auto* source=emitter(effect);
+    entity::ParticleSimulationSystem system;system.onUpdate(0);
+    CHECK(source->runtime->particles().size()==1);
+    system.onUpdate(.2f);
+    CHECK(source->runtime->particles().empty());
+    CHECK(source->runtime->impacts().size()==1);
+    CHECK(source->runtime->impacts()[0].surfaceTag==7);
+    CHECK(system.impactVisuals().size()==1);
+    CHECK_FLOAT_EQ(system.impactVisuals().front().pose.position.y,.5f,0.0001f);
+}
+TEST_CASE(particle_solid_surface_sweeps_fast_particles) {
+    Fixture fixture;
+    auto& world=entity::World::instance();
+    auto* wall=world.createEntity();wall->addComponent<entity::Transform>();
+    auto* surface=wall->addComponent<entity::ParticleSurface2DComponent>();
+    surface->halfExtent={.1f,2};surface->ground=false;surface->solid=true;surface->surfaceTag=9;
+    auto effect=burst(1);effect.velocityMin=effect.velocityMax={10,0,0};
+    effect.collision2D.mode=particle::CollisionMode2D::Sweep;
+    auto* source=emitter(effect);
+    for(auto* object:world.query<entity::Transform,entity::ParticleEmitterComponent>())
+        object->getComponent<entity::Transform>()->position={-1,0,0};
+    entity::ParticleSimulationSystem system;system.onUpdate(0);system.onUpdate(.2f);
+    CHECK(source->runtime->particles().empty());
+    CHECK(source->runtime->impacts().size()==1);
+    CHECK(source->runtime->impacts()[0].surfaceTag==9);
+    CHECK_FLOAT_EQ(source->runtime->impacts()[0].position.x,-.1f,0.0001f);
+}
+TEST_CASE(particle_surface_scene_roundtrip) {
+    Fixture fixture;
+    auto* object=entity::World::instance().createEntity();object->addComponent<entity::Transform>();
+    auto* surface=object->addComponent<entity::ParticleSurface2DComponent>();
+    surface->halfExtent={3,4};surface->height=2;surface->surfaceTag=5;
+    surface->collisionMask=8;surface->solid=true;
+    const auto path=(std::filesystem::temp_directory_path()/"ay_particle_surface_roundtrip.scn").string();
+    CHECK(entity::saveScene(entity::World::instance(),path));
+    entity::World::instance().shutdown();entity::World::instance().initialize();
+    CHECK(entity::loadScene(entity::World::instance(),path));
+    int count=0;
+    for(auto* e:entity::World::instance().query<entity::ParticleSurface2DComponent>()) {
+        const auto* loaded=e->getComponent<entity::ParticleSurface2DComponent>();
+        CHECK_FLOAT_EQ(loaded->halfExtent.x,3,0);CHECK_FLOAT_EQ(loaded->height,2,0);
+        CHECK_INT_EQ(loaded->surfaceTag,5);CHECK_INT_EQ(loaded->collisionMask,8);
+        CHECK(loaded->solid);++count;
+    }
+    CHECK_INT_EQ(count,1);std::filesystem::remove(path);
+}
+TEST_CASE(particle_collision_example_scene_loads) {
+    Fixture fixture;
+    const auto path=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()
+        /"AYParticle/examples/Collision2D/Assets/worlds/RainCollision2D.scn";
+    CHECK(entity::loadScene(entity::World::instance(),path.string()));
+    int surfaces=0,effects=0;
+    for(auto* e:entity::World::instance().query<entity::ParticleSurface2DComponent>()) {(void)e;++surfaces;}
+    for(auto* e:entity::World::instance().query<entity::ParticleEffectComponent>()) {(void)e;++effects;}
+    CHECK_INT_EQ(surfaces,2);CHECK_INT_EQ(effects,1);
+}
 TEST_CASE(particle_gpu_preference_falls_back_without_graphics) {
     Fixture fixture;
     auto effect=burst(10); effect.backend=particle::Backend::Gpu; auto* c=emitter(effect);
