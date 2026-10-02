@@ -1,4 +1,5 @@
 #include <AYEntity/ActorClassAsset.h>
+#include <AYAssetFormat/AssetFormat.h>
 
 #include <AYEntity/ComponentFactory.h>
 #include <AYEntity/ComponentRegistry.h>
@@ -58,7 +59,10 @@ bool portablePath(const std::string& value, const std::string& suffix)
         || value.find(':') != std::string::npos
         || value.front() == '/' || value.back() == '/') return false;
     const std::filesystem::path path(value);
-    if (path.is_absolute() || path.extension() != suffix) return false;
+    const bool extensionMatches = suffix == ayt::asset_format::suffix(ayt::asset_format::Id::ActorClass)
+        ? ayt::asset_format::matchesPath(value, ayt::asset_format::Id::ActorClass)
+        : path.extension() == suffix;
+    if (path.is_absolute() || !extensionMatches) return false;
     for (const auto& part : path) {
         if (part == "." || part == ".." || part.empty()) return false;
     }
@@ -101,8 +105,8 @@ bool validate(const ActorClassAsset& asset, std::string* error)
         fail(error, "Actor script must be an asset-root-relative .logia path");
         return false;
     }
-    if (!asset.parentPath.empty() && !portablePath(asset.parentPath, ".ayactor")) {
-        fail(error, "Actor parent must be an asset-root-relative .ayactor path");
+    if (!asset.parentPath.empty() && !portablePath(asset.parentPath, ".act")) {
+        fail(error, "Actor parent must be an asset-root-relative .act path");
         return false;
     }
     if (asset.parentPath.empty()
@@ -527,7 +531,7 @@ bool parseActorClassAsset(const std::string& source,
 bool loadActorClassAsset(const std::string& absolutePath,
                          ActorClassAsset& out, std::string* error)
 {
-    if (std::filesystem::path(absolutePath).extension() != ".ayactor"
+    if (!ayt::asset_format::matchesPath(absolutePath, ayt::asset_format::Id::ActorClass)
         || !ayt::io::File::exists(absolutePath)) {
         fail(error, "Actor class file is missing or has the wrong extension");
         return false;
@@ -544,7 +548,7 @@ bool loadActorClassAsset(const std::string& absolutePath,
 bool saveActorClassAsset(const std::string& absolutePath,
                          const ActorClassAsset& asset, std::string* error)
 {
-    if (std::filesystem::path(absolutePath).extension() != ".ayactor"
+    if (!ayt::asset_format::isCanonicalPath(absolutePath, ayt::asset_format::Id::ActorClass)
         || !validate(asset, error)) return false;
     try {
         Json wire = {{"type", "ay.actorClass"}, {"schemaVersion", 3},
@@ -602,7 +606,7 @@ bool resolveActorClassPath(const std::string& assetsRoot,
                            const std::string& classPath,
                            std::string& absolutePath, std::string* error)
 {
-    return resolveAssetPath(assetsRoot, classPath, ".ayactor",
+    return resolveAssetPath(assetsRoot, classPath, ".act",
                             absolutePath, error);
 }
 

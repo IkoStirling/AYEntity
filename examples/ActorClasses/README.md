@@ -1,7 +1,7 @@
 # Actor class inheritance example
 
-`Assets/actors/EnemyActor.ayactor` defines a reusable ECS component and
-property template. `EliteEnemy.ayactor` inherits it, changes two properties
+`Assets/actors/EnemyActor.act` defines a reusable ECS component and
+property template. `EliteEnemy.act` inherits it, changes two properties
 and patches the health component's `maxHp`. Both use `EnemyActor.logia` because
 the child leaves `script` empty.
 

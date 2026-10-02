@@ -33,11 +33,11 @@ struct ActorClassAsset {
     std::vector<std::string> removedProperties;
 };
 
-/// Parse a schema 1, 2 or 3 `.ayactor` document in memory, including component
+/// Parse a schema 1, 2 or 3 `.act` document in memory, including component
 /// registration checks. Use this for editor diagnostics before saving.
 bool parseActorClassAsset(const std::string& source,
                           ActorClassAsset& out, std::string* error = nullptr);
-/// Read and validate a loose `.ayactor` authoring asset. The caller provides
+/// Read and validate a loose `.act` or legacy `.ayactor` authoring asset. The caller provides
 /// an absolute path within its project's asset root.
 bool loadActorClassAsset(const std::string& absolutePath,
                          ActorClassAsset& out, std::string* error = nullptr);

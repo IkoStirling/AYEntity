@@ -76,19 +76,19 @@ TEST_CASE(actor_multi_slots_inherit_override_and_roundtrip)
     base.components.push_back({"test.ActorMultiProbe", R"({"value":20})",
                                secondId, "Second"});
     std::string error;
-    CHECK(saveActorClassAsset((root / "actors/Base.ayactor").string(), base, &error));
+    CHECK(saveActorClassAsset((root / "actors/Base.act").string(), base, &error));
     ActorClassAsset child;
     child.id = "MultiChild";
-    child.parentPath = "actors/Base.ayactor";
+    child.parentPath = "actors/Base.act";
     child.components.push_back({"test.ActorMultiProbe", R"({"value":25})",
                                 secondId, {}});
-    CHECK(saveActorClassAsset((root / "actors/Child.ayactor").string(), child, &error));
+    CHECK(saveActorClassAsset((root / "actors/Child.act").string(), child, &error));
     ActorClassAsset effective;
-    CHECK(resolveActorClassAsset(root.string(), "actors/Child.ayactor", effective, &error));
+    CHECK(resolveActorClassAsset(root.string(), "actors/Child.act", effective, &error));
     CHECK_INT_EQ(static_cast<int>(effective.components.size()), 2);
     Entity* entity = world.createEntity();
     entity->setName("MultiActor");
-    CHECK(instantiateActorClass(*entity, child, "actors/Child.ayactor",
+    CHECK(instantiateActorClass(*entity, child, "actors/Child.act",
                                 root.string(), &error));
     auto* first = static_cast<ActorMultiProbe*>(entity->findComponentById(firstId));
     auto* second = static_cast<ActorMultiProbe*>(entity->findComponentById(secondId));
@@ -130,7 +130,7 @@ TEST_CASE(actor_class_scene_roundtrip_preserves_identity_and_field_overrides)
         / "ay_actor_class_roundtrip" / "Assets";
     fs::create_directories(root / "actors");
     fs::create_directories(root / "worlds");
-    const fs::path classFile = root / "actors" / "Enemy.ayactor";
+    const fs::path classFile = root / "actors" / "Enemy.act";
     const fs::path sceneFile = root / "worlds" / "Encounter.ayscene";
     ActorClassAsset asset;
     asset.id = "Enemy";
@@ -142,7 +142,7 @@ TEST_CASE(actor_class_scene_roundtrip_preserves_identity_and_field_overrides)
 
     Entity* first = world.createEntity();
     first->setName("Enemy A");
-    CHECK(instantiateActorClass(*first, asset, "actors/Enemy.ayactor",
+    CHECK(instantiateActorClass(*first, asset, "actors/Enemy.act",
                                 root.string(), &error));
     const std::string healthSlotId =
         first->componentInstance(first->getComponent<HealthComponent>())->id;
@@ -152,7 +152,7 @@ TEST_CASE(actor_class_scene_roundtrip_preserves_identity_and_field_overrides)
 
     Entity* second = world.createEntity();
     second->setName("Enemy B");
-    CHECK(instantiateActorClass(*second, asset, "actors/Enemy.ayactor",
+    CHECK(instantiateActorClass(*second, asset, "actors/Enemy.act",
                                 root.string(), &error));
     const std::string secondId = second->getComponent<ActorInstanceComponent>()->instanceId;
     CHECK(firstId != secondId);
@@ -192,9 +192,9 @@ TEST_CASE(actor_class_inherits_data_and_rejects_cycles)
     const fs::path root = fs::temp_directory_path()
         / "ay_actor_class_inheritance" / "Assets";
     fs::create_directories(root / "actors");
-    const auto basePath = root / "actors/Base.ayactor";
-    const auto childPath = root / "actors/Child.ayactor";
-    const auto grandPath = root / "actors/Grand.ayactor";
+    const auto basePath = root / "actors/Base.act";
+    const auto childPath = root / "actors/Child.act";
+    const auto grandPath = root / "actors/Grand.act";
     std::string error;
     ActorClassAsset base;
     base.id = "Base";
@@ -206,34 +206,34 @@ TEST_CASE(actor_class_inherits_data_and_rejects_cycles)
 
     ActorClassAsset child;
     child.id = "Child";
-    child.parentPath = "actors/Base.ayactor";
+    child.parentPath = "actors/Base.act";
     child.propertiesJson = R"({"hp":150})";
     child.removedProperties.push_back("speed");
     child.components.push_back({"HealthComponent", R"({"maxHp":150})"});
     CHECK(saveActorClassAsset(childPath.string(), child, &error));
     ActorClassAsset effective;
-    CHECK(resolveActorClassAsset(root.string(), "actors/Child.ayactor",
+    CHECK(resolveActorClassAsset(root.string(), "actors/Child.act",
                                  effective, &error));
     CHECK(effective.scriptPath == base.scriptPath);
     CHECK(effective.propertiesJson.find("speed") == std::string::npos);
     CHECK(effective.propertiesJson.find("150") != std::string::npos);
     Entity* entity = world.createEntity();
-    CHECK(instantiateActorClass(*entity, child, "actors/Child.ayactor",
+    CHECK(instantiateActorClass(*entity, child, "actors/Child.act",
                                 root.string(), &error));
     CHECK_INT_EQ(entity->getComponent<HealthComponent>()->currentHp, 100);
     CHECK_INT_EQ(entity->getComponent<HealthComponent>()->maxHp, 150);
 
     ActorClassAsset grand;
     grand.id = "Grand";
-    grand.parentPath = "actors/Child.ayactor";
+    grand.parentPath = "actors/Child.act";
     grand.removedComponents.push_back("HealthComponent");
     CHECK(saveActorClassAsset(grandPath.string(), grand, &error));
-    CHECK(resolveActorClassAsset(root.string(), "actors/Grand.ayactor",
+    CHECK(resolveActorClassAsset(root.string(), "actors/Grand.act",
                                  effective, &error));
     CHECK(effective.components.empty());
-    base.parentPath = "actors/Grand.ayactor";
+    base.parentPath = "actors/Grand.act";
     CHECK(saveActorClassAsset(basePath.string(), base, &error));
-    CHECK_FALSE(resolveActorClassAsset(root.string(), "actors/Child.ayactor",
+    CHECK_FALSE(resolveActorClassAsset(root.string(), "actors/Child.act",
                                        effective, &error));
     CHECK(error.find("cycle") != std::string::npos);
 
@@ -253,9 +253,10 @@ TEST_CASE(actor_schema_one_remains_readable)
     CHECK(loadActorClassAsset(path.string(), loaded, &error));
     CHECK(loaded.id == "Legacy");
     CHECK(loaded.parentPath.empty());
-    CHECK(saveActorClassAsset(path.string(), loaded, &error));
+    const auto canonical = root / "Legacy.act";
+    CHECK(saveActorClassAsset(canonical.string(), loaded, &error));
     {
-        std::ifstream migrated(path);
+        std::ifstream migrated(canonical);
         const std::string serialized((std::istreambuf_iterator<char>(migrated)),
                                      std::istreambuf_iterator<char>());
         CHECK(serialized.find("\"schemaVersion\": 3")
@@ -279,22 +280,22 @@ TEST_CASE(failed_actor_scene_load_restores_previous_world)
     actor.components.push_back({"HealthComponent",
         R"({"currentHp":77,"maxHp":100})"});
     std::string error;
-    CHECK(saveActorClassAsset((root / "actors/Enemy.ayactor").string(),
+    CHECK(saveActorClassAsset((root / "actors/Enemy.act").string(),
                               actor, &error));
     Entity* original = world.createEntity();
     original->setName("Existing Enemy");
-    CHECK(instantiateActorClass(*original, actor, "actors/Enemy.ayactor",
+    CHECK(instantiateActorClass(*original, actor, "actors/Enemy.act",
                                 root.string(), &error));
     const auto scene = root / "worlds/Bad.ayscene";
     CHECK(saveScene(world, scene.string()));
     std::ifstream input(scene);
     std::string encoded((std::istreambuf_iterator<char>(input)), {});
     input.close();
-    const auto position = encoded.find("actors/Enemy.ayactor");
+    const auto position = encoded.find("actors/Enemy.act");
     CHECK(position != std::string::npos);
     if (position != std::string::npos)
-        encoded.replace(position, std::string("actors/Enemy.ayactor").size(),
-                        "actors/Missing.ayactor");
+        encoded.replace(position, std::string("actors/Enemy.act").size(),
+                        "actors/Missing.act");
     std::ofstream(scene, std::ios::trunc) << encoded;
     ayt::serializer::SerializeError sceneError;
     CHECK_FALSE(loadScene(world, scene.string(), &sceneError));
@@ -320,14 +321,14 @@ TEST_CASE(actor_large_scene_roundtrip_within_debug_budget)
     ActorClassAsset actor;
     actor.id = "CrowdEnemy";
     std::string error;
-    CHECK(saveActorClassAsset((root / "actors/CrowdEnemy.ayactor").string(),
+    CHECK(saveActorClassAsset((root / "actors/CrowdEnemy.act").string(),
                               actor, &error));
     const auto start = std::chrono::steady_clock::now();
     std::unordered_set<std::string> identities;
     for (int index = 0; index < kCount; ++index) {
         Entity* entity = world.createEntity();
         CHECK(instantiateActorClass(*entity, actor,
-            "actors/CrowdEnemy.ayactor", root.string(), &error));
+            "actors/CrowdEnemy.act", root.string(), &error));
         identities.insert(entity->getComponent<ActorInstanceComponent>()->instanceId);
     }
     CHECK_INT_EQ(identities.size(), static_cast<std::size_t>(kCount));

@@ -62,6 +62,7 @@ add_library(AYEntity::Core ALIAS AYEntityCore)
 ay_configure_entity_target(AYEntityCore)
 target_link_libraries(AYEntityCore PUBLIC
     AY::Module
+    AYAssetFormat
     AYCore
     AYGameLoop
     AYReflect

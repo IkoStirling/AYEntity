@@ -193,7 +193,7 @@ TEST_CASE(particle_editor_override_drives_culling) {
 TEST_CASE(particle_showcase_replays_after_opening_delay) {
     Fixture fixture(true); CHECK_NOT_NULL(fixture.renderer); if (!fixture.renderer) return;
     const auto path=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path()
-        / "AYParticle/examples/ParticleShowcase.ayscene";
+        / "AYParticle/examples/ParticleShowcase.scn";
     CHECK(entity::loadScene(entity::World::instance(),path.string()));
     auto emitters=entity::World::instance().query<entity::ParticleEmitterComponent>();
     int emitterCount=0; for (auto* e:emitters) { (void)e; ++emitterCount; }
