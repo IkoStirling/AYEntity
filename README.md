@@ -4,6 +4,13 @@ AYEntity 是 AY Engine 的实体组件系统。`AYEntityCore` 负责 Entity/Comp
 存储、System 调度与场景序列化；动画、渲染、2D、物理、脚本和网络绑定均为
 显式选择的 integration target，不再成为 Core 的反向依赖。
 
+完整组件测试按 `AY_ENTITY_HAS_NETWORK_INTEGRATION` 编译网络组件用例。
+测试目标显式接收 Script/Network 开关，与兼容 facade 的私有编译定义一致，
+确保完整配置实际执行两类组件用例，裁剪配置验证 Script 拒绝行为。
+关闭网络时其余组件与 2D/物理集成测试继续运行，不要求不存在的网络库。
+关闭 Script 集成时，组件用例验证工厂明确拒绝未注册的 ScriptComponent，
+并继续运行其余用例；意外的空组件不会导致测试程序解引用崩溃。
+
 ## 3D 游戏相机（2026-10-03）
 
 `Transform + PerspectiveCameraComponent` 是推荐入口；使用 `createComponent` 显式实例 API。

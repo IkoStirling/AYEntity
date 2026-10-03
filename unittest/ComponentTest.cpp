@@ -6,7 +6,9 @@
 #include <AYEntity/components/HealthComponent.h>
 #include <AYEntity/components/RigidBodyComponent.h>
 #include <AYEntity/components/ScriptComponent.h>
+#if AY_ENTITY_HAS_NETWORK_INTEGRATION
 #include <AYEntity/components/NetworkComponent.h>
+#endif
 #include <AYTest.h>
 #include <algorithm>
 #include <cstring>
@@ -170,7 +172,13 @@ TEST_CASE(script_component)
     Entity* e = Entity::create();
 
     auto* script = e->addComponent<ScriptComponent>();
+#if AY_ENTITY_HAS_SCRIPT_INTEGRATION
     CHECK_NOT_NULL(script);
+    if (!script) {
+        Entity::destroy(e);
+        World::instance().shutdown();
+        return;
+    }
     CHECK_TRUE(strcmp(script->getName(), "ScriptComponent") == 0);
 
     // 验证脚本名称设置
@@ -185,11 +193,16 @@ TEST_CASE(script_component)
 
     // 验证方法调用（当前无实际实现）
     CHECK_FALSE(script->callScriptMethod("onStart"));
+#else
+    // A schema not installed in this feature profile cannot be constructed.
+    CHECK_NULL(script);
+#endif
 
     Entity::destroy(e);
     World::instance().shutdown();
 }
 
+#if AY_ENTITY_HAS_NETWORK_INTEGRATION
 TEST_CASE(network_component)
 {
     World::instance().initialize();
@@ -230,6 +243,8 @@ TEST_CASE(network_component)
     Entity::destroy(e);
     World::instance().shutdown();
 }
+
+#endif
 
 TEST_CASE(transform_revision_tracks_setter_writes)
 {
