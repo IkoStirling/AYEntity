@@ -1,5 +1,15 @@
 # AYEntity Design
 
+> **2026-10-03 — PerspectiveCamera3D**：Core 拥有可序列化的 Multiple 相机组件和
+> renderer-independent selection/evaluation，RenderIntegration 拥有 World-scoped provider。
+> Renderer 在几何提取前调用 provider；Edit/Host 覆盖优先，不改原 Scene 组件。
+> active/priority/Entity id/component id 选主，Transform 插值驱动姿态、scale 忽略。
+> 非有限/零 quaternion pose 不选，非法镜头参数安全修正；Scene 在显式字段完成后
+> 补建缺失 Transform。相机 identity 纳入 World/Entity generation/组件 id，切换与
+> requestCameraCut 失效 TAA、Motion 和 AutoExposure 历史。World teardown 在系统销毁前
+> 撤销 provider；调用在 owner thread，不是 ECS 并发读取接口。测试见
+> unittest/AYTest_PerspectiveCamera.cpp；尚未验收 split-screen、层过滤或真实 GPU 镜头切换。
+
 > **2026-10-02 — 组件身份与装载顺序**：组件 ID 恢复先检查实体全部槽位的冲突，
 > 再修改目标，失败不消耗恢复机会。Scene 在每个实体显式组件读取完成后按文件
 > 顺序执行 `afterSceneDeserialize`，避免 Sprite/Camera 补建 Transform 遮蔽后续

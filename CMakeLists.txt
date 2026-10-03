@@ -48,6 +48,7 @@ add_library(AYEntityCore STATIC
     src/AYEntity.cpp
     src/AYComponentRegistry.cpp
     src/AYEntityReflection.cpp
+    src/AYPerspectiveCameraSelection.cpp
     src/AYEntityCoreModule.cpp
     src/AYEntityComponentModule.cpp
     src/AYEntityRuntimeModule.cpp
@@ -132,6 +133,7 @@ if(AY_ENABLE_RENDERER)
     endif()
     add_library(AYEntityRenderIntegration STATIC
         src/AYEntityRenderIntegrationModule.cpp
+        src/AYPerspectiveCameraUpdateSystem.cpp
         src/AYRenderSystem.cpp
         src/AYSkinnedMeshRenderSystem.cpp
         src/AYCharacterEntity.cpp
@@ -248,6 +250,13 @@ target_compile_definitions(AYEntity PRIVATE
 )
 
 # Identity and Scene authoring regressions also run without visual integrations.
+if(BUILD_TESTING)
+    add_executable(AYEntity_PerspectiveCameraTests
+        unittest/PerspectiveCameraTestMain.cpp unittest/AYTest_PerspectiveCamera.cpp)
+    target_link_libraries(AYEntity_PerspectiveCameraTests PRIVATE AYEntityCore AYTest)
+    ay_add_test(AYEntity_PerspectiveCameraTests LABELS "ayentity;camera3d" TIMEOUT 60)
+endif()
+
 if(BUILD_TESTING AND AY_ENABLE_ENTITY_2D_SCHEMA)
     add_executable(AYEntity_IdentityTests
         unittest/TestMain.cpp

@@ -4,6 +4,16 @@ AYEntity 是 AY Engine 的实体组件系统。`AYEntityCore` 负责 Entity/Comp
 存储、System 调度与场景序列化；动画、渲染、2D、物理、脚本和网络绑定均为
 显式选择的 integration target，不再成为 Core 的反向依赖。
 
+## 3D 游戏相机（2026-10-03）
+
+`Transform + PerspectiveCameraComponent` 是推荐入口；使用 `createComponent` 显式实例 API。
+Core 注册可保存的 FOV（度）、near/far、active、priority，支持 Headless 求值和 Scene 往返。
+安装 RenderIntegration 后自动选最高优先级活动相机，在提取几何前同步；同分按 Entity id
+和持久组件 id 排序。Transform 的 scale 不影响镜头，朝向为 LH / Y-up / 本地 +Z。
+Editor/Host 覆盖优先，清除覆盖恢复游戏相机；无有效相机回退默认镜头。
+瞬移调用 `requestCameraCut()`；换 World/相机/覆盖来源会重置时域历史。
+不含 split-screen、3D layer mask 或镜头混合。纯 CPU 回归入口 `AYEntity_PerspectiveCameraTests`。
+
 ## 公开接口
 
 组件实例 ID 在同一 Entity 内唯一；恢复 ID 时，冲突或已恢复后的改号均被拒绝。
