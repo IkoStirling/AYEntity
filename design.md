@@ -1,5 +1,13 @@
 # AYEntity Design
 
+## 2026-10-05 — 生产 shader 清单闭包
+
+SkinnedMeshRenderSystem 的三段 rigid fallback 源仅机械迁移到 Renderer 的共享源码头，
+运行时与离线工具均引用同一份常量；不复制测试 shader，也不更改场景提交/骨骼算法。
+Renderer 63项内置清单新增ParticleUnlit与rigid_skin_fallback，避免严格游戏模式首次使用失效。
+源头是内部实现支持，不提升为游戏侧推荐 API；EntityRenderIntegration 编译及既有蒙皮用例验证。
+SkinnedAnimationTests 21用例/99断言通过；迁移三段raw字节与原常量逐字相同，API/骨骼算法未变。
+
 > **2026-10-03 — PerspectiveCamera3D**：Core 拥有可序列化的 Multiple 相机组件和
 > renderer-independent selection/evaluation，RenderIntegration 拥有 World-scoped provider。
 > Renderer 在几何提取前调用 provider；Edit/Host 覆盖优先，不改原 Scene 组件。

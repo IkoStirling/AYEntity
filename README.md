@@ -1,5 +1,9 @@
 # AYEntity
 
+2026-10-05：RenderIntegration 的 rigid/diagnostic fallback shader 源移到 Renderer 共享
+FallbackMeshShaderSources.h；运行时与默认离线清单引用同一份字节，发布游戏不临时编译。
+未改变皮肤/材质路径选择或 gameplay facade；粒子默认源也由 Renderer 清单覆盖。
+
 AYEntity 是 AY Engine 的实体组件系统。`AYEntityCore` 负责 Entity/Component
 存储、System 调度与场景序列化；动画、渲染、2D、物理、脚本和网络绑定均为
 显式选择的 integration target，不再成为 Core 的反向依赖。
