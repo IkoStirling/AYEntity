@@ -90,6 +90,16 @@ endif()
 
 set(_ay_entity_integrations)
 
+# Explicit session/replay adapter; Core retains its existing dependency boundary.
+if(TARGET AYReplay)
+    add_library(AYEntityDeterminism STATIC
+        src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp
+        src/AYDeterministicReplay.cpp)
+    add_library(AYEntity::Determinism ALIAS AYEntityDeterminism)
+    ay_configure_entity_target(AYEntityDeterminism)
+    target_link_libraries(AYEntityDeterminism PUBLIC AYEntityCore AYReplay)
+endif()
+
 # Serialized 2D component metadata is useful to headless tools and servers.
 # Keep it separate from the renderer-backed systems so scene loading and
 # validation do not require a graphics device.
@@ -251,6 +261,21 @@ target_compile_definitions(AYEntity PRIVATE
 
 # Identity and Scene authoring regressions also run without visual integrations.
 if(BUILD_TESTING)
+    if(TARGET AYEntityDeterminism)
+        add_executable(AYEntity_DeterministicSessionTests
+            unittest/DeterministicSessionTestMain.cpp unittest/AYTest_DeterministicSession.cpp)
+        target_link_libraries(AYEntity_DeterministicSessionTests PRIVATE AYEntityDeterminism AYTest)
+        ay_add_test(AYEntity_DeterministicSessionTests LABELS "ayentity;determinism;replay" TIMEOUT 120 RUN_SERIAL)
+        add_executable(AYEntity_DeterministicSessionWorker unittest/DeterministicSessionWorker.cpp)
+        target_link_libraries(AYEntity_DeterministicSessionWorker PRIVATE AYEntityDeterminism)
+        add_test(NAME AYEntity_DeterministicSessionProcesses
+            COMMAND ${CMAKE_COMMAND}
+                -DWORKER=$<TARGET_FILE:AYEntity_DeterministicSessionWorker>
+                -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/session-process-check
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/unittest/RunDeterministicSessionProcessCheck.cmake)
+        set_tests_properties(AYEntity_DeterministicSessionProcesses PROPERTIES
+            LABELS "ayentity;determinism;replay;process" TIMEOUT 480 RUN_SERIAL TRUE)
+    endif()
     add_executable(AYEntity_DeterministicHostTests
         unittest/DeterministicHostTestMain.cpp unittest/AYTest_DeterministicHost.cpp)
     target_link_libraries(AYEntity_DeterministicHostTests PRIVATE AYEntityCore AYTest)

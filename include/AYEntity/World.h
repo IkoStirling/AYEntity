@@ -13,6 +13,7 @@
 #include <typeindex>
 #include <functional>
 #include <algorithm>
+#include <stdexcept>
 
 namespace ayt::scene
 {
@@ -28,6 +29,7 @@ namespace ayt::entity
 // Forward declaration (Query is fully defined in AYEntity.h)
 template<typename... Components>
 class Query;
+class DeterministicSession;
 
 class World {
 public:
@@ -51,15 +53,20 @@ public:
     /// Backward-compatible presentation update. Bridge alpha defaults to 1.
     void update(float dt);
     /// Run one Sim step with legacy native dt input. Only SystemLane::Sim runs.
+    /// Throws logic_error while DeterministicSession owns this World.
     void fixedUpdate(float fixedDt);
     /// Typed Sim-only tick: positive finite dt, direct IDeterministicSystem dispatch.
     /// Invalid dt throws before snapshots/onStart/writes. Legacy Sim systems
     /// receive a native dt adapter; their arithmetic is not certified.
+    /// Throws logic_error while DeterministicSession owns this World.
     void fixedUpdate(math::DetFloat32 fixedDt);
     /// Run Bridge(alpha) before Present(dt), then component presentation ticks.
     void updatePresentation(float dt, float interpolationAlpha);
 
+    /// Create an ordinary World entity; session ownership rejects direct structure changes.
+    /// Use DeterministicSession::addEntity or tick-context spawn while claimed.
     Entity* createEntity();
+    /// Destroy an ordinary entity; throws logic_error while a session owns structure.
     void destroyEntity(Entity* e);
     Entity* findEntity(const char* name) const;
     Entity* findEntity(uint32_t id) const;
@@ -111,6 +118,8 @@ public:
     EntityHandle getEntityHandle(uint32_t id);
 
 private:
+    DeterministicSession* _deterministicOwner = nullptr;
+    friend class DeterministicSession;
     World();
     ~World();
     World(const World&) = delete;
@@ -144,6 +153,8 @@ private:
 // =============================================================================
 template<typename T>
 void World::registerSystem(int32_t priority, SystemLane lane) {
+    if (_deterministicOwner && lane==SystemLane::Sim)
+        throw std::logic_error("Session owns World Sim execution");
     static_assert(std::is_base_of_v<ISystem, T>, "T must inherit ISystem");
     auto system = std::make_unique<T>();
     system->setPriority(priority);

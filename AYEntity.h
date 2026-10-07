@@ -11,6 +11,7 @@
 #include <AYEntity/components/TransformComponent.h>
 #include <AYEntity/components/SimTransformComponent.h>
 #include <AYEntity/components/DetSimTransformComponent.h>
+#include <AYEntity/components/DetSimStateComponent.h>
 #include <AYEntity/DeterministicSystem.h>
 #include <AYEntity/components/HealthComponent.h>
 #include <AYEntity/components/MeshComponent.h>

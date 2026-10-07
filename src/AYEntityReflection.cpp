@@ -14,6 +14,7 @@
 #include "AYEntity/components/MeshComponent.h"
 #include "AYEntity/components/SimTransformComponent.h"
 #include "AYEntity/components/DetSimTransformComponent.h"
+#include "AYEntity/components/DetSimStateComponent.h"
 #include "AYEntity/components/TransformComponent.h"
 #include "AYEntity/components/ActorInstanceComponent.h"
 #include "AYEntity/components/PerspectiveCameraComponent.h"
@@ -52,6 +53,12 @@ ComponentRegistryResult registerEntityCoreComponents(ComponentRegistry& registry
             "DetSimTransformComponent", "Binary32 Simulation Transform", "Simulation");
         det.editorAddable = false; // Runtime state has no authoring/scene schema.
         AYT_REGISTER_COMPONENT(registry.registerComponent(std::move(det)));
+    }
+    {
+        auto state = detail::makeComponentDescriptor<DetSimStateComponent>(
+            "DetSimStateComponent", "Registered Simulation State", "Simulation");
+        state.editorAddable = false;
+        AYT_REGISTER_COMPONENT(registry.registerComponent(std::move(state)));
     }
     AYT_REGISTER_COMPONENT(registerSceneComponent<HealthComponent>(
         registry, "HealthComponent", "Health", "Gameplay"));

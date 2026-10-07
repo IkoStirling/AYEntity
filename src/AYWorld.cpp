@@ -65,6 +65,7 @@ bool World::initialize() {
 
 void World::shutdown() {
     if (!_initialized) return;
+    _deterministicOwner = nullptr;
 
     // Integrations release World-owned state before systems disappear. The
     // callback registry belongs to AYEntityCore and therefore keeps World
@@ -120,11 +121,13 @@ void World::beginSimulationStep() {
 }
 
 void World::fixedUpdate(float fixedDt) {
+    if (_deterministicOwner) throw std::logic_error("Session owns World Sim execution");
     beginSimulationStep();
     updateLane(SystemLane::Sim, fixedDt);
 }
 
 void World::fixedUpdate(math::DetFloat32 fixedDt) {
+    if (_deterministicOwner) throw std::logic_error("Session owns World Sim execution");
     if (!fixedDt.isFinite() || !(fixedDt > math::DetFloat32{})) {
         throw std::invalid_argument("Deterministic World dt must be finite and positive");
     }
@@ -165,6 +168,7 @@ void World::updateLane(SystemLane lane, float timeValue) {
 }
 
 Entity* World::createEntity() {
+    if (_deterministicOwner) throw std::logic_error("Use session structural commands");
     return createEntityInternal();
 }
 
@@ -185,6 +189,7 @@ Entity* World::createEntityInternal() {
 }
 
 void World::destroyEntity(Entity* e) {
+    if (_deterministicOwner) throw std::logic_error("Use session structural commands");
     // After shutdown(), entity storage is freed. Callers may still hold
     // raw Entity* (EditorPlayRuntime clear* during ~dtor after tests call
     // World::shutdown). Must not touch e when the world is down.

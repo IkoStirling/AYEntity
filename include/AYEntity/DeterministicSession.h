@@ -1,0 +1,142 @@
+#pragma once
+#include <AYEntity/components/DetSimTransformComponent.h>
+#include <AYMath/Random.h>
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string>
+
+namespace ayt::entity {
+class World;
+class Entity;
+using SimEntityId = std::uint64_t;
+using DetStateBlocks = std::map<std::uint32_t,std::vector<std::uint64_t>>;
+struct DetStateSchema {
+    std::uint32_t id=0, version=1;
+    std::vector<std::uint32_t> fields;
+    friend bool operator==(const DetStateSchema&,const DetStateSchema&)=default;
+};
+struct DetSessionConfig {
+    std::uint32_t applicationVersion=1, inputVersion=1;
+    std::uint32_t stepNumerator=1, stepDenominator=60;
+    std::uint64_t contentHash=0;
+};
+struct DetTickCommand {
+    std::uint32_t source=0, sequence=0, type=0;
+    std::vector<std::uint8_t> payload;
+    friend bool operator==(const DetTickCommand&,const DetTickCommand&)=default;
+};
+struct DetTickInput {
+    std::uint64_t tick=0;
+    std::uint32_t version=1;
+    std::vector<DetTickCommand> commands;
+    friend bool operator==(const DetTickInput&,const DetTickInput&)=default;
+};
+struct DetActorState {
+    DetSimTransformComponent::Snapshot pose;
+    DetStateBlocks blocks;
+    friend bool operator==(const DetActorState&,const DetActorState&)=default;
+};
+struct DetSessionCheckpoint {
+    static constexpr std::uint32_t kVersion=1;
+    std::vector<std::uint8_t> manifest;
+    std::uint64_t nextTick=0;
+    std::map<SimEntityId,DetActorState> actors;
+    DetStateBlocks globals;
+    std::map<std::uint32_t,math::pcg32_state> randomStreams;
+    std::vector<DetTickCommand> pendingEvents;
+    std::vector<SimEntityId> retiredIds;
+};
+/// First differing canonical field; IDs are session identities, never addresses/RTTI.
+struct DetStateDifference {
+    std::uint64_t tick=0, entity=0, expected=0, actual=0;
+    std::uint32_t component=0, field=0;
+    std::string section;
+};
+/// Explicit little-endian profile, length bounds and checksum; no object dumps.
+std::vector<std::uint8_t> encodeDetCheckpoint(const DetSessionCheckpoint& state);
+bool decodeDetCheckpoint(std::span<const std::uint8_t> bytes,DetSessionCheckpoint& state,std::string& error);
+std::optional<DetStateDifference> firstDetDifference(const DetSessionCheckpoint& expected,const DetSessionCheckpoint& actual);
+std::uint64_t detCheckpointHash(const DetSessionCheckpoint& state);
+bool canonicalizeDetInput(DetTickInput& input,std::string& error);
+std::vector<std::uint8_t> encodeDetInput(const DetTickInput& input);
+bool decodeDetInput(std::span<const std::uint8_t> bytes,DetTickInput& input,std::string& error);
+
+class DeterministicSession;
+/** @brief One sealed tick's authoritative access, valid only during its system callback.
+ * @note Iterate entities() by stable SimEntityId. Hidden mutable callback state,
+ * runtime Entity IDs, native floats and external effects are outside the contract.
+ * All mutable gameplay data must use pose(), words()/globals(), or registered RNG.
+ */
+class DetTickContext {
+public:
+    std::uint64_t tick() const;
+    math::DetFloat32 dt() const;
+    const DetTickInput& input() const;
+    std::span<const DetTickCommand> events() const;
+    std::vector<SimEntityId> entities() const;
+    DetSimTransformComponent& pose(SimEntityId id);
+    std::span<std::uint64_t> words(SimEntityId id,std::uint32_t schema);
+    std::span<std::uint64_t> globals(std::uint32_t schema);
+    math::pcg32_state& random(std::uint32_t stream);
+    /// Queue structural changes for end-of-tick, in system (priority,id)/call order.
+    /// IDs cannot be reused, even after despawn; invalid requests fault the tick.
+    void spawn(SimEntityId id,DetActorState initial={});
+    void despawn(SimEntityId id);
+    /// Next-tick delivery, sorted by stable producer system ID and local sequence.
+    void emit(std::uint32_t type,std::span<const std::uint8_t> payload={});
+private:
+    friend class DeterministicSession;
+    DetTickContext(DeterministicSession& session,std::uint32_t system);
+    DeterministicSession& _session;
+    std::uint32_t _system, _sequence=0;
+};
+
+/** @brief Explicit single-threaded tick owner for a World and its registered Sim state.
+ * @note Link AYEntity::Determinism. Claim an initialized World with no legacy Sim
+ * systems/authorities. Configure schemas, globals, RNG and callbacks before seal().
+ * Systems run by (priority,stable ID), entities by Sim ID, input/events by
+ * (source,sequence). This owner excludes direct World Sim ticks and structural
+ * mutation. Presentation may run independently but cannot change Sim fields.
+ * Schema IDs >=2 describe fixed-width uint64 word blocks (pose uses ID 1).
+ * Checkpoint validates everything before restoring; callback failure faults the
+ * session until explicit restore. It cannot undo unregistered external effects.
+ * World outlives the session; handles/pointers may change after restoration.
+ */
+class DeterministicSession {
+public:
+    using System=std::function<bool(DetTickContext&)>;
+    explicit DeterministicSession(World& world,DetSessionConfig config={});
+    ~DeterministicSession();
+    DeterministicSession(const DeterministicSession&)=delete;
+    DeterministicSession& operator=(const DeterministicSession&)=delete;
+    bool registerSchema(DetStateSchema schema,std::vector<std::uint64_t> defaults={});
+    bool registerSystem(std::uint32_t id,std::int32_t priority,System system);
+    bool registerRandomStream(std::uint32_t id,std::uint64_t seed);
+    bool registerGlobalState(std::uint32_t schema,std::vector<std::uint64_t> words={});
+    bool addEntity(SimEntityId id,DetActorState initial={});
+    /// Freeze canonical configuration and validate the initial registered state.
+    bool seal();
+    /// Validate sequential input and external mutation before any tick writes.
+    /// Input validation failure leaves state unchanged; execution failure faults.
+    bool advance(DetTickInput input);
+    /// Capture all registered fields at a quiescent boundary; reject outside writes.
+    std::optional<DetSessionCheckpoint> checkpoint() const;
+    /// Same manifest required; invalid data rejected before changing any Sim state.
+    bool restore(const DetSessionCheckpoint& state);
+    std::uint64_t nextTick() const;
+    math::DetFloat32 fixedStep() const;
+    bool sealed() const;
+    bool faulted() const;
+    const std::string& error() const;
+    const std::vector<std::uint8_t>& manifest() const;
+    /// Presentation lookup only; authoritative systems use stable session IDs.
+    Entity* presentationEntity(SimEntityId id) const;
+private:
+    friend class DetTickContext;
+    struct Impl;
+    std::unique_ptr<Impl> _impl;
+};
+} // namespace ayt::entity

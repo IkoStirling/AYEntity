@@ -55,6 +55,7 @@ Scene 先读取实体全部显式组件，再执行依赖补建回调，Sprite/C
 | 目标 | 内容 | 额外依赖 |
 |---|---|---|
 | `AYEntityCore` / `AYEntity::Core` | World、Entity、注册表、序列化、Entity SubSystem、Sim/Bridge | AYModule、AYCore、AYGameLoop、AYReflect、AYSerializer、AYMath |
+| `AYEntityDeterminism` / `AYEntity::Determinism` | 注册状态 Sim 会话、检查点、逐 tick 校验与 .rpl 回放/seek | AYEntityCore、AYReplay |
 | `AYEntityAnimationIntegration` | 动画组件与系统 | AYAnimation、AYResource、AYEventSystem |
 | `AYEntityRenderIntegration` | Mesh/SkinnedMesh 表现系统 | AYRenderer、Animation integration、AYResource |
 | `AYEntity2DIntegration` | Tilemap/Sprite/OrthoCamera 表现系统 | AYRenderer、AYResource |
@@ -111,7 +112,7 @@ world.updatePresentation(frameDt, interpolationAlpha);
 步内多个 Sim 系统写位置不会破坏插值起点。
 
 `SimTransformComponent` 保留旧 Q16.16 平移。新确定性逻辑可选择下面的
-软件 binary32 组件；旋转/缩放的确定性契约尚待扩展。Sim 系统需要按实体 ID 稳定遍历：可使用
+软件 binary32 组件；旋转已提供可选权威，缩放保持表现字段。Sim 系统需要按实体 ID 稳定遍历：可使用
 `World::getAllEntities()`，不要依赖 SparseSet swap-remove 后的 `Query` 顺序。
 
 ### 软件 binary32 Sim 平移
@@ -170,6 +171,27 @@ Bridge 跳过同时具有两类 Sim 权威或存在非有限 Det 历史/位置�
 仅用于表现，clamp 到 0..1，NaN 取 0。Sequencer 拒绝两种 Sim 权威，包括
 播放后动态添加的组件。`AYEntity_DeterministicTests` 仅链接 Core，覆盖
 旧 lane、typed tick、检查点重放、迁移与 Bridge；完整 AYEntityTest 也含新用例。
+
+## 确定性会话与回放（第六阶段）
+
+显式链接 `AYEntity::Determinism`，创建 `DeterministicSession`，注册固定 word schemas、
+全局字段、RNG streams 与稳定 ID callbacks，再添加 SimEntityId actor 并 seal。
+callback 的 `DetTickContext` 提供 software dt、canonical input、pose、registered words、
+globals、RNG、下一 tick 事件和 tick 末 spawn/despawn。系统按 priority/ID、实体按
+Sim ID 执行。检查点覆盖完整注册状态；恢复可重建原生 Entity handles。
+
+会话要求已初始化且无旧 Sim 系统/权威的 World，只有一个 custom tick owner；
+必须先替换标准 Host World Sim 推进。受管 actor 只允许 DetSimTransform、DetSimState
+和表现 Transform，不自动保存任意原生游戏组件。隐藏 mutable callback captures、
+native math、外部效果与 callback 内 World/组件生命周期操作不满足契约。
+Present/Bridge 可独立更新且不得改 Sim 字段。World 须晚于 session 销毁。
+
+`DetReplayWriter` 保存 manifest、输入、完整 post-tick witness、周期 checkpoint 和
+completion seal；Reader 严格校验后通过同一 advance 路径回放/seek，给出首个
+tick/entity/schema/field 分歧。单段 256 MiB，未 finish 文件拒绝；I/O 失败不回滚
+已执行 tick。构建目标包含 `AYEntity_DeterministicSessionTests/Worker`，CTest 的
+`AYEntity_DeterministicSessionProcesses` 比较四个独立进程的 10000 tick 与完整状态。
+接入示例、容量、软件 profiles 和失败语义见[第六阶段](../../AYDocs/DETERMINISTIC-SESSION-STAGE6.md)。
 
 ## 显式组件注册
 

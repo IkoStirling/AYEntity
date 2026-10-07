@@ -52,6 +52,10 @@ TEST_CASE(module_registers_types_before_the_host_seals_the_registry)
     CHECK_NOT_NULL(detTransform);
     CHECK_FALSE(detTransform->sceneSerializable);
     CHECK_FALSE(detTransform->editorAddable);
+    const auto* detState = registry.find<DetSimStateComponent>();
+    CHECK_NOT_NULL(detState);
+    CHECK_FALSE(detState->sceneSerializable);
+    CHECK_FALSE(detState->editorAddable);
     // Feature components are no longer registered by AYEntityCore. Their
     // explicit integration modules participate in the same prepare phase.
     CHECK(registry.find("BlendSpaceComponent") == nullptr);

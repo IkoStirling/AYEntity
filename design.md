@@ -933,7 +933,7 @@ endif()
 - [x] `SimTransformComponent` + `SimToPresentBridgeSystem`
 - [x] Sim 系统稳定遍历顺序文档化（使用 `getAllEntities()` / 显式 ID 排序）
 
-> DET-04 于 2026-09-01 完成。后续网络输入、Replay/rollback 与通用确定性碰撞仍分别属于 DET-05–07。工作包见 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../AYDocs/ENGINE-DETERMINISM-ARCHITECTURE.md) §7–§9。
+> DET-04 于 2026-09-01 完成。第六阶段已完成注册状态本地 Sim session、checkpoint/replay；后续网络输入、通用 rollback 协议与确定性碰撞仍分别属于 DET-05–07。工作包见 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../AYDocs/ENGINE-DETERMINISM-ARCHITECTURE.md) §7–§9。
 
 ---
 
@@ -1075,6 +1075,37 @@ Snapshot 继续使用 v2 的 pose 字段及 scalar/rotation profile，积分没�
 这是恒定角速度单步运动，不提供 torque、角加速度或刚体动力学。
 Core 20 项、Host 5 项验证乘序、非法输入原子性，以及 256/128 步真实
 角速度运动检查点回放；见[第五阶段](../../AYDocs/DETERMINISTIC-FLOAT-STAGE5.md)。
+
+### 14.5.3 注册状态会话与输入回放（第六阶段，2026-10-07）
+
+`AYEntity::Determinism` 是依赖 Core + AYReplay 的显式 integration，不给 Core 添加
+Replay 依赖。`DeterministicSession` 独占 World Sim/结构推进；现存标准 Host Sim
+责任须替换后才能接入。单线程、World 晚于 session，关闭 World 会撤销旧 owner。
+callback 只访问临时 DetTickContext，不使用隐藏可变捕获或外部副作用。
+
+受管实体仅包含 DetSimTransform、runtime-only DetSimState 和表现 Transform。
+自定义权威字段使用注册的 uint64 word blocks，schema/version/field ID 稳定；
+不是任意 Component codec。系统按 priority/ID，actor 按 SimEntityId，input/event
+按 source/sequence；下一 tick 交付事件，结构命令 tick 末按调用序执行。
+销毁 Sim ID 不复用。原生 ID、UUID、RTTI、Transform/alpha 和渲染对象不参与状态比较。
+
+seal 固定 manifest 中的应用/内容/输入版本、软件 dt、数值 profiles、schemas、
+systems、RNG seeds 和 global 集。checkpoint 捕获 pose/history/revision/flags、
+actor/global words、RNG state/inc、pending events、retired IDs、nextTick。
+无效 input/restore 在写入前拒绝；系统错误 fault 后须显式恢复。恢复保持 pose bits，
+可重建 Entity，因此按 Sim ID 重新获取表现指针。边界拒绝外部 Sim 写入，不能沙箱
+任意 native callback。禁止 callback 修改 World/组件生命周期。
+
+`.rpl` adapter 使用普通 event 0x20001..0x20005 的 manifest/input/witness/checkpoint/
+completion，避开旧 raw checkpoint 歧义，Reader 自建 checkpoint 索引。所有内部
+payload 显式 LE、有界、带 FNV-1a64；诊断比较完整字段。writer 每 tick 存完整 witness，
+reader 恢复最近 checkpoint 后以同一 advance 验证到 seek 目标。单段 256 MiB，最多
+100000 records，不实现 delta、分段或 peer 输入收集。缺 seal/未知/损坏记录拒绝。
+
+测试验证 invalid restore 原子性、ID 重建/退役、事件顺序、fault、World teardown、
+文件诊断，以及 10000 tick 独立进程录制/实时/回放/5000 checkpoint 继续；反转
+注册顺序、改变 Present rate/alpha 与宿主舍入模式，Debug/Release 位型一致。
+完整契约与限制见[第六阶段](../../AYDocs/DETERMINISTIC-SESSION-STAGE6.md)。
 
 ### 14.6 与网络 / 回放的关系
 
