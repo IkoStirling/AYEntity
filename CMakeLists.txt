@@ -92,13 +92,17 @@ set(_ay_entity_integrations)
 
 # Explicit session/replay adapter; Core retains its existing dependency boundary.
 if(TARGET AYReplay)
-    add_library(AYEntityDeterminism STATIC
+    add_library(AYEntityDeterminismKernel STATIC
         src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp src/AYDeterministicState.cpp
-        src/AYDeterministicReplay.cpp src/AYDeterministicCollision2D.cpp
+        src/AYDeterministicCollision2D.cpp
         src/AYDeterministicLockstepProtocol.cpp src/AYDeterministicLockstep.cpp)
+    add_library(AYEntity::DeterminismKernel ALIAS AYEntityDeterminismKernel)
+    ay_configure_entity_target(AYEntityDeterminismKernel)
+    target_link_libraries(AYEntityDeterminismKernel PUBLIC AYMath AYReplay)
+    add_library(AYEntityDeterminism STATIC src/AYDeterministicSessionWorld.cpp src/AYDeterministicReplay.cpp)
     add_library(AYEntity::Determinism ALIAS AYEntityDeterminism)
     ay_configure_entity_target(AYEntityDeterminism)
-    target_link_libraries(AYEntityDeterminism PUBLIC AYEntityCore AYReplay)
+    target_link_libraries(AYEntityDeterminism PUBLIC AYEntityCore AYEntityDeterminismKernel AYReplay)
 endif()
 
 # Declared here, invoked after AYApplication/AYScene exist in the superproject.
@@ -117,9 +121,18 @@ function(ay_entity_add_determinism_host_integration)
     if(BUILD_TESTING)
         add_executable(AYEntity_DeterministicHostSessionTests
             "${_root}/unittest/DeterministicHostSessionTestMain.cpp"
-            "${_root}/unittest/AYTest_DeterministicHostSession.cpp")
+            "${_root}/unittest/AYTest_DeterministicHostSession.cpp"
+            "${_root}/unittest/AYTest_DeterministicHostNetwork.cpp")
         target_link_libraries(AYEntity_DeterministicHostSessionTests PRIVATE AYEntityDeterminismHost AYTest)
         ay_add_test(AYEntity_DeterministicHostSessionTests LABELS "ayentity;determinism;host;replay" TIMEOUT 120 RUN_SERIAL)
+        if(TARGET AYNetwork AND WIN32)
+            add_executable(AYEntity_DeterministicHostNetworkWorker "${_root}/unittest/DeterministicHostNetworkWorker.cpp")
+            target_link_libraries(AYEntity_DeterministicHostNetworkWorker PRIVATE AYEntityDeterminismHost AYNetwork)
+            add_test(NAME AYEntity_DeterministicHostNetworkProcesses COMMAND pwsh -NoProfile -File
+                "${_root}/unittest/RunDeterministicNetworkCheck.ps1" -Worker $<TARGET_FILE:AYEntity_DeterministicHostNetworkWorker>
+                -OutputDir "${CMAKE_CURRENT_BINARY_DIR}/host-network-process-check" -TimeoutSeconds 450 -CompareTrace)
+            set_tests_properties(AYEntity_DeterministicHostNetworkProcesses PROPERTIES TIMEOUT 960 RUN_SERIAL TRUE LABELS "ayentity;determinism;host;network;process")
+        endif()
         add_executable(AYEntity_DeterministicHostSessionWorker "${_root}/unittest/DeterministicHostSessionWorker.cpp")
         target_link_libraries(AYEntity_DeterministicHostSessionWorker PRIVATE AYEntityDeterminismHost)
         add_test(NAME AYEntity_DeterministicHostSessionProcesses

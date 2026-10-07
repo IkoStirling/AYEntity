@@ -123,6 +123,7 @@ private:
     DeterministicSession* _deterministicOwner = nullptr;
     IEntitySimulationDriver* _hostedSimulationObserver = nullptr;
     friend class DeterministicSession;
+    friend class DetWorldStorage;
     friend class DeterministicHostController;
     World();
     ~World();

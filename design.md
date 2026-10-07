@@ -1477,3 +1477,23 @@ pair/phase 排序后统一提交 pose/history/events，无未注册的持久缓�
 solid penetration；manifest3 绑定 systemId/version2 validator，旧 profile1 无变化。
 迭代上限/挤压/未能表示的运动拒绝，未解决冲突不返回伪成功；tick 显式 restore。
 各 body 表现/网络/replay 继续使用同一 registered checkpoint 闭包。
+# Stage13: shared Session storage and standard Host network owner
+
+The same Session/typed-state/wire/collision/lockstep source is compiled into
+AYEntity::DeterminismKernel. Owned registered actors retain the actual
+DetSimTransformComponent/typed blocks. Private DetSessionStorage separates
+actor storage only; AYEntity::Determinism adds the World topology/lifetime adapter
+and replay file integration. World and owned execution compare complete canonical
+bytes including structural operations, RNG, events and restore.
+
+Host recipe.lockstep owns one coordinator. A missing ready barrier returns fixed
+Blocked before committing Host or Session tick, caches exactly one local input,
+and freezes the latest committed presentation pose. External owner-thread packet
+ingress resumes only a network wait, preserving explicit controller pause/step.
+Live resetNetwork validates an agreed checkpoint/newer epoch, pauses and resets
+the protocol; no live Record history rewrite or Replay network owner.
+
+Logic profiles enter manifest4 as sorted stable ID/version/u64 identity (max64),
+with an optional empty validator table. Manifests1..3 retain old bytes when no
+logic identity is registered. See the stage13 project document for format,
+portable actual Session/collision golden gates and standard Host/network process tests.

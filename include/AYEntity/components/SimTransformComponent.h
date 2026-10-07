@@ -3,7 +3,7 @@
 // DET-04 deterministic translation state. Rotation and scale remain in the
 // presentation Transform until AYMath defines their fixed-point contracts.
 
-#include <AYEntity/IEntity.h>
+#include <AYEntity/IComponent.h>
 #include <AYMath/Fixed.h>
 
 #include <cstdint>

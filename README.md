@@ -312,3 +312,19 @@ body/policy/history/已发行身份/event payload；invalid restore 不修改 Wo
 Linux x64/ARM64 × GCC 13.3.0/Clang 18.1.3 四组原生 portable 实际通过：
 typed codec/layout 精确 oracle 与三成员10000 tick Lockstep 协议；完整 Host、
 solver 与实际传输使用 Windows 集成证据。见[原生验收记录](../../AYDocs/DETERMINISTIC-NATIVE-ACCEPTANCE.md)。
+
+## 共享 Session kernel 与标准 Host Lockstep
+
+`AYEntity::DeterminismKernel` 可构造拥有注册状态的 `DeterministicSession(config)`，
+不需要 World/Host；与 `AYEntity::Determinism` 的 World adapter 运行同一核心与碰撞 solver。
+`IComponent` 最小生命周期位于独立公共头，既有 IEntity 继续包含它。
+`registerLogicProfile(id,version,hash)` 在 seal 前声明权威代码身份，进入 manifest4；
+无逻辑身份的会话仍保持 manifest1/2/3 原字节。受限 Logia 通过 AYScript::Determinism 安装。
+
+标准 Scene recipe.lockstep 显式启用固定 roster 联机；input 每个 tick 采样一次 local input，
+controller.receiveNetwork/networkPackets 在 owner-thread 外部帧边界接入认证 transport。
+缺输入/hash冻结 Host/Session 双时钟并保留表现，controller.pause/stepOnce 保持明确暂停。
+Live 恢复使用 resetNetwork(agreedCheckpoint,newerEpoch)，再明确握手/resume；
+Replay 禁止 live lockstep、Record 不改写历史，无自动 checkpoint 传输或 rollback。
+实现、范围、10000 tick 实际 Host/network 与 Session/collision 原生检查见
+[完成阶段](../../AYDocs/DETERMINISTIC-COMPLETION-STAGE13.md)。

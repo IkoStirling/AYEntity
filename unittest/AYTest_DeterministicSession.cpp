@@ -1,4 +1,5 @@
 #include "DetSessionScenario.h"
+#include "DetTypedSessionScenario.h"
 #include <AYEntity/DeterministicReplay.h>
 #include <AYEntity.h>
 #include <AYEntity/SimToPresentBridgeSystem.h>
@@ -239,5 +240,21 @@ TEST_CASE(semantic_validator_reentry_and_exceptions_reject_initial_state) {
     Fixture f;auto& s=*f.session;
     CHECK_TRUE(s.registerValidator(1,1,[&s](const auto&,std::string&){(void)s.seal();return true;}));
     CHECK_FALSE(s.seal());CHECK_FALSE(s.sealed());CHECK_TRUE(s.error().find("reentry")!=std::string::npos);
+}
+TEST_CASE(world_adapter_and_owned_kernel_share_full_registered_state_and_restore) {
+    Fixture f({1,1,1,64,0});DeterministicSession kernel({1,1,1,64,0});
+    CHECK_TRUE(dettyped_scenario::configure(*f.session));CHECK_TRUE(dettyped_scenario::configure(kernel,true));
+    std::optional<DetSessionCheckpoint> middle;
+    for(unsigned tick=0;tick<1000;++tick){
+        CHECK_TRUE(f.session->advance(dettyped_scenario::input(tick)));
+        CHECK_TRUE(kernel.advance(dettyped_scenario::input(tick,true)));
+        CHECK(encodeDetCheckpoint(*f.session->checkpoint())==encodeDetCheckpoint(*kernel.checkpoint()));
+        if(tick==499)middle=f.session->checkpoint();
+    }
+    CHECK_TRUE(kernel.presentationEntity(2)==nullptr);
+    const auto expected=encodeDetCheckpoint(*kernel.checkpoint());
+    CHECK_TRUE(f.session->restore(*middle));CHECK_TRUE(kernel.restore(*middle));
+    for(unsigned tick=500;tick<1000;++tick){CHECK_TRUE(f.session->advance(dettyped_scenario::input(tick)));CHECK_TRUE(kernel.advance(dettyped_scenario::input(tick)));}
+    CHECK(encodeDetCheckpoint(*f.session->checkpoint())==expected && encodeDetCheckpoint(*kernel.checkpoint())==expected);
 }
 TEST_SUITE_END;

@@ -91,7 +91,8 @@ public:
                 return false;
             World::instance().updatePresentation(
                 context.deltaTime,
-                context.interpolationAlpha);
+                _simulationDriver ? _simulationDriver->presentationAlpha(context.interpolationAlpha)
+                    : context.interpolationAlpha);
         }
         return true;
     }

@@ -2,6 +2,7 @@
 // AYEntity/IEntity.h - AYEntity main interfaces
 
 #include <AYCore.h>
+#include <AYEntity/IComponent.h>
 #include <AYGameLoop.h>
 #include <functional>
 #include <vector>
@@ -55,17 +56,7 @@ enum class SystemLane : uint8_t {
 // =============================================================================
 // IComponent - Component base class
 // =============================================================================
-class IComponent {
-public:
-    virtual ~IComponent() = default;
 
-    virtual const char* getName() const = 0;
-
-    virtual void onAttach(Entity* entity) {}
-    virtual void onDetach() {}
-    virtual void onUpdate(float dt) {}
-    virtual void onStart() {}
-};
 
 // =============================================================================
 // ISystem - System interface

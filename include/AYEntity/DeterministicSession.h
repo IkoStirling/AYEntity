@@ -12,6 +12,7 @@
 namespace ayt::entity {
 class World;
 class Entity;
+class DetSessionStorage;
 using SimEntityId = std::uint64_t;
 using DetStateBlocks = std::map<std::uint32_t,std::vector<std::uint64_t>>;
 struct DetStateSchema {
@@ -128,6 +129,10 @@ public:
     using System=std::function<bool(DetTickContext&)>;
     using Validator=std::function<bool(const DetSessionCheckpoint&,std::string&)>;
     explicit DeterministicSession(World& world,DetSessionConfig config={});
+    /// Owned registered-state kernel, without a World/Host or presentation entities.
+    /// Same callbacks, manifests, checkpoint validation and collision as the World adapter.
+    /// Link AYEntity::DeterminismKernel; this overload claims no global engine services.
+    explicit DeterministicSession(DetSessionConfig config={});
     ~DeterministicSession();
     DeterministicSession(const DeterministicSession&)=delete;
     DeterministicSession& operator=(const DeterministicSession&)=delete;
@@ -136,6 +141,9 @@ public:
     /// Defaults are automatically applied to actors and registered globals.
     bool registerTypedSchema(DetTypedStateSchema schema);
     bool registerSystem(std::uint32_t id,std::int32_t priority,System system);
+    /// Version/hash of registered authoritative code enters manifest 4 (max 64).
+    /// Configure before seal; matching peers/replays must have the same identities.
+    bool registerLogicProfile(std::uint32_t id,std::uint32_t version,std::uint64_t hash);
     /// Register pure read-only state semantics before seal (max 64, sorted stable IDs).
     /// ID/version enter manifest 3. Called at seal, checkpoint, restore and before
     /// structural tick commit; false/throw rejects with ID and diagnostic. No
@@ -164,6 +172,7 @@ public:
     Entity* presentationEntity(SimEntityId id) const;
 private:
     friend class DetTickContext;
+    DeterministicSession(std::unique_ptr<DetSessionStorage>,DetSessionConfig);
     struct Impl;
     std::unique_ptr<Impl> _impl;
 };

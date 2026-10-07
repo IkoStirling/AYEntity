@@ -1,5 +1,6 @@
 #pragma once
 #include <AYEntity/DeterministicReplay.h>
+#include <AYEntity/DeterministicLockstep.h>
 #include <AYGameLoop/IGameLoop.h>
 #include <AYModule/IModule.h>
 
@@ -24,6 +25,9 @@ struct DetHostedSceneRecipe {
     std::function<bool(const DetHostInputRequest&, DetTickInput&)> input;
     std::string replayPath;
     std::uint32_t checkpointInterval = 300;
+    /// Opt-in fixed-roster networking in Live/Record; Replay consumes recorded inputs.
+    /// Host owns advance; input samples one local contribution per session tick.
+    std::optional<DetLockstepConfig> lockstep;
 };
 struct DetHostOptions {
     /// nullopt explicitly selects ordinary World Sim, e.g. for Edit/preview scenes.
@@ -66,6 +70,20 @@ public:
     bool restore(const DetSessionCheckpoint&);
     /// Replay-only verified seek; pauses first and resets the reader restart boundary.
     bool seek(std::uint64_t nextTick);
+    /// Owner-thread ingress at an external frame boundary; authenticate member mapping first.
+    /// Invalid packets return false; terminal protocol faults stop controlled simulation.
+    bool receiveNetwork(std::uint32_t authenticatedMember, std::span<const std::uint8_t> packet);
+    /// Retained outbound packets; application throttles transport/resends outside Sim.
+    std::vector<std::vector<std::uint8_t>> networkPackets() const;
+    /// Missing input/hash stalls this session tick while presentation continues.
+    bool networkWaiting() const;
+    bool networkSynchronized() const;
+    std::vector<std::uint32_t> networkMissing() const;
+    /// Admission/liveness policy is external; a lost fixed member faults this epoch.
+    bool disconnectNetworkMember(std::uint32_t member);
+    /// Live-only agreed checkpoint recovery, paused, with a strictly newer epoch.
+    /// Every peer must agree the same checkpoint/epoch; no automatic state transfer.
+    bool resetNetwork(const DetSessionCheckpoint&, std::uint32_t newEpoch);
     DetHostState state() const;
     /// Host diagnostic, or active session diagnostic (including checkpoint rejection).
     const std::string& error() const;

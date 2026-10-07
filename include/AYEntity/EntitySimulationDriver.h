@@ -15,6 +15,8 @@ public:
     virtual ~IEntitySimulationDriver() = default;
     virtual std::optional<bool> fixedTick(World&, const game::FrameContext&) = 0;
     virtual bool presentationBoundary(World&) { return true; }
+    /// A waiting network owner may hold the latest committed pose instead of rewinding history.
+    virtual float presentationAlpha(float alpha) const { return alpha; }
     virtual void hostShutdown() noexcept = 0;
     virtual void worldShutdown(World&) noexcept = 0;
 };
