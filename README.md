@@ -310,8 +310,9 @@ body/policy/history/已发行身份/event payload；invalid restore 不修改 Wo
 完整规则和真实 Host 10k 动态场景见[第十二阶段](../../AYDocs/DETERMINISTIC-COLLISION-STAGE12.md)。
 
 Linux x64/ARM64 × GCC 13.3.0/Clang 18.1.3 四组原生 portable 实际通过：
-typed codec/layout 精确 oracle 与三成员10000 tick Lockstep 协议；完整 Host、
-solver 与实际传输使用 Windows 集成证据。见[原生验收记录](../../AYDocs/DETERMINISTIC-NATIVE-ACCEPTANCE.md)。
+typed codec/layout、三成员10000 tick Lockstep、完整共享 Session 与两种碰撞 solver
+10000 tick/5000 checkpoint replay，golden 与 Windows Host一致；完整 Host表现与
+实际传输仍使用 Windows集成证据。见[原生验收记录](../../AYDocs/DETERMINISTIC-NATIVE-ACCEPTANCE.md)。
 
 ## 共享 Session kernel 与标准 Host Lockstep
 

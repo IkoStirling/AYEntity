@@ -1497,3 +1497,8 @@ Logic profiles enter manifest4 as sorted stable ID/version/u64 identity (max64),
 with an optional empty validator table. Manifests1..3 retain old bytes when no
 logic identity is registered. See the stage13 project document for format,
 portable actual Session/collision golden gates and standard Host/network process tests.
+
+Native acceptance run 37653449840 passed all four GCC13.3/Clang18.1 x64/ARM64 jobs:
+actual shared Session and both solver profiles, 10000 ticks and 5000 checkpoint replay,
+legacy/extended complete hashes match the previously verified Windows Host.
+Full engine Host presentation and AYNetwork transport remain Windows integration gates.
