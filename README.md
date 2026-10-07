@@ -146,10 +146,11 @@ world.fixedUpdate(D::fromInt(1) / D::fromInt(60));
 
 typed dt 必须有限且正；非法输入在 snapshot/onStart/写入前抛
 `std::invalid_argument`。`IDeterministicSystem` 收到原始 DetFloat32 dt；
-其他旧 Sim 系统走显式 native adapter。标准 EntitySubSystem 仍传 native
-float dt，经 `IDeterministicSystem::onUpdate` 位复制进入 typed 回调；需要
-精确 tick 比率的玩法应由约定整数比率构造 dt，或由拥有 tick 的宿主使用
-typed World 入口。类型接入不保证第三方物理/旧系统自动确定化。
+其他旧 Sim 系统走显式 native adapter。标准 EntitySubSystem 现在直接使用
+`FrameContext::fixedStep` 的 DetFloat32；GameLoop 默认软件比率 1/60，
+可通过 `IGameLoop::setFixedTimestepRatio` 在启动前或帧间配置。手工 legacy
+context 没有 fixedStep 时才回退到 float World 入口。不要额外推进标准
+Host 已拥有的 World；物理/旧系统仍需独立满足确定性契约。
 
 `setPosition/translate` 返回 bool，非有限值或溢出不写入、不推进 revision。
 `snapshot/restore` 保存前后 position bits、revision、history 标志及 scalar

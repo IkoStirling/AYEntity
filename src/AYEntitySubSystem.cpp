@@ -66,7 +66,11 @@ public:
     void tick(ayt::game::FramePhase phase,
               const ayt::game::FrameContext& context) override {
         if (phase == ayt::game::FramePhase::FixedPrePhysics) {
-            World::instance().fixedUpdate(context.fixedDeltaTime);
+            if (context.fixedStep) {
+                World::instance().fixedUpdate(context.fixedStep->deltaTime());
+            } else {
+                World::instance().fixedUpdate(context.fixedDeltaTime);
+            }
         } else if (phase == ayt::game::FramePhase::World) {
             World::instance().updatePresentation(
                 context.deltaTime,

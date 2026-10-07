@@ -251,6 +251,10 @@ target_compile_definitions(AYEntity PRIVATE
 
 # Identity and Scene authoring regressions also run without visual integrations.
 if(BUILD_TESTING)
+    add_executable(AYEntity_DeterministicHostTests
+        unittest/DeterministicHostTestMain.cpp unittest/AYTest_DeterministicHost.cpp)
+    target_link_libraries(AYEntity_DeterministicHostTests PRIVATE AYEntityCore AYTest)
+    ay_add_test(AYEntity_DeterministicHostTests LABELS "ayentity;determinism;host" TIMEOUT 60 RUN_SERIAL)
     add_executable(AYEntity_DeterministicTests
         unittest/DeterministicTestMain.cpp
         unittest/AYTest_DeterministicLane.cpp unittest/AYTest_DetFloatSim.cpp)

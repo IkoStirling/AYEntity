@@ -1023,7 +1023,9 @@ Sim 开始前统一 snapshot。`World::fixedUpdate(DetFloat32)` 验证正且有�
 失败在任何 snapshot/onStart 前抛 invalid_argument；对 `IDeterministicSystem`
 直接 typed dispatch，同 priority 保留注册顺序，其他 Sim 系统用 native adapter。
 旧 `fixedUpdate(float)` 继续可用；IDeterministicSystem 的 final onUpdate 仅
-位复制 dt，标准 GameLoop/Entity Host 的整数比率时间接入仍待后续工作。
+位复制 dt。2026-10-07 后续接入：标准 GameLoop 提供 FixedTimestep 比率
+输入，Entity adapter 优先使用 FrameContext.fixedStep 的 DetFloat32；只有
+手工 legacy context 为空时回退 float。Host 墙钟预算仍只决定 tick 数量。
 
 新组件的 setter/translate 对非有限输入/结果失败且无 mutation/revision；
 restore 在 scalar profile 和两组有限字段校验通过后一起更新，保留历史。
