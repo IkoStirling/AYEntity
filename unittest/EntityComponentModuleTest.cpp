@@ -48,6 +48,10 @@ TEST_CASE(module_registers_types_before_the_host_seals_the_registry)
         registry.find<SimTransformComponent>();
     CHECK_NOT_NULL(simTransform);
     CHECK_FALSE(simTransform->sceneSerializable);
+    const auto* detTransform = registry.find<DetSimTransformComponent>();
+    CHECK_NOT_NULL(detTransform);
+    CHECK_FALSE(detTransform->sceneSerializable);
+    CHECK_FALSE(detTransform->editorAddable);
     // Feature components are no longer registered by AYEntityCore. Their
     // explicit integration modules participate in the same prepare phase.
     CHECK(registry.find("BlendSpaceComponent") == nullptr);

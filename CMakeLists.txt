@@ -251,6 +251,11 @@ target_compile_definitions(AYEntity PRIVATE
 
 # Identity and Scene authoring regressions also run without visual integrations.
 if(BUILD_TESTING)
+    add_executable(AYEntity_DeterministicTests
+        unittest/DeterministicTestMain.cpp
+        unittest/AYTest_DeterministicLane.cpp unittest/AYTest_DetFloatSim.cpp)
+    target_link_libraries(AYEntity_DeterministicTests PRIVATE AYEntityCore AYTest)
+    ay_add_test(AYEntity_DeterministicTests LABELS "ayentity;determinism" TIMEOUT 60 RUN_SERIAL)
     add_executable(AYEntity_PerspectiveCameraTests
         unittest/PerspectiveCameraTestMain.cpp unittest/AYTest_PerspectiveCamera.cpp)
     target_link_libraries(AYEntity_PerspectiveCameraTests PRIVATE AYEntityCore AYTest)

@@ -54,4 +54,9 @@ template SimTransformComponent* Entity::addComponent<SimTransformComponent>();
 template SimTransformComponent* Entity::getComponent<SimTransformComponent>();
 template bool Entity::hasComponent<SimTransformComponent>() const;
 
+// --- Software binary32 translation -----------------------------------------
+template DetSimTransformComponent* Entity::addComponent<DetSimTransformComponent>();
+template DetSimTransformComponent* Entity::getComponent<DetSimTransformComponent>();
+template bool Entity::hasComponent<DetSimTransformComponent>() const;
+
 } // namespace ayt::entity

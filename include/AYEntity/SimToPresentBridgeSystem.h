@@ -5,8 +5,9 @@
 namespace ayt::entity
 {
 
-// Converts deterministic fixed translation into the float presentation
-// Transform. onUpdate's argument is interpolation alpha, not delta time.
+/// Convert Fixed or DetFloat translation into presentation Transform position.
+/// onUpdate receives alpha, not dt; conflicting authorities/non-finite Det state
+/// are skipped. Native presentation interpolation does not write Sim state.
 class SimToPresentBridgeSystem final : public ISystem {
 public:
     const char* getName() const override { return "SimToPresentBridgeSystem"; }
@@ -15,6 +16,7 @@ public:
     static constexpr int kPriority = 0;
 };
 
+/// Install the core translation Bridge in the active World (SystemLane::Bridge).
 void registerSimToPresentBridgeSystem();
 
 } // namespace ayt::entity

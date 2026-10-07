@@ -2,6 +2,7 @@
 // AYEntity/World.h - World class (non-template parts)
 
 #include <AYEntity/IEntity.h>
+#include <AYMath/DetFloat.h>
 #include <AYEntity/ComponentRegistry.h>
 #include <AYEntity/SparseSet.h>
 #include <AYEntity/EntityHandle.h>
@@ -49,8 +50,12 @@ public:
     bool isInitialized() const { return _initialized; }
     /// Backward-compatible presentation update. Bridge alpha defaults to 1.
     void update(float dt);
-    /// Run one deterministic simulation step. Only SystemLane::Sim runs.
+    /// Run one Sim step with legacy native dt input. Only SystemLane::Sim runs.
     void fixedUpdate(float fixedDt);
+    /// Typed Sim-only tick: positive finite dt, direct IDeterministicSystem dispatch.
+    /// Invalid dt throws before snapshots/onStart/writes. Legacy Sim systems
+    /// receive a native dt adapter; their arithmetic is not certified.
+    void fixedUpdate(math::DetFloat32 fixedDt);
     /// Run Bridge(alpha) before Present(dt), then component presentation ticks.
     void updatePresentation(float dt, float interpolationAlpha);
 
@@ -114,6 +119,7 @@ private:
     Entity* createEntityInternal();
     void destroyEntityInternal(Entity* e);
     void updateLane(SystemLane lane, float timeValue);
+    void beginSimulationStep();
 
     std::vector<EntityHandle> _entityPool;
     std::vector<std::unique_ptr<ISystem>> _systems;

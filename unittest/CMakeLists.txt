@@ -12,6 +12,7 @@ set(SOURCES
     EntityHandleTest.cpp
     SystemTest.cpp
     AYTest_DeterministicLane.cpp
+    AYTest_DetFloatSim.cpp
     SkinnedAnimationTest.cpp
     CharacterEntityTest.cpp
     AYTest_SceneSerializer.cpp

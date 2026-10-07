@@ -1010,11 +1010,28 @@ Sim 系统由 `World` 串行执行。同一 lane 内按 priority 排序，同优
 |------|----------|--------|
 | `TransformComponent` | `Float32` | Render、Editor、非 lockstep 网络复制 |
 | `SimTransformComponent` | Q16.16 `FixedVec3` 平移 | Sim 系统、lockstep checksum |
+| `DetSimTransformComponent` | 软件 binary32 `DetVec3` 平移（新逻辑推荐） | Sim 系统、按字段 bits 的 checkpoint/checksum |
 | 玩法 hitbox / 受击判定 | Sim 代理体 | **不要**在 lockstep 中采样蒙皮后的骨骼矩阵 |
 
 `World::fixedUpdate` 在每个固定步执行 Sim 系统前保存所有 SimTransform 的
 `previousPosition`。Bridge 对前后位置按表现帧 alpha 插值，并保留
-`Transform` 的 rotation/scale；固定点旋转与缩放不在 DET-04 范围内。
+`Transform` 的 rotation/scale；确定性旋转与缩放不在本阶段范围内。
+
+2026-10-07 DET-04F：Core 注册独立 `DetSimTransformComponent`（运行时、
+非 sceneSerializable/editorAddable）；旧类型与格式不变。两类状态都在
+Sim 开始前统一 snapshot。`World::fixedUpdate(DetFloat32)` 验证正且有限，
+失败在任何 snapshot/onStart 前抛 invalid_argument；对 `IDeterministicSystem`
+直接 typed dispatch，同 priority 保留注册顺序，其他 Sim 系统用 native adapter。
+旧 `fixedUpdate(float)` 继续可用；IDeterministicSystem 的 final onUpdate 仅
+位复制 dt，标准 GameLoop/Entity Host 的整数比率时间接入仍待后续工作。
+
+新组件的 setter/translate 对非有限输入/结果失败且无 mutation/revision；
+restore 在 scalar profile 和两组有限字段校验通过后一起更新，保留历史。
+Snapshot 是字段数据，不是新增文件格式；外部保存约定字节序和输入/RNG
+schema。`importFixed` 软件 nearest-even 转换 raw/65536，可能损失 Q16.16
+低位；需显式移除旧权威。Bridge 遇到双 Sim 类型或无效 Det 字段不发布；
+native double 插值避免极值差溢出，仅用于 Present，不参与权威校验。
+平移之外的 quaternion/scale/physics/script/网络集成尚未实现。
 
 命中判定应使用 Sim 代理（胶囊 / AABB），由动画在 Present 轨驱动视觉，与 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../AYDocs/ENGINE-DETERMINISM-ARCHITECTURE.md) §5.3 一致。
 

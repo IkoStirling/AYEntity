@@ -10,6 +10,8 @@
 #include <AYEntity/ComponentRegistry.h>
 #include <AYEntity/components/TransformComponent.h>
 #include <AYEntity/components/SimTransformComponent.h>
+#include <AYEntity/components/DetSimTransformComponent.h>
+#include <AYEntity/DeterministicSystem.h>
 #include <AYEntity/components/HealthComponent.h>
 #include <AYEntity/components/MeshComponent.h>
 #include <AYEntity/components/RigidBodyComponent.h>

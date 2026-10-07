@@ -110,9 +110,58 @@ world.updatePresentation(frameDt, interpolationAlpha);
 位置。`World` 会在每次 Sim 步开始前统一保存 `previousPosition`，所以同一
 步内多个 Sim 系统写位置不会破坏插值起点。
 
-当前 `SimTransformComponent` 只权威管理平移；确定性旋转/缩放需要等待
-AYMath 的固定点旋转契约。Sim 系统需要按实体 ID 稳定遍历：可使用
+`SimTransformComponent` 保留旧 Q16.16 平移。新确定性逻辑可选择下面的
+软件 binary32 组件；旋转/缩放的确定性契约尚待扩展。Sim 系统需要按实体 ID 稳定遍历：可使用
 `World::getAllEntities()`，不要依赖 SparseSet swap-remove 后的 `Query` 顺序。
+
+### 软件 binary32 Sim 平移
+
+`DetSimTransformComponent` 是独立运行时组件，使用 AYMath `DetVec3`，
+由 Core 类型注册安装；不写 `.ayscene`、不作为编辑器可添加的作者组件。
+与 `Transform` 同时添加后，既有 Core Bridge 自动发布插值平移，保留
+表现层 rotation/scale，不写回 Sim。每实体只能有一个 Sim 平移权威。
+
+```cpp
+using D = ayt::math::DetFloat32;
+using V = ayt::math::DetVec3;
+class MovementSystem final : public ayt::entity::IDeterministicSystem {
+public:
+    const char* getName() const override { return "Movement"; }
+    void onDeterministicUpdate(D dt) override {
+        for (auto* entity : ayt::entity::World::instance().getAllEntities())
+            if (auto* sim = entity->getComponent<ayt::entity::DetSimTransformComponent>())
+                (void)sim->translate(V::fromInts(3, 0, 0) * dt);
+    }
+};
+// 在已初始化且 Core 类型已注册的活动 World 中组装：
+auto& world = ayt::entity::World::instance();
+auto* entity = world.createEntity();
+entity->addComponent<ayt::entity::Transform>();
+auto* sim = entity->addComponent<ayt::entity::DetSimTransformComponent>();
+sim->setPosition(V::fromInts(1, 2, 3));
+world.registerSystem<MovementSystem>(100, ayt::entity::SystemLane::Sim);
+// 只有负责 tick 的自定义宿主调用；不要重复 tick 标准 Host 已拥有的 World：
+world.fixedUpdate(D::fromInt(1) / D::fromInt(60));
+```
+
+typed dt 必须有限且正；非法输入在 snapshot/onStart/写入前抛
+`std::invalid_argument`。`IDeterministicSystem` 收到原始 DetFloat32 dt；
+其他旧 Sim 系统走显式 native adapter。标准 EntitySubSystem 仍传 native
+float dt，经 `IDeterministicSystem::onUpdate` 位复制进入 typed 回调；需要
+精确 tick 比率的玩法应由约定整数比率构造 dt，或由拥有 tick 的宿主使用
+typed World 入口。类型接入不保证第三方物理/旧系统自动确定化。
+
+`setPosition/translate` 返回 bool，非有限值或溢出不写入、不推进 revision。
+`snapshot/restore` 保存前后 position bits、revision、history 标志及 scalar
+profile；未知 profile/非有限字段恢复失败且不改变状态。保存时显式编码
+字段和字节序，外部输入/RNG/system 状态由宿主同时 checkpoint。
+`importFixed` 明确以软件舍入将 Q16.16 转为 binary32，复制历史与 revision，
+不修改旧组件；大坐标可能丢失低位。完成后移除旧组件，并升级回放 schema。
+
+Bridge 跳过同时具有两类 Sim 权威或存在非有限 Det 历史/位置的实体；alpha
+仅用于表现，clamp 到 0..1，NaN 取 0。Sequencer 拒绝两种 Sim 权威，包括
+播放后动态添加的组件。`AYEntity_DeterministicTests` 仅链接 Core，覆盖
+旧 lane、typed tick、检查点重放、迁移与 Bridge；完整 AYEntityTest 也含新用例。
 
 ## 显式组件注册
 

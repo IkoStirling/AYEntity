@@ -4,6 +4,9 @@
 #include <AYEntity/EntityImpl.h>
 #include <AYEntity/WorldLifecycle.h>
 #include <AYEntity/components/SimTransformComponent.h>
+#include <AYEntity/components/DetSimTransformComponent.h>
+#include <AYEntity/DeterministicSystem.h>
+#include <stdexcept>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -100,7 +103,7 @@ void World::update(float dt) {
     updatePresentation(dt, 1.0f);
 }
 
-void World::fixedUpdate(float fixedDt) {
+void World::beginSimulationStep() {
     // Snapshot once per fixed tick, before any Sim system writes. This makes
     // interpolation independent of how many Sim systems touch the component.
     if (auto* storage = getStorage<SimTransformComponent>()) {
@@ -109,7 +112,32 @@ void World::fixedUpdate(float fixedDt) {
         }
     }
 
+    if (auto* storage = getStorage<DetSimTransformComponent>()) {
+        for (auto* transform : storage->getDense()) {
+            if (transform != nullptr) transform->beginSimulationStep();
+        }
+    }
+}
+
+void World::fixedUpdate(float fixedDt) {
+    beginSimulationStep();
     updateLane(SystemLane::Sim, fixedDt);
+}
+
+void World::fixedUpdate(math::DetFloat32 fixedDt) {
+    if (!fixedDt.isFinite() || !(fixedDt > math::DetFloat32{})) {
+        throw std::invalid_argument("Deterministic World dt must be finite and positive");
+    }
+    beginSimulationStep();
+    for (auto& system : _systems) {
+        if (system->getLane() != SystemLane::Sim) continue;
+        system->startOnce();
+        if (auto* deterministic = dynamic_cast<IDeterministicSystem*>(system.get())) {
+            deterministic->onDeterministicUpdate(fixedDt);
+        } else {
+            system->onUpdate(fixedDt.toFloat());
+        }
+    }
 }
 
 void World::updatePresentation(float dt, float interpolationAlpha) {
