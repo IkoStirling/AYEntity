@@ -93,7 +93,7 @@ set(_ay_entity_integrations)
 # Explicit session/replay adapter; Core retains its existing dependency boundary.
 if(TARGET AYReplay)
     add_library(AYEntityDeterminism STATIC
-        src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp
+        src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp src/AYDeterministicState.cpp
         src/AYDeterministicReplay.cpp)
     add_library(AYEntity::Determinism ALIAS AYEntityDeterminism)
     ay_configure_entity_target(AYEntityDeterminism)
@@ -294,7 +294,8 @@ target_compile_definitions(AYEntity PRIVATE
 if(BUILD_TESTING)
     if(TARGET AYEntityDeterminism)
         add_executable(AYEntity_DeterministicSessionTests
-            unittest/DeterministicSessionTestMain.cpp unittest/AYTest_DeterministicSession.cpp)
+            unittest/DeterministicSessionTestMain.cpp unittest/AYTest_DeterministicSession.cpp
+            unittest/AYTest_DeterministicState.cpp)
         target_link_libraries(AYEntity_DeterministicSessionTests PRIVATE AYEntityDeterminism AYTest)
         ay_add_test(AYEntity_DeterministicSessionTests LABELS "ayentity;determinism;replay" TIMEOUT 120 RUN_SERIAL)
         add_executable(AYEntity_DeterministicSessionWorker unittest/DeterministicSessionWorker.cpp)

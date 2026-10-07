@@ -4,6 +4,7 @@
 #include <limits>
 #include <stdexcept>
 #include <tuple>
+#include <set>
 
 namespace ayt::entity::detwire {
 inline constexpr std::size_t maxBytes=8*1024*1024, maxInputBytes=64*1024;
@@ -24,6 +25,7 @@ struct Writer {
 struct Reader {
     std::span<const std::uint8_t> bytes;
     std::size_t position=0;
+    std::uint32_t version=1;
     std::uint64_t u64(unsigned count=8) {
         if (count>bytes.size()-position) throw std::runtime_error("Truncated session record");
         std::uint64_t v=0;for(unsigned i=0;i<count;++i) v|=std::uint64_t{bytes[position++]}<<(8*i);return v;
@@ -39,12 +41,13 @@ struct Reader {
     }
     void end() { if(position!=bytes.size())throw std::runtime_error("Trailing session bytes"); }
 };
-inline Reader checked(std::span<const std::uint8_t> bytes,std::uint32_t magic) {
+inline Reader checked(std::span<const std::uint8_t> bytes,std::uint32_t magic,std::uint32_t maxVersion=1) {
     if(bytes.size()<16 || bytes.size()>maxBytes)throw std::runtime_error("Session record size limit");
     Reader trailer{bytes.last(8)};
     if(trailer.u64()!=replay::fnv1a64(bytes.data(),bytes.size()-8))throw std::runtime_error("Session checksum mismatch");
     Reader r{bytes.first(bytes.size()-8)};
-    if(r.u32()!=magic || r.u32()!=1)throw std::runtime_error("Unknown session record version");return r;
+    if(r.u32()!=magic)throw std::runtime_error("Unknown session record magic");
+    r.version=r.u32();if(!r.version || r.version>maxVersion)throw std::runtime_error("Unknown session record version");return r;
 }
 inline auto commandKey(const DetTickCommand& c) { return std::pair{c.source,c.sequence}; }
 inline void command(Writer& w,const DetTickCommand& c) { w.u32(c.source);w.u32(c.sequence);w.u32(c.type);w.blob(c.payload); }
@@ -56,10 +59,17 @@ inline void blocks(Writer& w,const DetStateBlocks& b) {
 inline DetStateBlocks blocks(Reader& r) {
     DetStateBlocks b;auto n=r.count(maxSchemas);
     for(unsigned i=0;i<n;++i) {
-        auto id=r.u32(),count=r.count(maxFields);std::vector<std::uint64_t> words;words.reserve(count);
+        auto id=r.u32(),count=r.count(maxFields*4);std::vector<std::uint64_t> words;words.reserve(count);
         for(unsigned j=0;j<count;++j)words.push_back(r.u64());
         if(!b.emplace(id,std::move(words)).second)throw std::runtime_error("Duplicate state schema");
     }return b;
 }
 inline constexpr std::uint32_t checkpointMagic=0x43534441,inputMagic=0x49534441,manifestMagic=0x4d534441;
+struct LayoutField {std::uint32_t id;DetStateType type;std::uint32_t width;};
+struct ManifestLayout {
+    std::map<std::uint32_t,std::vector<LayoutField>> schemas;
+    std::set<std::uint32_t> globals;
+};
+ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes);
+bool validLayoutBlocks(const DetStateBlocks& blocks,const ManifestLayout& layout,bool all);
 } // namespace ayt::entity::detwire

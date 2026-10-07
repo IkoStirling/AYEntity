@@ -1396,3 +1396,24 @@ Live restore / Replay seek 都先暂停；Record 恢复拒绝，存在目的文�
 partial callback fault 必须显式恢复；I/O 失败不能撤销已执行 tick。host simTick 与
 presentation frame index 只作调度/采集元数据，权威身份为 session.nextTick。
 完整行为和限制见[第七阶段](../../AYDocs/DETERMINISTIC-HOST-STAGE7.md)。
+
+### 14.5.5 类型化注册字段（第八阶段，2026-10-07）
+
+DetTypedStateSchema initial 的封闭 variant 类型映射到显式固定 wire code，
+不以 variant index、RTTI 或 sizeof 作为持久身份。Session 拷贝 descriptor，
+legacy/typed 共用 schema ID 空间；逻辑 field ID 保持稳定，多分量字段保存
+2/3/4 canonical lanes。DetSimState 的 words 继续作为内部显式持久化存储，
+业务 typed access 返回值副本并校验 field type；typed blocks 禁止 raw span。
+字节 codec/初始 defaults/回调访问共用验证规则。字段写入先预检后全量替换；
+callback 非法 typed access 设置 sticky fault，即使 catch 也不能提交该 tick。
+
+含 typed fields 的 manifest 2 保存每 field 的 type 和 default lanes，legacy-only
+仍生成原 manifest 1；checkpoint envelope 1/.rpl v2 不变，无隐式迁移。
+decode 完整解析有界 manifest、profile、field/default 和 actor/global shapes，
+最后才替换输出；restore 进一步要求封存 manifest 完全一致，再原子预检恢复。
+diff 将每个 lane 映射回逻辑 field ID + zero-based lane；scalar 为 lane 0。
+整数固定-width bit pattern 零扩展到 u64，binary32 只用低 32 bits，bool 0/1。
+非有限 binary32 拒绝但 signed zero/subnormal 保留；raw quaternion 只要求有限，
+rotation 入口继续负责旋转有效性。EntityRef 是可空/未解析 stable ID，非 ownership。
+128 logical fields/schema，最多 512 lanes，仍同时受 manifest/checkpoint byte budgets 限制。
+Windows typed Host 10k 四进程/Debug-Release 和 legacy golden 验收见[第八阶段](../../AYDocs/DETERMINISTIC-STATE-STAGE8.md)。

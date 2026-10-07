@@ -1,6 +1,7 @@
 #pragma once
 #include <AYEntity/components/DetSimTransformComponent.h>
 #include <AYMath/Random.h>
+#include <AYEntity/DeterministicState.h>
 #include <functional>
 #include <map>
 #include <memory>
@@ -54,6 +55,8 @@ struct DetStateDifference {
     std::uint64_t tick=0, entity=0, expected=0, actual=0;
     std::uint32_t component=0, field=0;
     std::string section;
+    /// Zero-based vector/quaternion lane; scalar fields use zero.
+    std::uint32_t lane=0;
 };
 /// Explicit little-endian profile, length bounds and checksum; no object dumps.
 std::vector<std::uint8_t> encodeDetCheckpoint(const DetSessionCheckpoint& state);
@@ -68,7 +71,9 @@ class DeterministicSession;
 /** @brief One sealed tick's authoritative access, valid only during its system callback.
  * @note Iterate entities() by stable SimEntityId. Hidden mutable callback state,
  * runtime Entity IDs, native floats and external effects are outside the contract.
- * All mutable gameplay data must use pose(), words()/globals(), or registered RNG.
+ * All mutable gameplay data must use pose(), typed read/write, legacy word
+ * blocks, or registered RNG. Typed access throws on ID/shape/type/value errors;
+ * the tick faults even if a callback catches the exception.
  */
 class DetTickContext {
 public:
@@ -80,6 +85,17 @@ public:
     DetSimTransformComponent& pose(SimEntityId id);
     std::span<std::uint64_t> words(SimEntityId id,std::uint32_t schema);
     std::span<std::uint64_t> globals(std::uint32_t schema);
+    /// Copies only; typed schemas cannot be accessed through words()/globals().
+    template<DetStateScalar T> T read(SimEntityId id,std::uint32_t schema,std::uint32_t field) {
+        return std::get<T>(readValue(id,schema,field,detStateType(DetStateValue{T{}})));
+    }
+    /// Validate type/value before replacing all lanes; errors fault the tick.
+    template<DetStateScalar T> void write(SimEntityId id,std::uint32_t schema,std::uint32_t field,T value) {
+        writeValue(id,schema,field,DetStateValue{value});
+    }
+    /// Global state uses the reserved actor ID zero, never an Entity pointer.
+    template<DetStateScalar T> T readGlobal(std::uint32_t schema,std::uint32_t field) {return read<T>(0,schema,field);}
+    template<DetStateScalar T> void writeGlobal(std::uint32_t schema,std::uint32_t field,T value) {write<T>(0,schema,field,value);}
     math::pcg32_state& random(std::uint32_t stream);
     /// Queue structural changes for end-of-tick, in system (priority,id)/call order.
     /// IDs cannot be reused, even after despawn; invalid requests fault the tick.
@@ -90,6 +106,8 @@ public:
 private:
     friend class DeterministicSession;
     DetTickContext(DeterministicSession& session,std::uint32_t system);
+    DetStateValue readValue(SimEntityId id,std::uint32_t schema,std::uint32_t field,DetStateType type);
+    void writeValue(SimEntityId id,std::uint32_t schema,std::uint32_t field,const DetStateValue& value);
     DeterministicSession& _session;
     std::uint32_t _system, _sequence=0;
 };
@@ -100,7 +118,7 @@ private:
  * Systems run by (priority,stable ID), entities by Sim ID, input/events by
  * (source,sequence). This owner excludes direct World Sim ticks and structural
  * mutation. Presentation may run independently but cannot change Sim fields.
- * Schema IDs >=2 describe fixed-width uint64 word blocks (pose uses ID 1).
+ * Schema IDs >=2 describe typed fixed fields or legacy uint64 words (pose ID 1).
  * Checkpoint validates everything before restoring; callback failure faults the
  * session until explicit restore. It cannot undo unregistered external effects.
  * World outlives the session; handles/pointers may change after restoration.
@@ -113,6 +131,9 @@ public:
     DeterministicSession(const DeterministicSession&)=delete;
     DeterministicSession& operator=(const DeterministicSession&)=delete;
     bool registerSchema(DetStateSchema schema,std::vector<std::uint64_t> defaults={});
+    /// Register finite, bounded typed fields before actors/seal; manifest version 2.
+    /// Defaults are automatically applied to actors and registered globals.
+    bool registerTypedSchema(DetTypedStateSchema schema);
     bool registerSystem(std::uint32_t id,std::int32_t priority,System system);
     bool registerRandomStream(std::uint32_t id,std::uint64_t seed);
     bool registerGlobalState(std::uint32_t schema,std::vector<std::uint64_t> words={});

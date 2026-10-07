@@ -91,7 +91,7 @@ bool DetReplayReader::open(std::string path) {
             if(header.eventType==replay::kEvtFoundation_SessionBegin){if(records!=0 || header.tick!=0 || !p.manifest.empty())throw std::runtime_error("Unexpected foundation session marker");continue;}
             if(complete)throw std::runtime_error("Records after completion seal");
             if(header.eventType==manifestEvent){if(!p.manifest.empty() || header.tick!=0 || !p.ticks.empty())throw std::runtime_error("Unexpected manifest");
-                (void)checked(payload,manifestMagic);p.manifest=std::move(payload);continue;}
+                (void)manifestLayout(payload);p.manifest=std::move(payload);continue;}
             if(p.manifest.empty())throw std::runtime_error("Missing session manifest");
             if(header.eventType==inputEvent){
                 if(waiting || !p.checkpoints.contains(0))throw std::runtime_error("Input without initial checkpoint or duplicate input");

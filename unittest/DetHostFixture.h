@@ -1,5 +1,5 @@
 #pragma once
-#include "DetSessionScenario.h"
+#include "DetTypedSessionScenario.h"
 #include <AYEntity/DeterministicHost.h>
 #include <AYEntity/EntityModule.h>
 #include <AYEntity/World.h>
@@ -35,7 +35,7 @@ struct Fixture {
     static DetHostedSceneRecipe recipe(DetHostMode mode=DetHostMode::Live,std::string path={}) {
         DetHostedSceneRecipe r;r.config.stepNumerator=1;r.config.stepDenominator=64;
         r.mode=mode;r.replayPath=std::move(path);r.checkpointInterval=3;
-        r.configure=[](auto& s){return detsession_scenario::configure(s);};
+        r.configure=[](auto& s){return dettyped_scenario::configure(s);};
         r.input=[](const auto& request,auto& packet){packet=detsession_scenario::input(request.tick);return true;};
         return r;
     }

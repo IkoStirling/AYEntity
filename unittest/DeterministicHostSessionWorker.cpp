@@ -21,7 +21,7 @@ int main(int argc,char** argv) {
         Fixture f;auto r=Fixture::recipe(mode=="record"?DetHostMode::Record:
             mode=="live"?DetHostMode::Live:DetHostMode::Replay,path);
         r.checkpointInterval=300;
-        r.configure=[&](auto& s){return detsession_scenario::configure(s,mode!="record");};
+        r.configure=[&](auto& s){return dettyped_scenario::configure(s,mode!="record");};
         r.input=[&](const auto& request,auto& packet){
             packet=detsession_scenario::input(request.tick,mode!="record");return true;};
         if(!f.bind(r))throw std::runtime_error(f.controller.error());

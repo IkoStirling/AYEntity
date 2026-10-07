@@ -1,5 +1,6 @@
 #include "detail/DetSessionWire.h"
 #include <algorithm>
+#include <bit>
 
 namespace ayt::entity {
 using namespace detwire;
@@ -18,6 +19,57 @@ DetSimTransformComponent::Snapshot pose(Reader& r) {
     p.revision=r.u64();p.hasPreviousPosition=r.boolean();p.rotationEnabled=r.boolean();p.hasPreviousRotation=r.boolean();return p;
 }
 }
+namespace detwire {
+ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
+    if(bytes.size()>maxInputBytes)throw std::runtime_error("Manifest size limit");
+    auto r=checked(bytes,manifestMagic,2);ManifestLayout layout;
+    const auto app=r.u32(),input=r.u32(),numerator=r.u32(),denominator=r.u32(),dt=r.u32();
+    const auto poseSchema=r.u32(),snapshot=r.u32();r.u64();
+    if(!app || !input || !numerator || !denominator || poseSchema!=1 || snapshot!=DetSimTransformComponent::kSnapshotVersion
+        || dt!=(math::DetFloat32::fromUInt(numerator)/math::DetFloat32::fromUInt(denominator)).bits()
+        || !math::DetFloat32::fromBits(dt).isFinite() || !(math::DetFloat32::fromBits(dt)>math::DetFloat32{}))
+        throw std::runtime_error("Invalid manifest configuration/profile");
+    if(r.u32()!=math::DetFloat32::kProfileVersion || r.u32()!=math::DetQuaternion::kRotationProfileVersion
+        || r.u32()!=math::kDetMathProfileVersion || r.u32()!=math::DetQuaternion::kAngularIntegrationProfileVersion)
+        throw std::runtime_error("Unknown manifest numeric profile");
+    auto n=r.count(maxSchemas);std::uint32_t previous=1;
+    for(unsigned i=0;i<n;++i) {
+        const auto id=r.u32(),version=r.u32(),count=r.count(maxFields);
+        if(id<=previous || id==UINT32_MAX || !version || !count)throw std::runtime_error("Invalid manifest schema");previous=id;
+        auto& fields=layout.schemas[id];std::uint32_t previousField=0;
+        for(unsigned j=0;j<count;++j) {
+            auto field=r.u32();if(field<=previousField)throw std::runtime_error("Invalid manifest field ID");previousField=field;
+            const auto type=r.version==1?DetStateType::Word:static_cast<DetStateType>(r.u32());
+            const std::uint32_t width=type==DetStateType::Vec2?2:type==DetStateType::Vec3?3:type==DetStateType::Quaternion?4:1;
+            std::vector<std::uint64_t> defaults;for(unsigned k=0;k<width;++k)defaults.push_back(r.u64());
+            if(type!=DetStateType::Word)(void)decodeDetStateValue(type,defaults);
+            fields.push_back({field,type,width});
+        }
+    }
+    n=r.count(maxSchemas);std::set<std::uint32_t> systems;std::optional<std::pair<std::int32_t,std::uint32_t>> lastSystem;
+    for(unsigned i=0;i<n;++i){const auto id=r.u32();const auto priority=std::bit_cast<std::int32_t>(r.u32());
+        const auto key=std::pair{priority,id};
+        if(!id || !systems.insert(id).second || (lastSystem && key<=*lastSystem))throw std::runtime_error("Invalid manifest system order");lastSystem=key;}
+    n=r.count(maxSchemas);previous=0;
+    for(unsigned i=0;i<n;++i){const auto id=r.u32();r.u64();if(id<=previous)throw std::runtime_error("Invalid manifest RNG ID");previous=id;}
+    n=r.count(maxSchemas);previous=0;
+    for(unsigned i=0;i<n;++i){const auto id=r.u32();if(id<=previous || !layout.schemas.contains(id))throw std::runtime_error("Invalid manifest global ID");previous=id;layout.globals.insert(id);}
+    r.end();return layout;
+}
+bool validLayoutBlocks(const DetStateBlocks& blocks,const ManifestLayout& layout,bool all) {
+    if(all && blocks.size()!=layout.schemas.size())return false;
+    try {
+        for(const auto& [id,words]:blocks) {
+            auto it=layout.schemas.find(id);if(it==layout.schemas.end())return false;
+            std::size_t total=0;for(const auto& field:it->second)total+=field.width;
+            if(words.size()!=total)return false;std::size_t offset=0;
+            for(const auto& field:it->second){if(field.type!=DetStateType::Word)
+                (void)decodeDetStateValue(field.type,std::span(words).subspan(offset,field.width));offset+=field.width;}
+        }
+    }catch(...){return false;}
+    return true;
+}
+} // namespace detwire
 bool canonicalizeDetInput(DetTickInput& input,std::string& error) {
     if(input.version==0 || input.commands.size()>maxCommands) { error="Invalid input version/count";return false; }
     std::size_t bytes=0;
@@ -61,11 +113,15 @@ std::vector<std::uint8_t> encodeDetCheckpoint(const DetSessionCheckpoint& s) {
 bool decodeDetCheckpoint(std::span<const std::uint8_t> bytes,DetSessionCheckpoint& state,std::string& error) {
     try {
         auto r=checked(bytes,checkpointMagic);DetSessionCheckpoint s;s.manifest=r.blob(maxInputBytes);
-        (void)checked(s.manifest,manifestMagic);s.nextTick=r.u64();
+        const auto layout=manifestLayout(s.manifest);s.nextTick=r.u64();
         auto n=r.count(maxActors);for(unsigned i=0;i<n;++i){auto id=r.u64();DetActorState a;a.pose=pose(r);a.blocks=blocks(r);
             DetSimTransformComponent test;if(!test.restore(a.pose))throw std::runtime_error("Invalid checkpoint pose/profile");
+            if(!validLayoutBlocks(a.blocks,layout,true))throw std::runtime_error("Invalid checkpoint typed state/schema");
             if(!id || !s.actors.emplace(id,std::move(a)).second)throw std::runtime_error("Duplicate/zero actor ID");}
-        s.globals=blocks(r);n=r.count(maxSchemas);for(unsigned i=0;i<n;++i){auto id=r.u32();auto a=r.u64(),b=r.u64();
+        s.globals=blocks(r);
+        if(s.globals.size()!=layout.globals.size() || !validLayoutBlocks(s.globals,layout,false))throw std::runtime_error("Invalid checkpoint global state/schema");
+        for(auto id:layout.globals)if(!s.globals.contains(id))throw std::runtime_error("Missing checkpoint global schema");
+        n=r.count(maxSchemas);for(unsigned i=0;i<n;++i){auto id=r.u32();auto a=r.u64(),b=r.u64();
             if(!id || !(b&1) || !s.randomStreams.emplace(id,math::pcg32_state{a,b}).second)throw std::runtime_error("Invalid RNG stream");}
         n=r.count(maxCommands);for(unsigned i=0;i<n;++i)s.pendingEvents.push_back(command(r));
         n=r.count(65536);for(unsigned i=0;i<n;++i)s.retiredIds.push_back(r.u64());r.end();
@@ -90,33 +146,32 @@ std::optional<DetStateDifference> firstDetDifference(const DetSessionCheckpoint&
     if(a.manifest!=b.manifest)return DetStateDifference{tick,0,0,0,0,0,"manifest"};
     if(a.nextTick!=b.nextTick)return DetStateDifference{tick,0,a.nextTick,b.nextTick,0,0,"tick"};
     // Pull stable custom field IDs from the exact common manifest.
-    std::map<std::uint32_t,std::vector<std::uint32_t>> schema;
+    std::map<std::uint32_t,std::vector<std::pair<std::uint32_t,std::uint32_t>>> schema;
     try {
-        auto r=checked(a.manifest,manifestMagic);
-        for(unsigned i=0;i<7;++i)r.u32();r.u64();for(unsigned i=0;i<4;++i)r.u32();
-        auto n=r.count(maxSchemas);for(unsigned i=0;i<n;++i){auto id=r.u32();r.u32();auto c=r.count(maxFields);
-            auto& fields=schema[id];for(unsigned j=0;j<c;++j){fields.push_back(r.u32());r.u64();}}
+        const auto layout=manifestLayout(a.manifest);
+        for(const auto& [id,fields]:layout.schemas)for(const auto& field:fields)
+            for(std::uint32_t lane=0;lane<field.width;++lane)schema[id].emplace_back(field.id,lane);
     }catch(...){return DetStateDifference{tick,0,0,0,0,0,"manifest"};}
-    using Key=std::tuple<std::string,SimEntityId,std::uint32_t,std::uint32_t>;
+    using Key=std::tuple<std::string,SimEntityId,std::uint32_t,std::uint32_t,std::uint32_t>;
     auto flatten=[&](const DetSessionCheckpoint& s){
         std::map<Key,std::uint64_t> f;
         auto addBlocks=[&](SimEntityId id,const DetStateBlocks& blocks){for(const auto& [cid,words]:blocks){
-            f[{"state-shape",id,cid,0}]=words.size();for(std::size_t i=0;i<words.size();++i){
-                auto found=schema.find(cid);auto fid=found!=schema.end() && i<found->second.size()?found->second[i]:static_cast<std::uint32_t>(i+1);
-                f[{"state",id,cid,fid}]=words[i];}}};
+            f[{"state-shape",id,cid,0,0}]=words.size();for(std::size_t i=0;i<words.size();++i){
+                auto found=schema.find(cid);auto [fid,lane]=found!=schema.end() && i<found->second.size()?found->second[i]:std::pair{static_cast<std::uint32_t>(i+1),0u};
+                f[{"state",id,cid,fid,lane}]=words[i];}}};
         addBlocks(0,s.globals);
         for(const auto& [id,actor]:s.actors){
-            f[{"actor",id,0,0}]=1;Writer w;pose(w,actor.pose);
+            f[{"actor",id,0,0,0}]=1;Writer w;pose(w,actor.pose);
             // Pose fields: schema/profile IDs 1..3, previous/current position
             // 4..9, previous/current rotation 10..17, revision 18, flags 19..21.
-            Reader r{w.bytes};for(unsigned i=1;i<=17;++i)f[{"pose",id,1,i}]=r.u32();
-            f[{"pose",id,1,18}]=r.u64();for(unsigned i=19;i<=21;++i)f[{"pose",id,1,i}]=r.u64(1);
+            Reader r{w.bytes};for(unsigned i=1;i<=17;++i)f[{"pose",id,1,i,0}]=r.u32();
+            f[{"pose",id,1,18,0}]=r.u64();for(unsigned i=19;i<=21;++i)f[{"pose",id,1,i,0}]=r.u64(1);
             addBlocks(id,actor.blocks);
         }
-        for(const auto& [id,rng]:s.randomStreams){f[{"rng",0,id,1}]=rng.state;f[{"rng",0,id,2}]=rng.inc;}
+        for(const auto& [id,rng]:s.randomStreams){f[{"rng",0,id,1,0}]=rng.state;f[{"rng",0,id,2,0}]=rng.inc;}
         Writer ew;ew.u32(static_cast<std::uint32_t>(s.pendingEvents.size()));for(const auto& c:s.pendingEvents)command(ew,c);
-        for(std::size_t i=0;i<ew.bytes.size();++i)f[{"events",0,0,static_cast<std::uint32_t>(i)}]=ew.bytes[i];
-        for(std::size_t i=0;i<s.retiredIds.size();++i)f[{"retired",0,0,static_cast<std::uint32_t>(i)}]=s.retiredIds[i];return f;
+        for(std::size_t i=0;i<ew.bytes.size();++i)f[{"events",0,0,static_cast<std::uint32_t>(i),0}]=ew.bytes[i];
+        for(std::size_t i=0;i<s.retiredIds.size();++i)f[{"retired",0,0,static_cast<std::uint32_t>(i),0}]=s.retiredIds[i];return f;
     };
     auto left=flatten(a),right=flatten(b);auto li=left.begin(),ri=right.begin();
     while(li!=left.end() || ri!=right.end()) {
@@ -124,7 +179,7 @@ std::optional<DetStateDifference> firstDetDifference(const DetSessionCheckpoint&
         Key key=!r || (l && li->first<ri->first)?li->first:ri->first;
         const bool hasL=l && li->first==key,hasR=r && ri->first==key;
         auto av=hasL?li->second:0,bv=hasR?ri->second:0;
-        if(!hasL || !hasR || av!=bv){auto [section,id,cid,fid]=key;return DetStateDifference{tick,id,av,bv,cid,fid,section};}
+        if(!hasL || !hasR || av!=bv){auto [section,id,cid,fid,lane]=key;return DetStateDifference{tick,id,av,bv,cid,fid,section,lane};}
         ++li;++ri;
     }return std::nullopt;
 }

@@ -115,7 +115,7 @@ TEST_CASE(replay_difference_faults_controller_and_reports_registered_field) {
     {Fixture f;CHECK_TRUE(f.bind(Fixture::recipe(DetHostMode::Record,base)));f.frame();
         recorded=f.controller.recordingPath();CHECK_TRUE(f.controller.stop());}
     {Fixture f;auto r=Fixture::recipe(DetHostMode::Replay,recorded);
-        r.configure=[](auto& s){return detsession_scenario::configure(s,false,true);};
+        r.configure=[](auto& s){return dettyped_scenario::configure(s,false,true);};
         CHECK_TRUE(f.bind(r));f.frame();CHECK(f.controller.state()==DetHostState::Faulted);
         CHECK(f.controller.difference().has_value());CHECK(f.controller.difference()->component==2);
         CHECK_FALSE(f.controller.resume());CHECK_FALSE(f.controller.seek(1));CHECK(f.controller.state()==DetHostState::Faulted);}

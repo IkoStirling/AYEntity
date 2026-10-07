@@ -245,3 +245,17 @@ callbacks 禁止重入生命周期/control；同 Scene clear/load 前 stop 后 r
 用例 `AYEntity_DeterministicHostSessionTests`；独立进程门禁
 `AYEntity_DeterministicHostSessionProcesses` 验证真实 Host 10000 ticks。
 完整契约、装配示例与验收见[第七阶段](../../AYDocs/DETERMINISTIC-HOST-STAGE7.md)。
+
+## 类型化确定性状态（第八阶段）
+
+`AYEntity::Determinism` 新增 `DetTypedStateSchema` 和 `registerTypedSchema`。
+稳定字段 ID 的 default 决定类型；支持 DetFloat32、DetVec2/3、DetQuaternion、
+固定整数、bool 和 DetEntityRef。callback 使用 `read<T>/write` 或
+`readGlobal<T>/writeGlobal`，初始覆盖使用 `detStateDefaults/writeDetState`。
+typed 字段不暴露 raw writable span；非法访问即使被 catch，仍 fault 当前 tick。
+Float lanes 要求有限，保留 signed zero/subnormal；raw Quaternion 不暗中归一化。
+manifest 2 保存字段类型和默认值；纯 word 会话仍使用 manifest 1，旧字节不变。
+检查点 envelope 1/.rpl v2 不变；恢复/解码完整预检，分歧增加 zero-based lane。
+类型化 Host 的 10000 tick record/live/replay/seek 已通过 Windows Debug/Release；
+`unittest/portable` 为原生 GCC/Clang/ARM64 提供同一 codec 的精确 oracle 入口。
+示例、格式、容量及实际验收见[第八阶段](../../AYDocs/DETERMINISTIC-STATE-STAGE8.md)。
