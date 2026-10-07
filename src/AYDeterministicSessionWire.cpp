@@ -22,7 +22,7 @@ DetSimTransformComponent::Snapshot pose(Reader& r) {
 namespace detwire {
 ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
     if(bytes.size()>maxInputBytes)throw std::runtime_error("Manifest size limit");
-    auto r=checked(bytes,manifestMagic,2);ManifestLayout layout;
+    auto r=checked(bytes,manifestMagic,3);ManifestLayout layout;
     const auto app=r.u32(),input=r.u32(),numerator=r.u32(),denominator=r.u32(),dt=r.u32();
     const auto poseSchema=r.u32(),snapshot=r.u32();r.u64();
     if(!app || !input || !numerator || !denominator || poseSchema!=1 || snapshot!=DetSimTransformComponent::kSnapshotVersion
@@ -54,6 +54,10 @@ ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
     for(unsigned i=0;i<n;++i){const auto id=r.u32();r.u64();if(id<=previous)throw std::runtime_error("Invalid manifest RNG ID");previous=id;}
     n=r.count(maxSchemas);previous=0;
     for(unsigned i=0;i<n;++i){const auto id=r.u32();if(id<=previous || !layout.schemas.contains(id))throw std::runtime_error("Invalid manifest global ID");previous=id;layout.globals.insert(id);}
+    if(r.version>=3){n=r.count(maxSchemas);previous=0;
+        if(!n)throw std::runtime_error("Empty manifest validator table");
+        for(unsigned i=0;i<n;++i){const auto id=r.u32(),version=r.u32();
+            if(id<=previous || !version)throw std::runtime_error("Invalid manifest validator ID/version");previous=id;}}
     r.end();return layout;
 }
 bool validLayoutBlocks(const DetStateBlocks& blocks,const ManifestLayout& layout,bool all) {

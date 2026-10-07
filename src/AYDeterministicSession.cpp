@@ -6,9 +6,22 @@
 
 namespace ayt::entity {
 using namespace detwire;
+namespace {
+bool sameState(const DetSessionCheckpoint& a,const DetSessionCheckpoint& b) {
+    if(a.manifest!=b.manifest || a.nextTick!=b.nextTick || a.actors!=b.actors || a.globals!=b.globals
+        || a.pendingEvents!=b.pendingEvents || a.retiredIds!=b.retiredIds || a.randomStreams.size()!=b.randomStreams.size())return false;
+    auto i=a.randomStreams.begin(),j=b.randomStreams.begin();
+    for(;i!=a.randomStreams.end();++i,++j)if(i->first!=j->first || i->second.state!=j->second.state || i->second.inc!=j->second.inc)return false;
+    return true;
+}
+}
 struct DeterministicSession::Impl {
-    struct Schema { DetStateSchema descriptor;std::vector<std::uint64_t> defaults;std::optional<DetTypedStateSchema> typed; };
+    struct Schema { DetStateSchema descriptor;std::vector<std::uint64_t> defaults;std::optional<DetTypedStateSchema> typed;std::optional<DetStateLayout> layout; };
     struct SystemEntry { std::uint32_t id;std::int32_t priority;System callback; };
+    struct ValidatorEntry {std::uint32_t version;Validator callback;};
+    std::map<std::uint32_t,ValidatorEntry> validators;
+    mutable bool validating=false;
+    mutable bool validationRejected=false;
     struct Actor { Entity* entity;std::uint32_t runtimeId; };
     struct Mutation { SimEntityId id;bool spawn;DetActorState initial; };
     World& world;DetSessionConfig config;math::DetFloat32 dt;
@@ -25,10 +38,11 @@ struct DeterministicSession::Impl {
     bool accessFailed=false;
     mutable std::string error;
     Impl(World& w,DetSessionConfig c):world(w),config(c),dt(math::DetFloat32::fromUInt(c.stepNumerator)/math::DetFloat32::fromUInt(c.stepDenominator)) {}
-    bool fail(std::string e) const { error=std::move(e);return false; }
+    bool fail(std::string e) const {if(validating)validationRejected=true;error=std::move(e);return false; }
     bool configuring() {
         if (!world.isInitialized() || world._deterministicOwner != owner)
             return fail("Session lost World ownership");
+        if(validating)return fail("Validator session reentry");
         return !sealed || fail("Session configuration is sealed");
     }
     bool actorValid(const Actor& a) const {
@@ -42,10 +56,7 @@ struct DeterministicSession::Impl {
     bool validBlocks(const DetStateBlocks& b,bool all) const {
         if(all && b.size()!=schemas.size())return false;
         for(const auto& [id,words]:b){auto it=schemas.find(id);if(it==schemas.end() || words.size()!=it->second.defaults.size())return false;
-            if(it->second.typed)try {
-                std::size_t offset=0;for(const auto& field:it->second.typed->fields){const auto width=encodeDetStateValue(field.initial).size();
-                    (void)decodeDetStateValue(detStateType(field.initial),std::span(words).subspan(offset,width));offset+=width;}
-            }catch(...){return false;}}
+            if(it->second.layout && !it->second.layout->valid(words))return false;}
         return true;
     }
     bool validActor(const DetActorState& a) const {
@@ -55,8 +66,8 @@ struct DeterministicSession::Impl {
         for(const auto& [id,s]:schemas)if(!a.blocks.contains(id))a.blocks[id]=s.defaults;
     }
     std::vector<std::uint8_t> buildManifest() const {
-        const bool typed=std::any_of(schemas.begin(),schemas.end(),[](const auto& entry){return entry.second.typed.has_value();});
-        Writer w;w.u32(manifestMagic);w.u32(typed?2:1);
+        const bool typed=!validators.empty() || std::any_of(schemas.begin(),schemas.end(),[](const auto& entry){return entry.second.typed.has_value();});
+        Writer w;w.u32(manifestMagic);w.u32(!validators.empty()?3:typed?2:1);
         w.u32(config.applicationVersion);w.u32(config.inputVersion);w.u32(config.stepNumerator);w.u32(config.stepDenominator);w.u32(dt.bits());
         w.u32(1);w.u32(DetSimTransformComponent::kSnapshotVersion);w.u64(config.contentHash);
         w.u32(math::DetFloat32::kProfileVersion);w.u32(math::DetQuaternion::kRotationProfileVersion);
@@ -70,6 +81,8 @@ struct DeterministicSession::Impl {
         w.u32(static_cast<std::uint32_t>(systems.size()));for(const auto& s:systems){w.u32(s.id);w.u32(static_cast<std::uint32_t>(s.priority));}
         w.u32(static_cast<std::uint32_t>(seeds.size()));for(const auto& [id,seed]:seeds){w.u32(id);w.u64(seed);}
         w.u32(static_cast<std::uint32_t>(state.globals.size()));for(const auto& [id,v]:state.globals)w.u32(id);
+        if(!validators.empty()){w.u32(static_cast<std::uint32_t>(validators.size()));
+            for(const auto& [id,v]:validators){w.u32(id);w.u32(v.version);}}
         return w.finish();
     }
     std::optional<DetSessionCheckpoint> capture() const {
@@ -108,7 +121,18 @@ struct DeterministicSession::Impl {
         DetTickInput events{s.nextTick,config.inputVersion,s.pendingEvents};std::string e;
         if(!canonicalizeDetInput(events,e) || events.commands!=s.pendingEvents)return fail("Invalid pending event order/size");
         for(const auto& c:s.pendingEvents)if(std::none_of(systems.begin(),systems.end(),[&](const auto& sys){return sys.id==c.source;}))return fail("Unknown event producer");
-        try { (void)encodeDetCheckpoint(s); }catch(const std::exception& e){return fail(e.what());}return true;
+        try { (void)encodeDetCheckpoint(s); }catch(const std::exception& e){return fail(e.what());}
+        if(validating)return fail("Validator session reentry");
+        validating=true;validationRejected=false;
+        for(const auto& [id,v]:validators){
+            std::string diagnostic;
+            try {if(v.callback(s,diagnostic) && !validationRejected)continue;
+                if(validationRejected)diagnostic=error;}
+            catch(const std::exception& e){diagnostic=e.what();}
+            catch(...){diagnostic="unknown exception";}
+            validating=false;return fail("State validator "+std::to_string(id)+": "+diagnostic);
+        }
+        validating=false;return true;
     }
 };
 DeterministicSession::DeterministicSession(World& world,DetSessionConfig config):_impl(std::make_unique<Impl>(world,config)) {
@@ -136,21 +160,26 @@ bool DeterministicSession::registerSchema(DetStateSchema schema,std::vector<std:
         || std::adjacent_find(schema.fields.begin(),schema.fields.end())!=schema.fields.end())return p.fail("Field IDs must be unique increasing nonzero values");
     if(defaults.empty())defaults.resize(schema.fields.size());
     if(defaults.size()!=schema.fields.size())return p.fail("Default field count mismatch");
-    p.schemas.emplace(schema.id,Impl::Schema{std::move(schema),std::move(defaults),std::nullopt});return true;
+    p.schemas.emplace(schema.id,Impl::Schema{std::move(schema),std::move(defaults),std::nullopt,std::nullopt});return true;
 }
 bool DeterministicSession::registerTypedSchema(DetTypedStateSchema schema) {
     auto& p=*_impl;if(!p.configuring())return false;
     if(p.schemas.size()>=maxSchemas || p.schemas.contains(schema.id) || !p.actors.empty())return p.fail("Duplicate/late typed state schema");
     try {
-        auto defaults=detStateDefaults(schema);DetStateSchema descriptor{schema.id,schema.version,{}};
+        DetStateLayout layout(schema);auto defaults=layout.defaults();DetStateSchema descriptor{schema.id,schema.version,{}};
         for(const auto& field:schema.fields)descriptor.fields.push_back(field.id);
-        p.schemas.emplace(schema.id,Impl::Schema{std::move(descriptor),std::move(defaults),std::move(schema)});return true;
+        p.schemas.emplace(schema.id,Impl::Schema{std::move(descriptor),std::move(defaults),std::move(schema),std::move(layout)});return true;
     }catch(const std::exception& e){return p.fail(e.what());}
 }
 bool DeterministicSession::registerSystem(std::uint32_t id,std::int32_t priority,System callback) {
     auto& p=*_impl;if(!p.configuring())return false;
     if(!id || !callback || p.systems.size()>=maxSchemas || std::any_of(p.systems.begin(),p.systems.end(),[&](const auto& s){return s.id==id;}))return p.fail("Invalid/duplicate system ID");
     p.systems.push_back({id,priority,std::move(callback)});return true;
+}
+bool DeterministicSession::registerValidator(std::uint32_t id,std::uint32_t version,Validator callback) {
+    auto& p=*_impl;if(!p.configuring())return false;
+    if(!id || !version || !callback || p.validators.size()>=maxSchemas || p.validators.contains(id))return p.fail("Invalid/duplicate validator ID/version");
+    p.validators.emplace(id,Impl::ValidatorEntry{version,std::move(callback)});return true;
 }
 bool DeterministicSession::registerRandomStream(std::uint32_t id,std::uint64_t seed) {
     auto& p=*_impl;if(!p.configuring())return false;
@@ -174,7 +203,7 @@ bool DeterministicSession::addEntity(SimEntityId id,DetActorState initial) {
 }
 bool DeterministicSession::seal() {
     auto& p=*_impl;
-    if(p.world._deterministicOwner!=this)return p.fail("Session lost World ownership");
+    if(p.validating || p.world._deterministicOwner!=this)return p.fail("Session reentry or lost World ownership");
     if(p.sealed)return true;
     std::sort(p.systems.begin(),p.systems.end(),[](const auto& a,const auto& b){return std::pair{a.priority,a.id}<std::pair{b.priority,b.id};});
     try {p.state.manifest=p.buildManifest();}catch(const std::exception& e){return p.fail(e.what());}
@@ -183,11 +212,11 @@ bool DeterministicSession::seal() {
     auto s=p.capture();if(!s || !p.validate(*s)){p.sealed=false;return false;}p.last=std::move(*s);p.error.clear();return true;
 }
 bool DeterministicSession::advance(DetTickInput input) {
-    auto& p=*_impl;if(!p.sealed || p.faulted || p.inTick || p.world._deterministicOwner!=this)return p.fail("Session not ready or lost tick ownership");
+    auto& p=*_impl;if(p.validating || !p.sealed || p.faulted || p.inTick || p.world._deterministicOwner!=this)return p.fail("Session not ready or lost tick ownership");
     if(input.tick!=p.state.nextTick || input.version!=p.config.inputVersion || input.tick==UINT64_MAX)return p.fail("Unexpected input tick/version");
     if(!canonicalizeDetInput(input,p.error))return false;
     auto before=p.capture();if(!before)return false;
-    if(firstDetDifference(p.last,*before))return p.fail("Registered Sim state changed outside the session tick");
+    if(!sameState(p.last,*before))return p.fail("Registered Sim state changed outside the session tick");
     p.input=std::move(input);p.inTick=true;p.accessFailed=false;p.mutations.clear();p.outgoing.clear();
     try {
         for(const auto& [id,a]:p.actors)a.entity->getComponent<DetSimTransformComponent>()->beginSimulationStep();
@@ -201,22 +230,26 @@ bool DeterministicSession::advance(DetTickInput input) {
         }
         DetTickInput events{p.state.nextTick+1,p.config.inputVersion,p.outgoing};
         if(!canonicalizeDetInput(events,p.error))throw std::runtime_error(p.error);
+        // Validate the complete prospective boundary before creating/destroying actors.
+        auto prospective=p.capture();if(!prospective)throw std::runtime_error(p.error);
+        for(const auto& m:p.mutations){if(m.spawn)prospective->actors.emplace(m.id,m.initial);else prospective->actors.erase(m.id);}
+        prospective->retiredIds.assign(retired.begin(),retired.end());prospective->pendingEvents=events.commands;++prospective->nextTick;
+        if(!p.validate(*prospective))throw std::runtime_error(p.error);
         for(const auto& m:p.mutations){if(m.spawn){auto slot=p.actors.emplace(m.id,Impl::Actor{nullptr,0}).first;slot->second=p.create(m.initial);}
             else{auto a=p.actors.at(m.id);p.world.destroyEntityInternal(a.entity);p.actors.erase(m.id);}}
         p.state.retiredIds.assign(retired.begin(),retired.end());p.state.pendingEvents=std::move(events.commands);++p.state.nextTick;
-        auto after=p.capture();if(!after || !p.validate(*after))throw std::runtime_error(p.error);
-        p.last=std::move(*after);p.inTick=false;p.error.clear();return true;
+        p.last=std::move(*prospective);p.inTick=false;p.error.clear();return true;
     }catch(const std::exception& e){p.faulted=true;p.inTick=false;return p.fail(e.what());}
     catch(...){p.faulted=true;p.inTick=false;return p.fail("Unknown system failure");}
 }
 std::optional<DetSessionCheckpoint> DeterministicSession::checkpoint() const {
-    auto& p=*_impl;if(p.inTick || p.faulted || p.world._deterministicOwner!=this){p.fail("Checkpoint requires a quiescent valid session");return std::nullopt;}
+    auto& p=*_impl;if(p.validating || p.inTick || p.faulted || p.world._deterministicOwner!=this){p.fail("Checkpoint requires a quiescent valid session");return std::nullopt;}
     auto s=p.capture();if(s && !p.validate(*s))return std::nullopt;
-    if(s && firstDetDifference(p.last,*s)){p.fail("Registered Sim state changed outside the session tick");return std::nullopt;}
+    if(s && !sameState(p.last,*s)){p.fail("Registered Sim state changed outside the session tick");return std::nullopt;}
     return s;
 }
 bool DeterministicSession::restore(const DetSessionCheckpoint& s) {
-    auto& p=*_impl;if(!p.sealed || p.inTick || p.world._deterministicOwner!=this)return p.fail("Restore requires a sealed quiescent session");
+    auto& p=*_impl;if(p.validating || !p.sealed || p.inTick || p.world._deterministicOwner!=this)return p.fail("Restore requires a sealed quiescent session");
     if(!p.validate(s))return false;
     // Stage all allocations before mutating retained poses or discarding actors.
     DetSessionCheckpoint staged,newState,newLast;std::map<SimEntityId,Impl::Actor> replacement,newActors;
@@ -244,7 +277,7 @@ bool DeterministicSession::faulted() const {return _impl->faulted;}
 const std::string& DeterministicSession::error() const {return _impl->error;}
 const std::vector<std::uint8_t>& DeterministicSession::manifest() const {return _impl->state.manifest;}
 Entity* DeterministicSession::presentationEntity(SimEntityId id) const {
-    if (_impl->world._deterministicOwner != this) return nullptr;
+    if (_impl->validating || _impl->world._deterministicOwner != this) return nullptr;
     auto it=_impl->actors.find(id);return it!=_impl->actors.end() && _impl->world.findEntity(it->second.runtimeId)==it->second.entity?it->second.entity:nullptr;
 }
 DetTickContext::DetTickContext(DeterministicSession& session,std::uint32_t system):_session(session),_system(system) {}
@@ -267,7 +300,7 @@ DetStateValue DetTickContext::readValue(SimEntityId id,std::uint32_t schema,std:
     try {
         const auto& descriptor=p.schemas.at(schema).typed;if(!descriptor)throw std::invalid_argument("Not a typed state schema");
         const auto& words=id?p.actors.at(id).entity->getComponent<DetSimStateComponent>()->blocks.at(schema):p.state.globals.at(schema);
-        auto value=readDetStateValue(*descriptor,words,field);
+        auto value=p.schemas.at(schema).layout->read(words,field);
         if(detStateType(value)!=type)throw std::invalid_argument("Typed state field type mismatch");return value;
     }catch(const std::exception& e){p.accessFailed=true;p.fail("Typed state read [entity="+std::to_string(id)+", schema="+std::to_string(schema)+", field="+std::to_string(field)+"]: "+e.what());throw std::runtime_error(p.error);}
 }
@@ -276,7 +309,7 @@ void DetTickContext::writeValue(SimEntityId id,std::uint32_t schema,std::uint32_
     try {
         const auto& descriptor=p.schemas.at(schema).typed;if(!descriptor)throw std::invalid_argument("Not a typed state schema");
         auto& words=id?p.actors.at(id).entity->getComponent<DetSimStateComponent>()->blocks.at(schema):p.state.globals.at(schema);
-        writeDetStateValue(*descriptor,words,field,value);
+        p.schemas.at(schema).layout->write(words,field,value);
     }catch(const std::exception& e){p.accessFailed=true;p.fail("Typed state write [entity="+std::to_string(id)+", schema="+std::to_string(schema)+", field="+std::to_string(field)+"]: "+e.what());throw std::runtime_error(p.error);}
 }
 math::pcg32_state& DetTickContext::random(std::uint32_t stream) {return _session._impl->state.randomStreams.at(stream);}

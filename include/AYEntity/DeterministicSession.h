@@ -126,6 +126,7 @@ private:
 class DeterministicSession {
 public:
     using System=std::function<bool(DetTickContext&)>;
+    using Validator=std::function<bool(const DetSessionCheckpoint&,std::string&)>;
     explicit DeterministicSession(World& world,DetSessionConfig config={});
     ~DeterministicSession();
     DeterministicSession(const DeterministicSession&)=delete;
@@ -135,6 +136,12 @@ public:
     /// Defaults are automatically applied to actors and registered globals.
     bool registerTypedSchema(DetTypedStateSchema schema);
     bool registerSystem(std::uint32_t id,std::int32_t priority,System system);
+    /// Register pure read-only state semantics before seal (max 64, sorted stable IDs).
+    /// ID/version enter manifest 3. Called at seal, checkpoint, restore and before
+    /// structural tick commit; false/throw rejects with ID and diagnostic. No
+    /// mutable captures, external effects or session reentry; validator code changes
+    /// require a new version. Invalid restore never changes World state.
+    bool registerValidator(std::uint32_t id,std::uint32_t version,Validator validator);
     bool registerRandomStream(std::uint32_t id,std::uint64_t seed);
     bool registerGlobalState(std::uint32_t schema,std::vector<std::uint64_t> words={});
     bool addEntity(SimEntityId id,DetActorState initial={});

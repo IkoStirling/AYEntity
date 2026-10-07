@@ -1436,3 +1436,15 @@ checkpoint envelope 1 / replay v2 不变。默认 schema 4/5、system 30、event
 geometry/collision profiles 和 policy defaults 入 manifest，改变拒绝跨配置恢复。
 64 active bodies / 61 trigger pairs 硬上限，XY translation only；未来动态刚体、
 旋转/3D shapes、连续触发 crossing 和网络/脚本需另立阶段。验收见第九阶段文档。
+
+### 14.5.7 语义校验与访问成本（第十阶段）
+
+Typed schema 注册时编译 DetStateLayout，字段二分定位，读取不分配 defaults。
+边界 outside-write 检查直接比较注册 bits/container，诊断 API 保持首字段/lane。
+纯只读 validator ID/version 表在 manifest 3 的 global table 后、FNV 前编码；
+u32 count + sorted (u32 id,u32 version)，1..64，非零唯一 ID/version。
+无 validator 时保留 manifest 1/2；manifest 3 总是包含 typed/Word type codes。
+表示验证后执行 callback，异常/拒绝包含 validator ID；Session 重入拒绝是 sticky。
+tick 在 scratch checkpoint 应用 spawn/despawn/events/nextTick 再验证，合格后提交
+World 结构与 last witness；前序 callbacks 的字段写入仍需显式 restore。
+不可把可访问的 const checkpoint 当作 C++ 沙箱；纯函数/版本维护是调用方契约。

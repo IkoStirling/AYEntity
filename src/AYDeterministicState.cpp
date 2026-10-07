@@ -93,4 +93,27 @@ void writeDetStateValue(const DetTypedStateSchema& schema,std::span<std::uint64_
     const auto encoded=encodeDetStateValue(value);
     std::copy(encoded.begin(),encoded.end(),words.begin()+f.offset);
 }
+DetStateLayout::DetStateLayout(const DetTypedStateSchema& schema):_defaults(detStateDefaults(schema)) {
+    std::size_t offset=0;_fields.reserve(schema.fields.size());
+    for(const auto& f:schema.fields){const auto type=detStateType(f.initial);
+        const std::size_t width=type==DetStateType::Vec2?2:type==DetStateType::Vec3?3:type==DetStateType::Quaternion?4:1;
+        _fields.push_back({f.id,type,offset,width});offset+=width;}
+}
+const DetStateLayout::Field& DetStateLayout::locate(std::size_t size,std::uint32_t id) const {
+    if(size!=_defaults.size())throw std::invalid_argument("Typed state shape mismatch");
+    const auto it=std::lower_bound(_fields.begin(),_fields.end(),id,[](const Field& f,auto key){return f.id<key;});
+    if(it==_fields.end() || it->id!=id)throw std::out_of_range("Unknown typed state field");return *it;
+}
+DetStateValue DetStateLayout::read(std::span<const std::uint64_t> words,std::uint32_t id) const {
+    const auto& f=locate(words.size(),id);return decodeDetStateValue(f.type,words.subspan(f.offset,f.width));
+}
+void DetStateLayout::write(std::span<std::uint64_t> words,std::uint32_t id,const DetStateValue& value) const {
+    const auto& f=locate(words.size(),id);
+    if(detStateType(value)!=f.type)throw std::invalid_argument("Typed state field type mismatch");
+    const auto encoded=encodeDetStateValue(value);std::copy(encoded.begin(),encoded.end(),words.begin()+f.offset);
+}
+bool DetStateLayout::valid(std::span<const std::uint64_t> words) const {
+    if(words.size()!=_defaults.size())return false;
+    try {for(const auto& f:_fields)(void)decodeDetStateValue(f.type,words.subspan(f.offset,f.width));return true;}catch(...){return false;}
+}
 } // namespace ayt::entity

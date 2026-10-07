@@ -273,3 +273,14 @@ Body/velocity/policy/history 与 pending events 全部进入现有 checkpoint/re
 安装失败销毁部分配置；语义/容量失败需显式 restore，前序系统和 pose history
 不自动回滚。无 `.ayscene` component 或 Box2D/Jolt 迁移。几何 oracle、边界测试、
 真实 Host 10k 与 SDK 契约见[第九阶段](../../AYDocs/DETERMINISTIC-COLLISION-STAGE9.md)。
+
+## 状态语义校验与布局缓存（第十阶段）
+
+`registerValidator(id,version,callback)` 注册只读纯函数，校验 complete checkpoint
+的跨字段、跨实体约束。seal、checkpoint、restore 和 tick 的预期结构提交边界
+都检查；restore 错误在 World 写入前返回，tick 错误 fault 后显式 restore。
+最多 64 validators，按 ID 执行；ID/version 进入 manifest 3，没有 validator 的
+会话继续输出原 manifest 1/2。禁止隐藏可变捕获、外部效果和 session 重入。
+`DetStateLayout` 拥有验证后的 metadata/defaults，适合重复初始化/读取/写入；
+Session 自动缓存布局，保持同一 canonical lane 和 sticky fault 规则。
+验证和测量见[第十阶段](../../AYDocs/DETERMINISTIC-VALIDATION-STAGE10.md)。

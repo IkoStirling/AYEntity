@@ -57,6 +57,24 @@ std::vector<std::uint64_t> detStateDefaults(const DetTypedStateSchema& schema);
 DetStateValue readDetStateValue(const DetTypedStateSchema& schema,std::span<const std::uint64_t> words,std::uint32_t field);
 /// All checks precede writes; type/shape/ID/value errors throw without changing words.
 void writeDetStateValue(const DetTypedStateSchema& schema,std::span<std::uint64_t> words,std::uint32_t field,const DetStateValue& value);
+/** @brief Immutable validated layout for repeated access; owns its metadata/defaults.
+ * @note Constructor validates the complete schema once. Each access still checks
+ * block size, field/type and canonical target value. Copying/changing the original
+ * schema cannot change this layout. Wire bytes are identical to schema helpers.
+ */
+class DetStateLayout {
+public:
+    explicit DetStateLayout(const DetTypedStateSchema& schema);
+    const std::vector<std::uint64_t>& defaults() const {return _defaults;}
+    DetStateValue read(std::span<const std::uint64_t> words,std::uint32_t field) const;
+    void write(std::span<std::uint64_t> words,std::uint32_t field,const DetStateValue& value) const;
+    bool valid(std::span<const std::uint64_t> words) const;
+private:
+    struct Field {std::uint32_t id;DetStateType type;std::size_t offset,width;};
+    const Field& locate(std::size_t size,std::uint32_t field) const;
+    std::vector<Field> _fields;
+    std::vector<std::uint64_t> _defaults;
+};
 template<DetStateScalar T> T readDetState(const DetTypedStateSchema& schema,std::span<const std::uint64_t> words,std::uint32_t field) {
     return std::get<T>(readDetStateValue(schema,words,field));
 }

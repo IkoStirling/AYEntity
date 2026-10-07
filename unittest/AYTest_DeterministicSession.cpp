@@ -206,4 +206,38 @@ TEST_CASE(replay_reports_first_tick_and_registered_field_for_changed_logic) {
     CHECK_FALSE(reader.advance(*f.session));CHECK_TRUE(reader.difference().has_value());
     const auto d=*reader.difference();CHECK_TRUE(d.tick==1 && d.entity==2 && d.component==2 && d.field==20);
 }
+
+TEST_CASE(semantic_validator_rejects_restore_before_world_mutation_and_faults_tick) {
+    Fixture f;auto& s=*f.session;
+    CHECK_TRUE(s.registerTypedSchema({2,1,{{10,std::uint32_t{3}}}}));
+    CHECK_TRUE(s.registerValidator(7,1,[](const auto& state,std::string& error){
+        for(const auto& [id,a]:state.actors)if(a.blocks.at(2)[0]>10){error="counter limit";return false;}return true;}));
+    CHECK_TRUE(s.registerSystem(1,0,[](auto& c){c.write(1,2,10,std::uint32_t{11});return true;}));
+    CHECK_TRUE(s.addEntity(1));CHECK_TRUE(s.seal());const auto saved=*s.checkpoint();auto* actor=s.presentationEntity(1);
+    auto bad=saved;bad.actors.at(1).blocks.at(2)[0]=11;bad.actors.emplace(2,bad.actors.at(1));
+    CHECK_FALSE(s.restore(bad));CHECK_TRUE(s.presentationEntity(1)==actor);CHECK_TRUE(s.presentationEntity(2)==nullptr);
+    CHECK_TRUE(!firstDetDifference(saved,*s.checkpoint()));
+    CHECK_FALSE(s.advance({0,1,{}}));CHECK_TRUE(s.faulted());CHECK_TRUE(s.error().find("validator 7")!=std::string::npos);
+    CHECK_TRUE(s.restore(saved));CHECK_FALSE(s.faulted());
+}
+TEST_CASE(semantic_validator_checks_prospective_structural_boundary) {
+    Fixture f;auto& s=*f.session;
+    CHECK_TRUE(s.registerValidator(1,2,[](const auto& state,std::string& e){e="only one actor";return state.actors.size()<=1;}));
+    CHECK_TRUE(s.registerSystem(1,0,[](auto& c){c.spawn(2);return true;}));CHECK_TRUE(s.addEntity(1));CHECK_TRUE(s.seal());
+    const auto saved=*s.checkpoint();CHECK_FALSE(s.advance({0,1,{}}));CHECK_TRUE(s.faulted());CHECK_TRUE(s.presentationEntity(2)==nullptr);
+    CHECK_TRUE(s.restore(saved));
+}
+TEST_CASE(semantic_validator_manifest_order_versions_and_configuration) {
+    Fixture f;auto& s=*f.session;auto accept=[](const auto&,std::string&){return true;};
+    CHECK_FALSE(s.registerValidator(0,1,accept));CHECK_FALSE(s.registerValidator(1,0,accept));
+    CHECK_TRUE(s.registerValidator(2,1,accept));CHECK_TRUE(s.registerValidator(1,3,accept));CHECK_FALSE(s.registerValidator(1,4,accept));
+    CHECK_TRUE(s.seal());CHECK_TRUE(s.manifest()[4]==3);CHECK_FALSE(s.registerValidator(3,1,accept));
+    const auto bytes=encodeDetCheckpoint(*s.checkpoint());DetSessionCheckpoint out;std::string error;
+    CHECK_TRUE(decodeDetCheckpoint(bytes,out,error));CHECK_TRUE(!firstDetDifference(*s.checkpoint(),out));
+}
+TEST_CASE(semantic_validator_reentry_and_exceptions_reject_initial_state) {
+    Fixture f;auto& s=*f.session;
+    CHECK_TRUE(s.registerValidator(1,1,[&s](const auto&,std::string&){(void)s.seal();return true;}));
+    CHECK_FALSE(s.seal());CHECK_FALSE(s.sealed());CHECK_TRUE(s.error().find("reentry")!=std::string::npos);
+}
 TEST_SUITE_END;
