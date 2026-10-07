@@ -118,4 +118,72 @@ TEST_CASE(noncanonical_history_and_changed_immutable_policy_fault_at_semantic_va
         // Six policy/count lanes followed by typed EntityRef slots.
         bad.globals.at(c.historySchema)[changed?1:6]=999;CHECK(s.restore(bad));CHECK(!s.advance({0,1,{}}));CHECK(s.restore(saved));CHECK(s.advance({0,1,{}}));}
 }
+
+TEST_CASE(extended_relative_sweep_mutual_kinematics_exact_dyadic_oracle){
+    for(int velocity=0;velocity<=16;++velocity){Fixture f;DetCollision2DConfig c;c.extended=true;c.maxBodies=2;auto& s=*f.session;
+        CHECK(installDetCollision2D(s,c));
+        CHECK(s.addEntity(20,actor(c,DetBodyMode2D::Kinematic,v(5,0),v(1,1),v(velocity-16,0))));
+        CHECK(s.addEntity(10,actor(c,DetBodyMode2D::Kinematic,v(-5,0),v(1,1),v(velocity,0))));
+        CHECK(s.seal());CHECK(s.advance({0,1,{}}));auto cp=*s.checkpoint();
+        // Initial center gap 10, surface gap 8, relative speed 16 -> t=1/2.
+        // Equal normal velocities after contact: velocity-8; final centers +/-1.
+        CHECK(position(cp,10)==v(velocity-9,0));CHECK(position(cp,20)==v(velocity-7,0));
+        CHECK(cp.actors.at(10).blocks.at(c.bodySchema)[5]==D::fromInt(velocity-8).bits());
+        CHECK(cp.actors.at(20).blocks.at(c.bodySchema)[5]==D::fromInt(velocity-8).bits());
+    }
+}
+TEST_CASE(extended_moving_obstacle_pushes_stationary_kinematic_without_tangent_friction){
+    Fixture f;DetCollision2DConfig c;c.extended=true;auto& s=*f.session;CHECK(installDetCollision2D(s,c));
+    CHECK(s.addEntity(10,actor(c,DetBodyMode2D::MovingObstacle,v(-5,0),v(1,10),v(8,0))));
+    CHECK(s.addEntity(20,actor(c,DetBodyMode2D::Kinematic,v(0,0),v(1,1),v(0,3))));
+    CHECK(s.seal());CHECK(s.advance({0,1,{}}));auto cp=*s.checkpoint();
+    CHECK(position(cp,10)==v(3,0));CHECK(position(cp,20)==v(5,3));CHECK(cp.actors.at(20).blocks.at(c.bodySchema)[5]==D::fromInt(8).bits());
+    CHECK(cp.actors.at(20).pose.position[2]==D::fromInt(7).bits());
+}
+TEST_CASE(extended_transient_trigger_crossing_emits_enter_then_exit_without_history){
+    Fixture f;DetCollision2DConfig c;c.extended=true;auto& s=*f.session;CHECK(installDetCollision2D(s,c));
+    CHECK(s.addEntity(10,actor(c,DetBodyMode2D::Kinematic,v(-5,0),v(1,1),v(10,0))));
+    CHECK(s.addEntity(20,actor(c,DetBodyMode2D::Static,{},v(1,1),{},true)));
+    CHECK(s.seal());const auto initial=*s.checkpoint();CHECK(s.advance({0,1,{}}));const auto final=*s.checkpoint();
+    CHECK(position(final,10)==v(5,0));CHECK(final.pendingEvents.size()==2);CHECK(final.globals.at(c.historySchema)[4]==0);
+    DetTriggerEvent2D a,b;CHECK(decodeDetTriggerEvent2D(final.pendingEvents[0].payload,a));CHECK(decodeDetTriggerEvent2D(final.pendingEvents[1].payload,b));
+    CHECK(a.phase==DetTriggerPhase2D::Enter && b.phase==DetTriggerPhase2D::Exit && a.pair==b.pair);
+    CHECK(s.restore(initial));CHECK(s.advance({0,1,{}}));CHECK(!firstDetDifference(final,*s.checkpoint()));
+}
+TEST_CASE(extended_trigger_crossing_uses_piecewise_solved_path_not_endpoint_chord){
+    Fixture f;DetCollision2DConfig c;c.extended=true;auto& s=*f.session;CHECK(installDetCollision2D(s,c));
+    CHECK(s.addEntity(10,actor(c,DetBodyMode2D::Kinematic,v(-5,-5),v(1,1),v(10,10))));
+    CHECK(s.addEntity(20,actor(c,DetBodyMode2D::Static,v(0,0),v(1,100))));
+    const auto quarter=D::fromBits(0x3e800000u);
+    CHECK(s.addEntity(30,actor(c,DetBodyMode2D::Static,v(-4,0),{quarter,quarter},{},true)));
+    CHECK(s.seal());CHECK(s.advance({0,1,{}}));CHECK(position(*s.checkpoint(),10)==v(-2,5));CHECK(s.checkpoint()->pendingEvents.empty());
+}
+TEST_CASE(extended_body_policy_history_and_event_semantics_reject_restore_atomically){
+    Fixture f;DetCollision2DConfig c;c.extended=true;c.maxTriggerPairs=1;auto& s=*f.session;CHECK(installDetCollision2D(s,c));
+    CHECK(s.addEntity(10,actor(c,DetBodyMode2D::Kinematic,{})));CHECK(s.seal());const auto saved=*s.checkpoint();auto* pointer=s.presentationEntity(10);
+    for(unsigned test=0;test<7;++test){auto bad=saved;
+        if(test==0)bad.actors.at(10).blocks.at(c.bodySchema)[1]=0;
+        if(test==1)bad.actors.at(10).blocks.at(c.bodySchema)[0]=4;
+        if(test==2)bad.globals.at(c.historySchema)[0]=1;
+        if(test==3)bad.globals.at(c.historySchema)[4]=2;
+        if(test==4)bad.globals.at(c.historySchema)[8]=11;
+        if(test==5)bad.pendingEvents.push_back({c.systemId,0,c.eventType,{1}});
+        if(test==6){bad.globals.at(c.historySchema)[4]=1;bad.globals.at(c.historySchema)[8]=99;bad.globals.at(c.historySchema)[9]=100;}
+        CHECK(!s.restore(bad));CHECK(s.presentationEntity(10)==pointer);CHECK(!firstDetDifference(saved,*s.checkpoint()));}
+}
+TEST_CASE(extended_capacity_penetration_and_contact_exhaustion_are_explicit){
+    {Fixture f;DetCollision2DConfig c;c.extended=true;c.maxBodies=1;auto& s=*f.session;CHECK(installDetCollision2D(s,c));
+        CHECK(s.addEntity(10,actor(c,DetBodyMode2D::Kinematic,{})));CHECK(s.addEntity(20,actor(c,DetBodyMode2D::Kinematic,v(5,0))));CHECK(!s.seal());}
+    {Fixture f;DetCollision2DConfig c;c.extended=true;auto& s=*f.session;CHECK(installDetCollision2D(s,c));
+        CHECK(s.addEntity(10,actor(c,DetBodyMode2D::Kinematic,{})));CHECK(s.addEntity(20,actor(c,DetBodyMode2D::Kinematic,{})));CHECK(!s.seal());}
+    {Fixture f;DetCollision2DConfig c;c.extended=true;c.maxContactIterations=1;auto& s=*f.session;CHECK(installDetCollision2D(s,c));
+        CHECK(s.addEntity(10,actor(c,DetBodyMode2D::Kinematic,v(-5,-5),v(1,1),v(10,10))));
+        CHECK(s.addEntity(20,actor(c,DetBodyMode2D::Static,{},v(1,100))));CHECK(s.addEntity(30,actor(c,DetBodyMode2D::Static,v(-5,5),v(100,1))));
+        CHECK(s.seal());auto saved=*s.checkpoint();CHECK(!s.advance({0,1,{}}));CHECK(s.faulted());CHECK(s.restore(saved));}
+}
+TEST_CASE(extended_motion_policy_is_manifest_distinct_and_legacy_disallows_moving_obstacle){
+    Fixture f;DetCollision2DConfig c;c.extended=true;c.maxTriggerPairs=61;CHECK(!installDetCollision2D(*f.session,c));
+    c.maxTriggerPairs=60;CHECK(installDetCollision2D(*f.session,c));CHECK(f.session->seal());CHECK(f.session->manifest()[4]==3);
+    c.extended=false;CHECK(rejects([&]{(void)detCollisionBodyState2D(c,{DetBodyMode2D::MovingObstacle,v(1,1),{},v(1,0)});}));
+}
 TEST_SUITE_END;

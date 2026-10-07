@@ -295,3 +295,16 @@ checkpoint/roster 握手一致，当前输入与 hash 都齐全才 advance；缺
 链接 AYNetwork 时可使用 `sendDetLockstepPackets`，勿重复安装 Host 的 Sim owner。
 可传入 DetReplayWriter.advance sink；失败后用 agreed checkpoint+new epoch 重建。
 接口、wire format、限制和测试见[第十一阶段](../../AYDocs/DETERMINISTIC-LOCKSTEP-STAGE11.md)。
+
+## 扩展确定性 2D 碰撞（第十二阶段）
+
+安装前设置 `DetCollision2DConfig.extended=true` 启用 profile 2，原 profile 1
+字节/行为保持兼容。所有移动在共同时间线上 relative sweep，按 time/axis/
+stable pair 处理：两个 Kinematic 等权共享法线速度，MovingObstacle 以规定速度
+运动并施加法线速度，切线无摩擦/携带。连续触发使用实际 piecewise solved path，
+初末均不重叠的 crossing 发 Enter+Exit。固定 history/capacity 仍在 checkpoint。
+安装器注册 ID=systemId/version2 纯语义 validator，seal/restore/tick 末预检
+body/policy/history/已发行身份/event payload；invalid restore 不修改 World。
+扩展 cap 为 60 current+transient pairs，contact passes 1–256 默认128；初始
+穿透、挤压/迭代超限 fault 后显式 restore。无动态刚体/摩擦/旋转 shapes。
+完整规则和真实 Host 10k 动态场景见[第十二阶段](../../AYDocs/DETERMINISTIC-COLLISION-STAGE12.md)。

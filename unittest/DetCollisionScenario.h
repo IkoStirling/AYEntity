@@ -5,8 +5,8 @@ namespace detcollision_scenario {
 using namespace ayt::entity;
 using D=ayt::math::DetFloat32;using V=ayt::math::DetVec2;
 inline V v(int x,int y){return {D::fromInt(x),D::fromInt(y)};}
-inline bool configure(DeterministicSession& s,bool reversed=false) {
-    DetCollision2DConfig policy;policy.maxBodies=8;policy.maxTriggerPairs=1;
+inline bool configure(DeterministicSession& s,bool reversed=false,bool extended=false) {
+    DetCollision2DConfig policy;policy.maxBodies=8;policy.maxTriggerPairs=1;policy.extended=extended;
     if(!s.registerTypedSchema({6,1,{{10,std::uint64_t{0}},{20,std::uint64_t{0}},{30,std::uint64_t{0}},
         {40,std::uint64_t{0}},{50,std::uint64_t{0}},{60,std::uint64_t{0}}}}) || !s.registerGlobalState(6))return false;
     auto input=[policy](DetTickContext& c){if(c.input().commands.size()!=2)return false;

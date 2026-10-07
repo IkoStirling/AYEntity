@@ -7,6 +7,15 @@
 #include <xmmintrin.h>
 #endif
 using namespace dethost_test;
+#ifndef AYDET_COLLISION_EXTENDED
+#define AYDET_COLLISION_EXTENDED 0
+#endif
+#if AYDET_COLLISION_EXTENDED
+#include "DetExtendedCollisionScenario.h"
+namespace collisionWorkerScenario=detextendedcollision_scenario;
+#else
+namespace collisionWorkerScenario=detcollision_scenario;
+#endif
 int main(int argc,char** argv) {
     if(argc!=4)return 2;
     const std::string mode=argv[1],path=argv[2],output=argv[3];
@@ -22,9 +31,9 @@ int main(int argc,char** argv) {
         Fixture f;auto r=Fixture::recipe(mode=="record"?DetHostMode::Record:
             mode=="live"?DetHostMode::Live:DetHostMode::Replay,path);
         r.checkpointInterval=300;
-        r.configure=[&](auto& s){return detcollision_scenario::configure(s,mode!="record");};
+        r.configure=[&](auto& s){return collisionWorkerScenario::configure(s,mode!="record");};
         r.input=[&](const auto& request,auto& packet){
-            packet=detcollision_scenario::input(request.tick,mode!="record");return true;};
+            packet=collisionWorkerScenario::input(request.tick,mode!="record");return true;};
         if(!f.bind(r))throw std::runtime_error(f.controller.error());
         if(mode=="seek" && !f.controller.seek(5000))throw std::runtime_error(f.controller.error());
         if(!f.controller.resume())throw std::runtime_error(f.controller.error());
@@ -39,7 +48,7 @@ int main(int argc,char** argv) {
             if(f.controller.session()->nextTick()!=before+1)throw std::runtime_error("Host duplicated a tick");
             const auto checkpoint=f.controller.checkpoint();
             if(!checkpoint)throw std::runtime_error(f.controller.error());
-            if(!detcollision_scenario::matchesGolden(*checkpoint))throw std::runtime_error("Collision position/event golden mismatch at tick "+std::to_string(checkpoint->nextTick));
+            if(!collisionWorkerScenario::matchesGolden(*checkpoint))throw std::runtime_error("Collision position/event golden mismatch at tick "+std::to_string(checkpoint->nextTick));
             hashes.push_back(detCheckpointHash(*checkpoint));
             if(mode=="live" && checkpoint->nextTick==5000)restart=*checkpoint;
             if(mode=="live" && !restored && checkpoint->nextTick==7500) {
@@ -48,11 +57,11 @@ int main(int argc,char** argv) {
                     throw std::runtime_error("Paused Host restore failed");
                 hashes.resize(5000);restored=true;
                 if(!f.controller.stepOnce() || !f.controller.resume())throw std::runtime_error("Host restart single step failed");
-                if(!detcollision_scenario::matchesGolden(*f.controller.checkpoint()))throw std::runtime_error("Collision restart golden mismatch");
+                if(!collisionWorkerScenario::matchesGolden(*f.controller.checkpoint()))throw std::runtime_error("Collision restart golden mismatch");
                 hashes.push_back(detCheckpointHash(*f.controller.checkpoint()));
             }
         }
-        const auto checkpoint=*f.controller.checkpoint();if(!detcollision_scenario::matchesGolden(checkpoint))throw std::runtime_error("Collision final golden mismatch");const auto final=encodeDetCheckpoint(checkpoint);
+        const auto checkpoint=*f.controller.checkpoint();if(!collisionWorkerScenario::matchesGolden(checkpoint))throw std::runtime_error("Collision final golden mismatch");const auto final=encodeDetCheckpoint(checkpoint);
         if(mode=="record" && !f.controller.stop())throw std::runtime_error(f.controller.error());
         if((mode=="replay" || mode=="seek") && f.controller.state()!=DetHostState::Completed)
             throw std::runtime_error("Replay did not complete");

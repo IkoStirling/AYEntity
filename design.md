@@ -1461,3 +1461,19 @@ current input + hash barrier 防止缺员/分歧继续；输入 source 必须属
 history/future/buffer 限制固定；retain+resend 修复乱序/重复/应用丢包，不无限缓存。
 配置和 handshake 不进入 gameplay checkpoint；恢复 agreed state 后新 epoch 重建。
 Wall clock/connection/member admission/timeout 层独立，输入与完整 state 复用 replay。
+
+### 14.5.9 相对运动与连续触发（第十二阶段）
+
+Profile 2 显式选择，body/history schema versions2，history 增加 field7 bool
+extended=true 和 field8 u32 contact-pass budget；1–60 slots 保持 ≤128 fields。
+同一全局残余时间找全部 solid pair relative delta 的最早 sweep，time、X/Y、
+stable pair 次序固定，共同推进并更新 residual；双 Kinematic 法线等权平均，
+MovingObstacle 无限质量规定运动，固定 Static 零速度。接触 snap 继续最多16ULP。
+保留每个同步运动段 before/after scratch，trigger 使用相对分段 swept interior
+检测。只对 previous/current 均 absent 的 transient pair 发 Enter+Exit；多次
+leave/reenter 聚合，不宣称逐 TOI 回调。current+transient 先过 pair budget，
+pair/phase 排序后统一提交 pose/history/events，无未注册的持久缓存。
+纯 validator 检查 finite/body/cap/policy/history/已发行 stable IDs/payload 和
+solid penetration；manifest3 绑定 systemId/version2 validator，旧 profile1 无变化。
+迭代上限/挤压/未能表示的运动拒绝，未解决冲突不返回伪成功；tick 显式 restore。
+各 body 表现/网络/replay 继续使用同一 registered checkpoint 闭包。

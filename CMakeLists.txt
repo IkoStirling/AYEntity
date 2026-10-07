@@ -131,6 +131,15 @@ function(ay_entity_add_determinism_host_integration)
             LABELS "ayentity;determinism;host;replay;process" TIMEOUT 960 RUN_SERIAL TRUE)
         add_executable(AYEntity_DeterministicCollisionHostWorker "${_root}/unittest/DeterministicCollisionHostWorker.cpp")
         target_link_libraries(AYEntity_DeterministicCollisionHostWorker PRIVATE AYEntityDeterminismHost)
+        add_executable(AYEntity_DeterministicExtendedCollisionHostWorker "${_root}/unittest/DeterministicCollisionHostWorker.cpp")
+        target_compile_definitions(AYEntity_DeterministicExtendedCollisionHostWorker PRIVATE AYDET_COLLISION_EXTENDED=1)
+        target_link_libraries(AYEntity_DeterministicExtendedCollisionHostWorker PRIVATE AYEntityDeterminismHost)
+        add_test(NAME AYEntity_DeterministicExtendedCollisionProcesses
+            COMMAND ${CMAKE_COMMAND} -DWORKER=$<TARGET_FILE:AYEntity_DeterministicExtendedCollisionHostWorker>
+                -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/extended-collision-host-process-check
+                -P "${_root}/unittest/RunDeterministicHostProcessCheck.cmake")
+        set_tests_properties(AYEntity_DeterministicExtendedCollisionProcesses PROPERTIES
+            LABELS "ayentity;determinism;collision;2d;host;replay;process" TIMEOUT 960 RUN_SERIAL TRUE)
         add_test(NAME AYEntity_DeterministicCollisionProcesses
             COMMAND ${CMAKE_COMMAND}
                 -DWORKER=$<TARGET_FILE:AYEntity_DeterministicCollisionHostWorker>
