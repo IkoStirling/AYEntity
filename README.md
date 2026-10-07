@@ -308,3 +308,7 @@ body/policy/history/已发行身份/event payload；invalid restore 不修改 Wo
 扩展 cap 为 60 current+transient pairs，contact passes 1–256 默认128；初始
 穿透、挤压/迭代超限 fault 后显式 restore。无动态刚体/摩擦/旋转 shapes。
 完整规则和真实 Host 10k 动态场景见[第十二阶段](../../AYDocs/DETERMINISTIC-COLLISION-STAGE12.md)。
+
+Linux x64/ARM64 × GCC 13.3.0/Clang 18.1.3 四组原生 portable 实际通过：
+typed codec/layout 精确 oracle 与三成员10000 tick Lockstep 协议；完整 Host、
+solver 与实际传输使用 Windows 集成证据。见[原生验收记录](../../AYDocs/DETERMINISTIC-NATIVE-ACCEPTANCE.md)。
