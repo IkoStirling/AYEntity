@@ -259,3 +259,17 @@ manifest 2 保存字段类型和默认值；纯 word 会话仍使用 manifest 1�
 类型化 Host 的 10000 tick record/live/replay/seek 已通过 Windows Debug/Release；
 `unittest/portable` 为原生 GCC/Clang/ARM64 提供同一 codec 的精确 oracle 入口。
 示例、格式、容量及实际验收见[第八阶段](../../AYDocs/DETERMINISTIC-STATE-STAGE8.md)。
+
+## 确定性 2D 碰撞（第九阶段）
+
+链接 `AYEntity::Determinism`，添加 actor 前 `installDetCollision2D` 注册 typed
+body/history schemas 和无持久缓存的系统，`detCollisionBodyState2D` 构造初始
+block。Earlier input 系统写 DetBodyVelocity，碰撞统一计算 world XY AABB 扫掠
+阻挡与滑动，时间/轴/稳定 ID 决定命中次序。只解 Kinematic solid 对 Static solid；
+初始穿透拒绝，不解动态刚体/堆叠。Trigger 不阻挡，tick 末正面积重叠按规范 pair
+生成 Enter/Stay/Exit，下一 tick 交付；穿过后终点已离开不生成事件。
+Body/velocity/policy/history 与 pending events 全部进入现有 checkpoint/replay。
+默认 64 body/32 trigger pairs，配置范围 1–64/1–61；应选择场景需要的容量。
+安装失败销毁部分配置；语义/容量失败需显式 restore，前序系统和 pose history
+不自动回滚。无 `.ayscene` component 或 Box2D/Jolt 迁移。几何 oracle、边界测试、
+真实 Host 10k 与 SDK 契约见[第九阶段](../../AYDocs/DETERMINISTIC-COLLISION-STAGE9.md)。

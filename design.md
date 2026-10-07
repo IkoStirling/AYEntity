@@ -1417,3 +1417,22 @@ diff 将每个 lane 映射回逻辑 field ID + zero-based lane；scalar 为 lane
 rotation 入口继续负责旋转有效性。EntityRef 是可空/未解析 stable ID，非 ownership。
 128 logical fields/schema，最多 512 lanes，仍同时受 manifest/checkpoint byte budgets 限制。
 Windows typed Host 10k 四进程/Debug-Release 和 legacy golden 验收见[第八阶段](../../AYDocs/DETERMINISTIC-STATE-STAGE8.md)。
+
+### 14.5.6 软件 Float32 2D 碰撞（第九阶段，2026-10-07）
+
+实现位于既有 Determinism target，不增加 Core 的依赖。Math DetGeometry2D
+负责 value-only closed-ray/strict-sweep profile 1；Entity 安装 typed body fields
+及全局 policy/pair-history。所有 actor/schema/system 身份稳定，双向 mask、
+min.x/ID broadphase、canonical pairs、time/axis/ID 窄相次序明确。
+每 tick scratch 先解 kinematic/static AABB，法线轴速度清零、切线滑动，接触
+重建后最多 16 ULP 向外调整并复检；无 initial penetration/depenetration。
+计算 final positive trigger overlap，再 merge 旧/新有序 pair 生成下一 tick 事件。
+容量和语义验证先于本系统 pose/history 提交；emit 总 budget、前序 callbacks 和
+kernel history 仍按 session fault/explicit restore 契约处理，不声称全 tick 自动回滚。
+Typed restore 验证表示；profile/policy/跨字段 history/body 语义在 callback 前检查。
+无持久 proxy 缓存，checkpoint 直接保存 typed bodies/globals 与 pending events。
+24-byte LE event profile/phase/u64 pair 是 session payload，现有 manifest 2 /
+checkpoint envelope 1 / replay v2 不变。默认 schema 4/5、system 30、event 0x30001；
+geometry/collision profiles 和 policy defaults 入 manifest，改变拒绝跨配置恢复。
+64 active bodies / 61 trigger pairs 硬上限，XY translation only；未来动态刚体、
+旋转/3D shapes、连续触发 crossing 和网络/脚本需另立阶段。验收见第九阶段文档。

@@ -94,7 +94,7 @@ set(_ay_entity_integrations)
 if(TARGET AYReplay)
     add_library(AYEntityDeterminism STATIC
         src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp src/AYDeterministicState.cpp
-        src/AYDeterministicReplay.cpp)
+        src/AYDeterministicReplay.cpp src/AYDeterministicCollision2D.cpp)
     add_library(AYEntity::Determinism ALIAS AYEntityDeterminism)
     ay_configure_entity_target(AYEntityDeterminism)
     target_link_libraries(AYEntityDeterminism PUBLIC AYEntityCore AYReplay)
@@ -128,6 +128,15 @@ function(ay_entity_add_determinism_host_integration)
                 -P "${_root}/unittest/RunDeterministicHostProcessCheck.cmake")
         set_tests_properties(AYEntity_DeterministicHostSessionProcesses PROPERTIES
             LABELS "ayentity;determinism;host;replay;process" TIMEOUT 960 RUN_SERIAL TRUE)
+        add_executable(AYEntity_DeterministicCollisionHostWorker "${_root}/unittest/DeterministicCollisionHostWorker.cpp")
+        target_link_libraries(AYEntity_DeterministicCollisionHostWorker PRIVATE AYEntityDeterminismHost)
+        add_test(NAME AYEntity_DeterministicCollisionProcesses
+            COMMAND ${CMAKE_COMMAND}
+                -DWORKER=$<TARGET_FILE:AYEntity_DeterministicCollisionHostWorker>
+                -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/collision-host-process-check
+                -P "${_root}/unittest/RunDeterministicHostProcessCheck.cmake")
+        set_tests_properties(AYEntity_DeterministicCollisionProcesses PROPERTIES
+            LABELS "ayentity;determinism;collision;2d;host;replay;process" TIMEOUT 960 RUN_SERIAL TRUE)
     endif()
 endfunction()
 
@@ -293,6 +302,10 @@ target_compile_definitions(AYEntity PRIVATE
 # Identity and Scene authoring regressions also run without visual integrations.
 if(BUILD_TESTING)
     if(TARGET AYEntityDeterminism)
+        add_executable(AYEntity_DeterministicCollisionTests
+            unittest/DeterministicCollisionTestMain.cpp unittest/AYTest_DeterministicCollision2D.cpp)
+        target_link_libraries(AYEntity_DeterministicCollisionTests PRIVATE AYEntityDeterminism AYTest)
+        ay_add_test(AYEntity_DeterministicCollisionTests LABELS "ayentity;determinism;collision;2d" TIMEOUT 120 RUN_SERIAL)
         add_executable(AYEntity_DeterministicSessionTests
             unittest/DeterministicSessionTestMain.cpp unittest/AYTest_DeterministicSession.cpp
             unittest/AYTest_DeterministicState.cpp)
