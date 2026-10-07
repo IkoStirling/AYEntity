@@ -6,10 +6,12 @@
 
 #include "AYEntity.h"
 #include "AYEntity/EntityModule.h"
+#include <AYEntity/EntitySimulationDriver.h>
 #include <AYGameLoop.h>
 #include <AYGameLoop/SubSystemRegistry.h>
 #include <cstdio>
 #include <memory>
+#include <stdexcept>
 
 namespace ayt::entity
 {
@@ -19,7 +21,9 @@ namespace ayt::entity
 // =============================================================================
 class EntitySubSystem : public ayt::game::ISubSystem {
 public:
+    ~EntitySubSystem() override { if (_simulationDriver) _simulationDriver->hostShutdown(); }
     const char* getName() const override { return "Entity"; }
+    bool requiresOwnerThread() const noexcept override { return static_cast<bool>(_simulationDriver); }
 
     const ayt::game::SubSystemDescriptor& getDescriptor() const override {
         static ayt::game::SubSystemDescriptor desc = {
@@ -47,6 +51,7 @@ public:
     }
 
     void shutdown() override {
+        if (_simulationDriver) _simulationDriver->hostShutdown();
         // Drop Scene redirect, then shut down the process fallback only.
         // Scene RAII owns Scene World teardown.
         World::setActiveWorld(nullptr);
@@ -65,19 +70,57 @@ public:
 
     void tick(ayt::game::FramePhase phase,
               const ayt::game::FrameContext& context) override {
+        if (!tickChecked(phase, context))
+            throw std::runtime_error("Entity simulation policy rejected phase");
+    }
+
+    bool tickChecked(ayt::game::FramePhase phase,
+                     const ayt::game::FrameContext& context) override {
         if (phase == ayt::game::FramePhase::FixedPrePhysics) {
+            if (_simulationDriver) {
+                auto handled = _simulationDriver->fixedTick(World::instance(), context);
+                if (handled.has_value()) return *handled;
+            }
             if (context.fixedStep) {
                 World::instance().fixedUpdate(context.fixedStep->deltaTime());
             } else {
                 World::instance().fixedUpdate(context.fixedDeltaTime);
             }
         } else if (phase == ayt::game::FramePhase::World) {
+            if (_simulationDriver && !_simulationDriver->presentationBoundary(World::instance()))
+                return false;
             World::instance().updatePresentation(
                 context.deltaTime,
                 context.interpolationAlpha);
         }
+        return true;
     }
+
+    TickResult tickResult(game::FramePhase phase, const game::FrameContext& context) override {
+        if (tickChecked(phase, context)) return TickResult::Completed;
+        return _simulationDriver && game::isFixedPhase(phase) ? TickResult::Blocked : TickResult::Failed;
+    }
+
+    bool attach(std::shared_ptr<IEntitySimulationDriver> driver) {
+        if (!driver || _simulationDriver) return false;
+        _simulationDriver = std::move(driver); return true;
+    }
+    bool detach(const IEntitySimulationDriver* driver) noexcept {
+        if (!driver || _simulationDriver.get() != driver) return false;
+        _simulationDriver->hostShutdown(); _simulationDriver.reset(); return true;
+    }
+private:
+    std::shared_ptr<IEntitySimulationDriver> _simulationDriver;
 };
+
+bool attachEntitySimulationDriver(game::ISubSystem& system, std::shared_ptr<IEntitySimulationDriver> driver) {
+    auto* entity = dynamic_cast<EntitySubSystem*>(&system);
+    return entity && entity->attach(std::move(driver));
+}
+bool detachEntitySimulationDriver(game::ISubSystem& system, const IEntitySimulationDriver* driver) noexcept {
+    auto* entity = dynamic_cast<EntitySubSystem*>(&system);
+    return entity && entity->detach(driver);
+}
 
 // =============================================================================
 // Registration (called from bootstrapModule)

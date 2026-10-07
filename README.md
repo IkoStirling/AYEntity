@@ -56,6 +56,7 @@ Scene 先读取实体全部显式组件，再执行依赖补建回调，Sprite/C
 |---|---|---|
 | `AYEntityCore` / `AYEntity::Core` | World、Entity、注册表、序列化、Entity SubSystem、Sim/Bridge | AYModule、AYCore、AYGameLoop、AYReflect、AYSerializer、AYMath |
 | `AYEntityDeterminism` / `AYEntity::Determinism` | 注册状态 Sim 会话、检查点、逐 tick 校验与 .rpl 回放/seek | AYEntityCore、AYReplay |
+| `AYEntityDeterminismHost` / `AYEntity::DeterminismHost` | 标准 Host/Scene 会话、Live/Record/Replay、暂停恢复及收尾 | Determinism、AYApplication、AYScene、AYEventSystem |
 | `AYEntityAnimationIntegration` | 动画组件与系统 | AYAnimation、AYResource、AYEventSystem |
 | `AYEntityRenderIntegration` | Mesh/SkinnedMesh 表现系统 | AYRenderer、Animation integration、AYResource |
 | `AYEntity2DIntegration` | Tilemap/Sprite/OrthoCamera 表现系统 | AYRenderer、AYResource |
@@ -180,8 +181,8 @@ callback 的 `DetTickContext` 提供 software dt、canonical input、pose、regi
 globals、RNG、下一 tick 事件和 tick 末 spawn/despawn。系统按 priority/ID、实体按
 Sim ID 执行。检查点覆盖完整注册状态；恢复可重建原生 Entity handles。
 
-会话要求已初始化且无旧 Sim 系统/权威的 World，只有一个 custom tick owner；
-必须先替换标准 Host World Sim 推进。受管 actor 只允许 DetSimTransform、DetSimState
+会话要求已初始化且无旧 Sim 系统/权威的 World，只有一个 tick owner；
+标准 Host 使用显式 `AYEntity::DeterminismHost` 接管，custom owner 自行替换 World Sim 推进。受管 actor 只允许 DetSimTransform、DetSimState
 和表现 Transform，不自动保存任意原生游戏组件。隐藏 mutable callback captures、
 native math、外部效果与 callback 内 World/组件生命周期操作不满足契约。
 Present/Bridge 可独立更新且不得改 Sim 字段。World 须晚于 session 销毁。
@@ -227,3 +228,20 @@ Core 组件；`EntityRuntimeModule` 只安装 Entity SubSystem 与 Core systems�
 Presentation、Physics、Script 和 Network 必须由对应的
 `Entity*IntegrationModule` 节点显式加入。`bootstrapEntityCore()` /
 `bootstrapModule()` 继续作为旧调用方和新建 Scene World 的兼容入口。
+
+## 标准 Host 确定性 Scene 接入（第七阶段）
+
+显式链接 `AYEntity::DeterminismHost`，将 `DeterministicHostIntegrationModule(options)`
+加入标准模块图（依赖 Entity.Runtime），从 `deterministicHost(host)` 取得借用 controller。
+selector 为每个 Scene 选 ordinary nullopt 或 Live/Record/Replay recipe，configure 注册
+第六阶段状态，input 只编码本 tick 命令。标准 FixedPrePhysics 是唯一 owner；要求
+Host 和 recipe 约分后的 rational step/bits 相同，拒绝 legacy native step。
+pause/stepOnce/resume、Live restore 和 Replay seek 都走标准 Host。失败返回
+GameLoop Blocked，暂停、不提交 tick/事件、清除固定欠账，Presentation/Egress 保留。
+Scene 变化释放旧会话；World/Host 关闭先封存健康录制；module shutdown 断开绑定。
+Record 要求新目的文件，不支持恢复改写。stop 后明确恢复/restart 或 disconnect。
+callbacks 禁止重入生命周期/control；同 Scene clear/load 前 stop 后 restart。
+输入边沿映射/量化由应用负责。Core 和 All 不自动启用 adapter，也不自动接管物理/脚本。
+用例 `AYEntity_DeterministicHostSessionTests`；独立进程门禁
+`AYEntity_DeterministicHostSessionProcesses` 验证真实 Host 10000 ticks。
+完整契约、装配示例与验收见[第七阶段](../../AYDocs/DETERMINISTIC-HOST-STAGE7.md)。

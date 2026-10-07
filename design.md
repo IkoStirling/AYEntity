@@ -1080,7 +1080,7 @@ Core 20 项、Host 5 项验证乘序、非法输入原子性，以及 256/128 �
 
 `AYEntity::Determinism` 是依赖 Core + AYReplay 的显式 integration，不给 Core 添加
 Replay 依赖。`DeterministicSession` 独占 World Sim/结构推进；现存标准 Host Sim
-责任须替换后才能接入。单线程、World 晚于 session，关闭 World 会撤销旧 owner。
+责任须替换后才能接入（第七阶段提供显式标准 adapter）。单线程、World 晚于 session，关闭 World 会撤销旧 owner。
 callback 只访问临时 DetTickContext，不使用隐藏可变捕获或外部副作用。
 
 受管实体仅包含 DetSimTransform、runtime-only DetSimState 和表现 Transform。
@@ -1373,3 +1373,26 @@ Gameplay。当前矩形只使用 Transform 平移，不使用旋转或缩放。�
 - [Unity Entity Component System](https://docs.unity3d.com/Packages/com.unity.entities@latest/)
 - [Unreal Gameplay Architecture](https://docs.unrealengine.com/en-US/ProgrammingAndScripting/GameplaySystems/networking/)
 - [O3DE Game Entity](https://o3de.org/docs/user-guide/components/)
+
+### 14.5.4 标准 Host/Scene 会话 adapter（第七阶段，2026-10-07）
+
+`AYEntity::DeterminismHost` 依赖 Determinism + Application + Scene + EventSystem，
+通过晚声明函数建立，不进入 All，避免 Application→Entity→Application 依赖环。
+Core 的 IEntitySimulationDriver 是基础设施：标准 Entity 单个 shared driver 返回
+nullopt 选择 legacy Sim，true 提交成功，false 映射 GameLoop 固定步 Blocked。
+绑定期间 Entity.requiresOwnerThread 为 true，phase layer 固定在 Host caller 线程。
+Controller 的 Scene recipe 显式选择 ordinary / Live / Record / Replay，只有一个
+推进 owner；没有故障 fallback。固定 step 比例与 bits、Host simTick 在输入采集前验证。
+Live/Record 输入编码后经 Session.advance，Replay 经同一内核校验。
+
+World 持有借用 shutdown observer，驱动/Controller 的 shared implementation 保活。
+shutdown 先交换并通知 observer，健康 Writer finish，然后释放 actor/session，最后
+World 撤销 owner 和存储。订阅借用 weak state，模块结束移除自己的服务和 driver。
+Scene current 变更由 EventBus 和标准边界解析；旧会话先 close，再 configure 新会话。
+同 Scene 内容重载需要 stop/restart，禁止 callback 重入生命周期和控制操作。
+
+GameLoop Blocked 不提交固定 tick，暂停并清除欠账；真实 phase failure 仍 fatal。
+Live restore / Replay seek 都先暂停；Record 恢复拒绝，存在目的文件拒绝覆盖。
+partial callback fault 必须显式恢复；I/O 失败不能撤销已执行 tick。host simTick 与
+presentation frame index 只作调度/采集元数据，权威身份为 session.nextTick。
+完整行为和限制见[第七阶段](../../AYDocs/DETERMINISTIC-HOST-STAGE7.md)。

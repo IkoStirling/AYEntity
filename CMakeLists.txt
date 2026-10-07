@@ -100,6 +100,37 @@ if(TARGET AYReplay)
     target_link_libraries(AYEntityDeterminism PUBLIC AYEntityCore AYReplay)
 endif()
 
+# Declared here, invoked after AYApplication/AYScene exist in the superproject.
+# Keep this opt-in adapter outside the compatibility facade to avoid a Host cycle.
+function(ay_entity_add_determinism_host_integration)
+    if(NOT TARGET AYEntityDeterminism OR NOT TARGET AYApplication OR NOT TARGET AYScene)
+        return()
+    endif()
+    set(_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
+    add_library(AYEntityDeterminismHost STATIC "${_root}/src/AYDeterministicHost.cpp")
+    add_library(AYEntity::DeterminismHost ALIAS AYEntityDeterminismHost)
+    target_link_libraries(AYEntityDeterminismHost PUBLIC AYEntityDeterminism AYApplication AYScene AYEventSystem)
+    target_compile_options(AYEntityDeterminismHost PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+    if(BUILD_TESTING)
+        add_executable(AYEntity_DeterministicHostSessionTests
+            "${_root}/unittest/DeterministicHostSessionTestMain.cpp"
+            "${_root}/unittest/AYTest_DeterministicHostSession.cpp")
+        target_link_libraries(AYEntity_DeterministicHostSessionTests PRIVATE AYEntityDeterminismHost AYTest)
+        ay_add_test(AYEntity_DeterministicHostSessionTests LABELS "ayentity;determinism;host;replay" TIMEOUT 120 RUN_SERIAL)
+        add_executable(AYEntity_DeterministicHostSessionWorker "${_root}/unittest/DeterministicHostSessionWorker.cpp")
+        target_link_libraries(AYEntity_DeterministicHostSessionWorker PRIVATE AYEntityDeterminismHost)
+        add_test(NAME AYEntity_DeterministicHostSessionProcesses
+            COMMAND ${CMAKE_COMMAND}
+                -DWORKER=$<TARGET_FILE:AYEntity_DeterministicHostSessionWorker>
+                -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/host-session-process-check
+                -P "${_root}/unittest/RunDeterministicHostProcessCheck.cmake")
+        set_tests_properties(AYEntity_DeterministicHostSessionProcesses PROPERTIES
+            LABELS "ayentity;determinism;host;replay;process" TIMEOUT 960 RUN_SERIAL TRUE)
+    endif()
+endfunction()
+
 # Serialized 2D component metadata is useful to headless tools and servers.
 # Keep it separate from the renderer-backed systems so scene loading and
 # validation do not require a graphics device.

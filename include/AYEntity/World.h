@@ -30,6 +30,8 @@ namespace ayt::entity
 template<typename... Components>
 class Query;
 class DeterministicSession;
+class DeterministicHostController;
+class IEntitySimulationDriver;
 
 class World {
 public:
@@ -119,7 +121,9 @@ public:
 
 private:
     DeterministicSession* _deterministicOwner = nullptr;
+    IEntitySimulationDriver* _hostedSimulationObserver = nullptr;
     friend class DeterministicSession;
+    friend class DeterministicHostController;
     World();
     ~World();
     World(const World&) = delete;

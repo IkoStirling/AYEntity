@@ -3,6 +3,7 @@
 #include <AYEntity/World.h>
 #include <AYEntity/EntityImpl.h>
 #include <AYEntity/WorldLifecycle.h>
+#include <AYEntity/EntitySimulationDriver.h>
 #include <AYEntity/components/SimTransformComponent.h>
 #include <AYEntity/components/DetSimTransformComponent.h>
 #include <AYEntity/DeterministicSystem.h>
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <utility>
 
 namespace ayt::entity
 {
@@ -65,6 +67,10 @@ bool World::initialize() {
 
 void World::shutdown() {
     if (!_initialized) return;
+    // The optional Host binding seals healthy recordings and releases its
+    // session while registered state and ownership are still valid.
+    if (auto* observer = std::exchange(_hostedSimulationObserver, nullptr))
+        observer->worldShutdown(*this);
     _deterministicOwner = nullptr;
 
     // Integrations release World-owned state before systems disappear. The
