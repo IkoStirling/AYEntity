@@ -26,7 +26,7 @@ public:
         for (auto* e : World::instance().getAllEntities()) {
             if (auto* sim = e->getComponent<DetSimTransformComponent>()) {
                 (void)sim->translate(probe.velocity*dt);
-                if (sim->rotationEnabled) (void)sim->rotateLocal(*Q::fromAxisSinCos(V::fromInts(0,0,1),dt,D::fromInt(1)));
+                if (sim->rotationEnabled) (void)sim->integrateAngularVelocityLocal(V::fromInts(0,0,2),dt);
             }
         }
     }
@@ -243,5 +243,27 @@ TEST_CASE(fixed_import_discards_rotation_and_v1_translation_migration_is_explici
     migrated.position=V::fromInts(3,4,5).bits(); migrated.previousPosition=V::fromInts(1,2,3).bits();
     migrated.hasPreviousPosition=true; migrated.revision=42;
     CHECK_TRUE(f.sim->restore(migrated) && migrated==f.sim->snapshot());
+}
+TEST_CASE(angular_velocity_integrators_preserve_history_and_select_coordinate_space) {
+    Fixture f; const auto start=*Q::fromAxisAngle(V::fromInts(1,0,0),ayt::math::kDetHalfPi);
+    CHECK_FALSE(f.sim->integrateAngularVelocityLocal(V::fromInts(0,1,0),D::fromInt(1)));
+    CHECK_TRUE(f.sim->setRotation(start)); f.sim->beginSimulationStep(); const auto saved=f.sim->snapshot();
+    const auto omega=V::fromInts(0,1,0); const auto dt=ayt::math::kDetHalfPi;
+    const auto expectedLocal=*f.sim->rotation.integratedAngularVelocityLocal(omega,dt);
+    CHECK_TRUE(f.sim->integrateAngularVelocityLocal(omega,dt));
+    CHECK_TRUE(f.sim->rotation.bits()==expectedLocal.bits() && f.sim->previousRotation.bits()==saved.rotation);
+    CHECK_TRUE(f.sim->restore(saved)); const auto expectedWorld=*f.sim->rotation.integratedAngularVelocityWorld(omega,dt);
+    CHECK_TRUE(f.sim->integrateAngularVelocityWorld(omega,dt));
+    CHECK_TRUE(f.sim->rotation.bits()==expectedWorld.bits() && expectedLocal.bits()!=expectedWorld.bits());
+    CHECK_TRUE(f.sim->revision==saved.revision+1 && f.sim->previousRotation.bits()==saved.rotation);
+}
+TEST_CASE(angular_integration_rejects_invalid_inputs_without_mutation) {
+    Fixture f; CHECK_TRUE(f.sim->setRotation(Q{})); const auto saved=f.sim->snapshot();
+    CHECK_FALSE(f.sim->integrateAngularVelocityLocal(V::fromInts(1,2,3),D::fromInt(-1)));
+    CHECK_FALSE(f.sim->integrateAngularVelocityWorld(V::fromBits({0x7f800000u,0,0}),D::fromInt(1)));
+    CHECK_FALSE(f.sim->integrateAngularVelocityLocal(V::fromBits({0x7f7fffffu,0,0}),D::fromInt(2)));
+    CHECK_TRUE(saved==f.sim->snapshot());
+    CHECK_TRUE(f.sim->integrateAngularVelocityLocal(V{},D::fromInt(1)));
+    CHECK_TRUE(f.sim->revision==saved.revision+1 && f.sim->rotation==Q{});
 }
 TEST_SUITE_END;

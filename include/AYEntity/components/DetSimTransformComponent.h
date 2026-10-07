@@ -69,6 +69,21 @@ struct DetSimTransformComponent final : public IComponent {
         ++revision;
         return true;
     }
+    /// Integrate local constant radians/second over finite dt>=0; requires rotation ownership.
+    /// Failure leaves all fields unchanged; success retains tick history and increments revision.
+    bool integrateAngularVelocityLocal(math::DetVec3 omega,math::DetFloat32 dt) noexcept {
+        if (!rotationEnabled) return false;
+        const auto value=rotation.integratedAngularVelocityLocal(omega,dt);
+        if (!value) return false;
+        rotation=*value; ++revision; return true;
+    }
+    /// Integrate world-space radians/second using a left-multiplied software delta.
+    bool integrateAngularVelocityWorld(math::DetVec3 omega,math::DetFloat32 dt) noexcept {
+        if (!rotationEnabled) return false;
+        const auto value=rotation.integratedAngularVelocityWorld(omega,dt);
+        if (!value) return false;
+        rotation=*value; ++revision; return true;
+    }
     /// Release rotation ownership without modifying Present; next activation seeds fresh history.
     void disableRotation() noexcept {
         if (!rotationEnabled) return;

@@ -20,7 +20,7 @@ public:
         for (auto* e : World::instance().getAllEntities())
             if (auto* sim=e->getComponent<DetSimTransformComponent>()) {
                 (void)sim->translate(V::fromInts(3,-2,1)*dt);
-                if (sim->rotationEnabled) (void)sim->rotateLocal(*Q::fromAxisSinCos(V::fromInts(0,1,0),dt,D::fromInt(1)));
+                if (sim->rotationEnabled) (void)sim->integrateAngularVelocityLocal(V::fromInts(0,2,0),dt);
             }
     }
 };

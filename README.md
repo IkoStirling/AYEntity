@@ -121,9 +121,12 @@ world.updatePresentation(frameDt, interpolationAlpha);
 与 `Transform` 同时添加后，既有 Core Bridge 自动发布插值平移，保留
 表现层 scale，不写回 Sim。旋转默认不接管；`setRotation(DetQuaternion)` 成功后
 接管旋转，`rotateLocal` 更新局部旋转，Bridge 发布最短半球 nlerp。
+`integrateAngularVelocityLocal/World(omega,dt)` 在局部/世界坐标积分恒定角速度
+（radians/秒，dt≥0）；需先启用旋转，失败不修改字段，成功增加 revision。
 `disableRotation` 释放旋转权威。每实体只能有一个 Sim Transform 权威。
 Snapshot v2 保存两组位置/旋转、scalar/rotation profile 与启用/历史标记；
-旧平移字段须显式解码进新 Snapshot，不能按旧内存布局恢复。
+旧平移字段须显式解码进新 Snapshot，不能按旧内存布局恢复。函数/积分
+算法 profile 另存于输入/session manifest，见[第五阶段](../../AYDocs/DETERMINISTIC-FLOAT-STAGE5.md)。
 
 ```cpp
 using D = ayt::math::DetFloat32;

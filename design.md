@@ -1060,6 +1060,22 @@ software nlerp（归一化端点、最短半球）采样启用的旋转，再位
 v2 恢复与 legacy 解码、Bridge 无反馈、256 步逐字段回放；数学 oracle 和
 平台状态见[第四阶段](../../AYDocs/DETERMINISTIC-FLOAT-STAGE4.md)。
 
+### 14.5.2 软件角速度积分（第五阶段，2026-10-07）
+
+已启用旋转的组件提供 `integrateAngularVelocityLocal/World`。omega 是
+`DetVec3` radians/秒，dt 是有限非负 `DetFloat32`；分别右乘/左乘软件
+半角 delta。算法与 overflow 规则见 AYMath README 的积分 profile 1。
+验证在写入之前完成，失败保留 rotation、previous、flags、revision；成功
+只写当前 rotation 并增加一次 revision，tick 统一维护历史。零 dt/omega
+仍执行归一化并成功增加 revision，不创建新的历史。
+
+Snapshot 继续使用 v2 的 pose 字段及 scalar/rotation profile，积分没有
+改变现存状态的编码。创建状态所用 `kDetMathProfileVersion` 与
+`kAngularIntegrationProfileVersion` 应写在 replay/session 的输入契约中。
+这是恒定角速度单步运动，不提供 torque、角加速度或刚体动力学。
+Core 20 项、Host 5 项验证乘序、非法输入原子性，以及 256/128 步真实
+角速度运动检查点回放；见[第五阶段](../../AYDocs/DETERMINISTIC-FLOAT-STAGE5.md)。
+
 ### 14.6 与网络 / 回放的关系
 
 | 网络模型 | ECS 用法 |
