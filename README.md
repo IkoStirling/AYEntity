@@ -284,3 +284,14 @@ Body/velocity/policy/history 与 pending events 全部进入现有 checkpoint/re
 `DetStateLayout` 拥有验证后的 metadata/defaults，适合重复初始化/读取/写入；
 Session 自动缓存布局，保持同一 canonical lane 和 sticky fault 规则。
 验证和测量见[第十阶段](../../AYDocs/DETERMINISTIC-VALIDATION-STAGE10.md)。
+
+## 通用网络 Lockstep（第十一阶段）
+
+`DeterministicLockstep` 显式持有 sealed Session 的推进权，固定 1–8 成员各提交
+一个 owned DetTickInput（包括 no-op），按 source/sequence 合帧。manifest/初始
+checkpoint/roster 握手一致，当前输入与 hash 都齐全才 advance；缺包 stall，
+相同 duplicate 幂等，冲突/分歧停止。纯协议 DetLockstepBarrier 无网络/World 依赖。
+应用负责 admitted/authenticated connection→stable member、channel 和重发/超时。
+链接 AYNetwork 时可使用 `sendDetLockstepPackets`，勿重复安装 Host 的 Sim owner。
+可传入 DetReplayWriter.advance sink；失败后用 agreed checkpoint+new epoch 重建。
+接口、wire format、限制和测试见[第十一阶段](../../AYDocs/DETERMINISTIC-LOCKSTEP-STAGE11.md)。

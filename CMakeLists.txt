@@ -94,7 +94,8 @@ set(_ay_entity_integrations)
 if(TARGET AYReplay)
     add_library(AYEntityDeterminism STATIC
         src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp src/AYDeterministicState.cpp
-        src/AYDeterministicReplay.cpp src/AYDeterministicCollision2D.cpp)
+        src/AYDeterministicReplay.cpp src/AYDeterministicCollision2D.cpp
+        src/AYDeterministicLockstepProtocol.cpp src/AYDeterministicLockstep.cpp)
     add_library(AYEntity::Determinism ALIAS AYEntityDeterminism)
     ay_configure_entity_target(AYEntityDeterminism)
     target_link_libraries(AYEntityDeterminism PUBLIC AYEntityCore AYReplay)
@@ -302,13 +303,21 @@ target_compile_definitions(AYEntity PRIVATE
 # Identity and Scene authoring regressions also run without visual integrations.
 if(BUILD_TESTING)
     if(TARGET AYEntityDeterminism)
+        if(TARGET AYNetwork AND WIN32)
+            add_executable(AYEntity_DeterministicNetworkWorker unittest/DeterministicNetworkWorker.cpp)
+            target_link_libraries(AYEntity_DeterministicNetworkWorker PRIVATE AYEntityDeterminism AYNetwork)
+            add_test(NAME AYEntity_DeterministicNetworkProcesses COMMAND powershell -NoProfile -ExecutionPolicy Bypass
+                -File ${CMAKE_CURRENT_SOURCE_DIR}/unittest/RunDeterministicNetworkCheck.ps1
+                -Worker $<TARGET_FILE:AYEntity_DeterministicNetworkWorker> -OutputDir ${CMAKE_CURRENT_BINARY_DIR}/network-lockstep-check)
+            set_tests_properties(AYEntity_DeterministicNetworkProcesses PROPERTIES TIMEOUT 160 RUN_SERIAL TRUE LABELS "ayentity;determinism;network;process")
+        endif()
         add_executable(AYEntity_DeterministicCollisionTests
             unittest/DeterministicCollisionTestMain.cpp unittest/AYTest_DeterministicCollision2D.cpp)
         target_link_libraries(AYEntity_DeterministicCollisionTests PRIVATE AYEntityDeterminism AYTest)
         ay_add_test(AYEntity_DeterministicCollisionTests LABELS "ayentity;determinism;collision;2d" TIMEOUT 120 RUN_SERIAL)
         add_executable(AYEntity_DeterministicSessionTests
             unittest/DeterministicSessionTestMain.cpp unittest/AYTest_DeterministicSession.cpp
-            unittest/AYTest_DeterministicState.cpp)
+            unittest/AYTest_DeterministicState.cpp unittest/AYTest_DeterministicLockstep.cpp)
         target_link_libraries(AYEntity_DeterministicSessionTests PRIVATE AYEntityDeterminism AYTest)
         ay_add_test(AYEntity_DeterministicSessionTests LABELS "ayentity;determinism;replay" TIMEOUT 120 RUN_SERIAL)
         add_executable(AYEntity_DeterministicSessionWorker unittest/DeterministicSessionWorker.cpp)

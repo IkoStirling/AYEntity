@@ -1448,3 +1448,16 @@ u32 count + sorted (u32 id,u32 version)，1..64，非零唯一 ID/version。
 tick 在 scratch checkpoint 应用 spawn/despawn/events/nextTick 再验证，合格后提交
 World 结构与 last witness；前序 callbacks 的字段写入仍需显式 restore。
 不可把可访问的 const checkpoint 当作 C++ 沙箱；纯函数/版本维护是调用方契约。
+
+### 14.5.8 网络输入/状态屏障（第十一阶段）
+
+DetLockstepBarrier 是 std-only 固定 roster 协议；Session adapter 保持 Core 不依赖
+Network，INetwork sendTo helper 由使用者显式链接。握手包含初始 tick/hash、
+完整 manifest、规范 roster 和 window/buffer 参数。每条消息 header 是 magic
+0x4c534441/profile1/sessionId64/epoch32/member32/kind32/tick64/bodySize32，
+末尾 FNV64；kind 1 Hello、2 Input、3 Hash。LE、48-byte envelope、有界解析。
+current input + hash barrier 防止缺员/分歧继续；输入 source 必须属于成员，合帧
+重走 Session canonical validation。Hash 是 full checkpoint FNV，不是认证。
+history/future/buffer 限制固定；retain+resend 修复乱序/重复/应用丢包，不无限缓存。
+配置和 handshake 不进入 gameplay checkpoint；恢复 agreed state 后新 epoch 重建。
+Wall clock/connection/member admission/timeout 层独立，输入与完整 state 复用 replay。
