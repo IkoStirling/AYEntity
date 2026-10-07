@@ -43,6 +43,12 @@ void SimToPresentBridgeSystem::onUpdate(float interpolationAlpha)
         if (det) {
             const auto previous = det->hasPreviousPosition ? det->previousPosition : det->position;
             if (!previous.isFinite() || !det->position.isFinite()) continue;
+            std::optional<math::DetQuaternion> rotationSample;
+            if (det->rotationEnabled) {
+                const auto from = det->hasPreviousRotation ? det->previousRotation : det->rotation;
+                rotationSample = math::DetQuaternion::nlerp(from,det->rotation,math::DetFloat32::fromFloat(alpha));
+                if (!rotationSample) continue; // Reject invalid pose before any Present writes.
+            }
             const auto blend = [alpha](math::DetFloat32 a, math::DetFloat32 b) {
                 if (alpha == 0.0f) return a.toFloat();
                 if (alpha == 1.0f) return b.toFloat();
@@ -51,6 +57,11 @@ void SimToPresentBridgeSystem::onUpdate(float interpolationAlpha)
             };
             present->position = {
                 blend(previous.x, det->position.x), blend(previous.y, det->position.y), blend(previous.z, det->position.z)};
+            if (rotationSample) {
+                const auto fields = rotationSample->toFloats();
+                present->rotation = {fields[0],fields[1],fields[2],fields[3]};
+                present->previousRotation = present->rotation;
+            }
         } else {
             const math::FixedVec3& previous = sim->hasPreviousPosition
                 ? sim->previousPosition : sim->position;
@@ -63,7 +74,8 @@ void SimToPresentBridgeSystem::onUpdate(float interpolationAlpha)
 
         // The bridge already produced the interpolated presentation sample.
         // Disable Transform's physics interpolation to avoid applying alpha a
-        // second time in render systems. Rotation/scale remain untouched.
+        // second time in render systems. Optional Det rotation is already
+        // sampled above; legacy rotation and all scale values remain untouched.
         present->previousPosition = present->position;
         present->hasPreviousSimulationPose = false;
     }

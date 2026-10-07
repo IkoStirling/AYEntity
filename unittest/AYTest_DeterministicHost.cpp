@@ -10,6 +10,7 @@ namespace {
 using namespace ayt::entity;
 using D=ayt::math::DetFloat32;
 using V=ayt::math::DetVec3;
+using Q=ayt::math::DetQuaternion;
 struct Probe { D dt{}; unsigned count=0; } probe;
 class Motion final : public IDeterministicSystem {
 public:
@@ -17,7 +18,10 @@ public:
     void onDeterministicUpdate(D dt) override {
         probe.dt=dt; ++probe.count;
         for (auto* e : World::instance().getAllEntities())
-            if (auto* sim=e->getComponent<DetSimTransformComponent>()) (void)sim->translate(V::fromInts(3,-2,1)*dt);
+            if (auto* sim=e->getComponent<DetSimTransformComponent>()) {
+                (void)sim->translate(V::fromInts(3,-2,1)*dt);
+                if (sim->rotationEnabled) (void)sim->rotateLocal(*Q::fromAxisSinCos(V::fromInts(0,1,0),dt,D::fromInt(1)));
+            }
     }
 };
 struct Session {
@@ -30,6 +34,7 @@ struct Session {
         (void)loop.setFixedTimestepRatio(1,64);
         loop.registerSubSystem(createEntitySubSystem().release());
         prepared=loop.prepareHostedSession(); probe={};
+        registerEntityCoreSystems(); // Same post-initialize install used by EntityRuntimeModule.
         World::instance().registerSystem<Motion>(0, SystemLane::Sim);
         auto* e=World::instance().createEntity();
         sim=e->addComponent<DetSimTransformComponent>(); e->addComponent<Transform>();
@@ -60,6 +65,7 @@ TEST_CASE(entity_prefers_typed_context_without_native_round_trip_and_retains_leg
 }
 TEST_CASE(host_checkpoint_replay_keeps_bits_with_hostile_rounding_and_same_tick_inputs) {
     Session s; CHECK_TRUE(s.prepared);
+    CHECK_TRUE(s.sim->setRotation(Q{}));
     const auto saved=s.sim->snapshot();
     for (unsigned i=0;i<128;++i) s.loop.stepOnce();
     const auto expected=s.sim->snapshot();
@@ -80,8 +86,19 @@ TEST_CASE(host_checkpoint_replay_keeps_bits_with_hostile_rounding_and_same_tick_
     _mm_setcsr(csr);
 #endif
     CHECK_TRUE(configured);
-    CHECK(actual.position==expected.position && actual.previousPosition==expected.previousPosition
-        && actual.revision==expected.revision && actual.hasPreviousPosition==expected.hasPreviousPosition);
+    CHECK(actual==expected);
+}
+TEST_CASE(standard_host_propagates_rotation_history_and_presents_without_feedback) {
+    Session s; CHECK_TRUE(s.prepared); CHECK_TRUE(s.sim->setRotation(Q{}));
+    s.loop.stepOnce(); const auto first=s.sim->snapshot();
+    CHECK(first.rotationEnabled && first.hasPreviousRotation && first.previousRotation==Q{}.bits());
+    s.loop.stepOnce(); const auto second=s.sim->snapshot();
+    CHECK(second.previousRotation==first.rotation && second.rotation!=first.rotation);
+    World::instance().updatePresentation(0.02f,0.5f);
+    CHECK(second==s.sim->snapshot());
+    auto* present=World::instance().getAllEntities().front()->getComponent<Transform>();
+    const auto expected=*Q::nlerp(Q::fromBits(second.previousRotation),Q::fromBits(second.rotation),D::fromBits(0x3f000000u));
+    CHECK(std::bit_cast<std::uint32_t>(present->rotation.y)==expected.y.bits());
 }
 TEST_CASE(host_native_configuration_remains_an_explicit_compatibility_boundary) {
     Session s; CHECK_TRUE(s.prepared);

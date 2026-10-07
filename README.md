@@ -119,7 +119,11 @@ world.updatePresentation(frameDt, interpolationAlpha);
 `DetSimTransformComponent` 是独立运行时组件，使用 AYMath `DetVec3`，
 由 Core 类型注册安装；不写 `.ayscene`、不作为编辑器可添加的作者组件。
 与 `Transform` 同时添加后，既有 Core Bridge 自动发布插值平移，保留
-表现层 rotation/scale，不写回 Sim。每实体只能有一个 Sim 平移权威。
+表现层 scale，不写回 Sim。旋转默认不接管；`setRotation(DetQuaternion)` 成功后
+接管旋转，`rotateLocal` 更新局部旋转，Bridge 发布最短半球 nlerp。
+`disableRotation` 释放旋转权威。每实体只能有一个 Sim Transform 权威。
+Snapshot v2 保存两组位置/旋转、scalar/rotation profile 与启用/历史标记；
+旧平移字段须显式解码进新 Snapshot，不能按旧内存布局恢复。
 
 ```cpp
 using D = ayt::math::DetFloat32;

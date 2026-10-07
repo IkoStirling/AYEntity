@@ -5,9 +5,10 @@
 namespace ayt::entity
 {
 
-/// Convert Fixed or DetFloat translation into presentation Transform position.
+/// Publish Fixed/DetFloat translation and opt-in DetQuaternion rotation to Transform.
 /// onUpdate receives alpha, not dt; conflicting authorities/non-finite Det state
-/// are skipped. Native presentation interpolation does not write Sim state.
+/// are skipped before pose writes. Translation uses native presentation arithmetic;
+/// Det rotation uses software nlerp. Neither path writes Sim state.
 class SimToPresentBridgeSystem final : public ISystem {
 public:
     const char* getName() const override { return "SimToPresentBridgeSystem"; }
@@ -16,7 +17,7 @@ public:
     static constexpr int kPriority = 0;
 };
 
-/// Install the core translation Bridge in the active World (SystemLane::Bridge).
+/// Install the one-way translation/rotation Bridge in the active World (SystemLane::Bridge).
 void registerSimToPresentBridgeSystem();
 
 } // namespace ayt::entity

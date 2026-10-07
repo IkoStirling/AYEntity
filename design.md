@@ -1015,7 +1015,7 @@ Sim 系统由 `World` 串行执行。同一 lane 内按 priority 排序，同优
 
 `World::fixedUpdate` 在每个固定步执行 Sim 系统前保存所有 SimTransform 的
 `previousPosition`。Bridge 对前后位置按表现帧 alpha 插值，并保留
-`Transform` 的 rotation/scale；确定性旋转与缩放不在本阶段范围内。
+legacy `Transform` 的 rotation/scale；下述 Det 路线可显式接管旋转，缩放仍属表现层。
 
 2026-10-07 DET-04F：Core 注册独立 `DetSimTransformComponent`（运行时、
 非 sceneSerializable/editorAddable）；旧类型与格式不变。两类状态都在
@@ -1028,14 +1028,37 @@ Sim 开始前统一 snapshot。`World::fixedUpdate(DetFloat32)` 验证正且有�
 手工 legacy context 为空时回退 float。Host 墙钟预算仍只决定 tick 数量。
 
 新组件的 setter/translate 对非有限输入/结果失败且无 mutation/revision；
-restore 在 scalar profile 和两组有限字段校验通过后一起更新，保留历史。
+restore 按下述 v2 schema 校验全部 profile、位置/旋转字段与标记后一起更新，保留历史。
 Snapshot 是字段数据，不是新增文件格式；外部保存约定字节序和输入/RNG
 schema。`importFixed` 软件 nearest-even 转换 raw/65536，可能损失 Q16.16
 低位；需显式移除旧权威。Bridge 遇到双 Sim 类型或无效 Det 字段不发布；
 native double 插值避免极值差溢出，仅用于 Present，不参与权威校验。
-平移之外的 quaternion/scale/physics/script/网络集成尚未实现。
+可选 quaternion 旋转见下述第四阶段扩展；scale/physics/script/网络确定性集成尚未实现。
 
 命中判定应使用 Sim 代理（胶囊 / AABB），由动画在 Present 轨驱动视觉，与 [`ENGINE-DETERMINISM-ARCHITECTURE.md`](../../AYDocs/ENGINE-DETERMINISM-ARCHITECTURE.md) §5.3 一致。
+
+### 14.5.1 浮点旋转扩展（第四阶段，2026-10-07）
+
+`DetSimTransformComponent` 默认只拥有平移。`setRotation` 对有限非零输入
+做软件归一化，首次启用初始化两组旋转、无历史；World 既有 begin-step
+入口在每 tick 的 Sim writer 之前复制已启用的 rotation。`rotateLocal` 使用
+rotation * delta 的归一化合成，不经过 native 类型；`disableRotation` 清理
+历史并释放权威。成功写增加共享 revision，失败不修改任何字段。
+
+Snapshot v2 与 scalar profile 分开编号，包含 rotation profile 1、两组 XYZW
+bits 与 enabled/history 标记。restore 在任何赋值前验证所有版本、有限位置、
+非零有限旋转（包括休眠字段）及“有历史必已启用”，随后原位恢复 bits，
+避免重归一化破坏回放。旧 v1 五项平移字段显式解码进 fresh v2 Snapshot；
+Fixed import 不含旋转，清回 identity/disabled。没有新增持久化文件格式。
+
+Bridge 先校验完整 Det pose，任何非法旋转都阻止部分 Present 写入；以
+software nlerp（归一化端点、最短半球）采样启用的旋转，再位复制到 Transform，
+同步 previousRotation 并关闭二次插值。alpha 仍是表现输入，不写 Sim。
+未启用旋转时保留现有 Present 旋转。外部不得并行改字段或加入竞争 writer。
+
+验收：16 项 DetFloatSim、5 项实际 Host，旋转历史/接管/禁用、失败原子性、
+v2 恢复与 legacy 解码、Bridge 无反馈、256 步逐字段回放；数学 oracle 和
+平台状态见[第四阶段](../../AYDocs/DETERMINISTIC-FLOAT-STAGE4.md)。
 
 ### 14.6 与网络 / 回放的关系
 
