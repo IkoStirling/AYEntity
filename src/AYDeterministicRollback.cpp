@@ -29,6 +29,7 @@ struct DeterministicRollback::Impl {
     DetRollbackConfig cfg;
     std::uint32_t epoch;
     std::uint64_t initial=0, confirmed=0, rollbacks=0, replayed=0;
+    std::uint64_t lastDepth=0, maxDepth=0, predicted=0;
     std::map<std::uint64_t,Snapshot> snapshots;
     std::map<std::uint64_t,std::map<std::uint32_t,DetTickInput>> actual;
     std::map<std::uint32_t,DetTickInput> seed;
@@ -138,7 +139,7 @@ struct DeterministicRollback::Impl {
             }
             for(auto& [t,s]:staged)snapshots.insert_or_assign(t,std::move(s));
             for(auto& [t,in]:inputs)used.insert_or_assign(t,std::move(in));
-            if(tick<head){++rollbacks;replayed+=head-tick;}
+            if(tick<head){++rollbacks;lastDepth=head-tick;maxDepth=std::max(maxDepth,lastDepth);replayed+=lastDepth;}
             confirm();error.clear();return true;
         } catch(const std::exception& e) {
             const std::string diagnostic=e.what();
@@ -197,7 +198,7 @@ bool DeterministicRollback::advance() {
         if(!p.session.advance(in))throw std::runtime_error(p.session.error());
         auto cp=p.session.checkpoint();if(!cp)throw std::runtime_error(p.session.error());
         p.snapshots.emplace(tick+1,Impl::Snapshot{*cp,encodeDetCheckpoint(*cp).size()});
-        p.used.emplace(tick,std::move(in));p.confirm();p.error.clear();return true;
+        p.used.emplace(tick,std::move(in));p.confirm();if(p.confirmed<=tick)++p.predicted;p.error.clear();return true;
     }catch(const std::exception& e){const std::string diagnostic=e.what();
         p.snapshots.erase(tick+1);p.used.erase(tick);
         if(!p.session.restore(before))return p.reject(diagnostic+"; restore failed: "+p.session.error(),true);
@@ -218,6 +219,15 @@ std::vector<DetTickInput> DeterministicRollback::actualInputs(std::uint32_t id) 
 }
 std::optional<DetSessionCheckpoint> DeterministicRollback::checkpointAt(std::uint64_t tick) const {
     auto it=_impl->snapshots.find(tick);if(it==_impl->snapshots.end())return std::nullopt;return it->second.state;
+}
+std::optional<DetTickInput> DeterministicRollback::confirmedInputAt(std::uint64_t tick) const {
+    const auto& p=*_impl;if(tick>=p.confirmed || tick<p.snapshots.begin()->first)return std::nullopt;
+    for(auto id:p.cfg.members)if(!p.has(id,tick))return std::nullopt;
+    return p.merged(tick);
+}
+DetRollbackDiagnostics DeterministicRollback::diagnostics() const {
+    const auto& p=*_impl;return {p.epoch,p.session.nextTick(),p.confirmed,p.confirmed,
+        p.snapshots.begin()->first,p.rollbacks,p.replayed,p.lastDepth,p.maxDepth,p.predicted,p.bytes()};
 }
 std::vector<DetConfirmedEvent> DeterministicRollback::takeConfirmedEvents(std::uint64_t through) {
     auto& p=*_impl;std::vector<DetConfirmedEvent> out;if(p.busy || p.failed)return out;

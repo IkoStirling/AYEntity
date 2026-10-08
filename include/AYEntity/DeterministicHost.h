@@ -2,6 +2,7 @@
 #include <AYEntity/DeterministicReplay.h>
 #include <AYEntity/DeterministicLockstep.h>
 #include <AYEntity/DeterministicRollback.h>
+#include <AYEntity/DeterministicRollbackReplay.h>
 #include <AYGameLoop/IGameLoop.h>
 #include <AYModule/IModule.h>
 
@@ -29,7 +30,7 @@ struct DetHostedSceneRecipe {
     /// Opt-in fixed-roster networking in Live/Record; Replay consumes recorded inputs.
     /// Host owns advance; input samples one local contribution per session tick.
     std::optional<DetLockstepConfig> lockstep;
-    /// Live-only predictive owner, mutually exclusive with lockstep. input request
+    /// Live/Record predictive owner, mutually exclusive with lockstep. input request
     /// targets localInputTick (including delay); samples once, never on resimulation.
     std::optional<DetRollbackNetworkConfig> rollback;
 };
@@ -69,11 +70,15 @@ public:
     /// Faulted/stopped/completed sessions cannot silently resume; recover/restart first.
     bool resume();
     /// One standard Host fixed tick while paused, with normal input/replay validation.
+    /// Schema2 replay may consume a recorded recovery jump before the next input;
+    /// a terminal recovery can complete without executing another Sim tick.
     bool stepOnce();
     /// Live-only checkpoint restore, pauses first; Record history cannot be rewritten.
     bool restore(const DetSessionCheckpoint&);
     /// Replay-only verified seek; pauses first and resets the reader restart boundary.
     bool seek(std::uint64_t nextTick);
+    /// Schema 2 rollback replay: select the epoch explicitly at recovery boundaries.
+    bool seekRollback(std::uint32_t epoch, std::uint64_t nextTick);
     /// Owner-thread ingress at an external frame boundary; authenticate member mapping first.
     /// Invalid packets return false; terminal protocol faults stop controlled simulation.
     bool receiveNetwork(std::uint32_t authenticatedMember, std::span<const std::uint8_t> packet);
@@ -88,13 +93,15 @@ public:
     /// Live-only agreed checkpoint recovery, paused, with a strictly newer epoch.
     /// Every peer must agree the same checkpoint/epoch; no automatic state transfer.
     bool resetNetwork(const DetSessionCheckpoint&, std::uint32_t newEpoch);
-    /// Rollback authority initiates bounded checkpoint transfer/new epoch; Live only.
+    /// Rollback authority initiates bounded checkpoint transfer/new epoch; Live/Record.
     /// Wait for matching fixed-roster hellos before ticking. Explicit pause persists.
     bool beginNetworkRecovery(std::uint32_t newEpoch);
     std::uint64_t networkConfirmedNextTick() const;
     std::uint64_t networkVerifiedNextTick() const;
     std::uint32_t networkEpoch() const;
     std::uint64_t rollbackCount() const;
+    /// Tick frontiers, lag, depth and canonical history byte count; no Sim writes.
+    DetRollbackDiagnostics rollbackDiagnostics() const;
     /// Quarantined presentation effects, released only after all peer hashes agree.
     std::vector<DetConfirmedEvent> takeConfirmedEvents();
     DetHostState state() const;

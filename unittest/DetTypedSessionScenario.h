@@ -1,5 +1,6 @@
 #pragma once
 #include "DetSessionScenario.h"
+#include <AYEntity/DeterministicCollision2D.h>
 
 namespace dettyped_scenario {
 using namespace ayt::entity;
@@ -10,7 +11,7 @@ inline DetTypedStateSchema actorSchema() {
     return {2,1,{{10,std::uint64_t{0}},{20,std::uint64_t{0}},{30,D::fromBits(0x3f000000u)},
         {40,V{}},{50,Q{}},{60,false},{70,DetEntityRef{}},{80,ayt::math::DetVec2{}},{90,std::int32_t{0}}}};
 }
-inline bool configure(DeterministicSession& s,bool reversed=false,bool altered=false) {
+inline bool configure(DeterministicSession& s,bool reversed=false,bool altered=false,bool collision=false) {
     if(!s.registerTypedSchema(actorSchema()) || !s.registerTypedSchema({3,1,{{1,std::uint64_t{0}},{2,std::uint64_t{0}}}})
         || !s.registerGlobalState(3) || !s.registerRandomStream(7,42) || !s.registerRandomStream(8,0))return false;
     auto inputSystem=[](DetTickContext& c){
@@ -23,8 +24,9 @@ inline bool configure(DeterministicSession& s,bool reversed=false,bool altered=f
         if(c.tick()%997==0)c.spawn(1000+c.tick());
         if(c.tick()%997==1)c.despawn(1000+c.tick()-1);return true;
     };
-    auto movement=[altered](DetTickContext& c){
+    auto movement=[altered,collision](DetTickContext& c){
         for(auto id:c.entities()) {
+            if(collision && (id==200 || id==201))continue; // Collision is their sole XY owner.
             c.write(id,2,10,c.read<std::uint64_t>(id,2,10)+ayt::math::random_uint(c.random(7),100));
             c.write(id,2,20,c.read<std::uint64_t>(id,2,20)+1+static_cast<unsigned>(altered));
             const auto speed=c.read<D>(id,2,30);
@@ -42,6 +44,22 @@ inline bool configure(DeterministicSession& s,bool reversed=false,bool altered=f
     if(reversed) {
         if(!s.registerSystem(20,0,movement) || !s.registerSystem(10,0,inputSystem))return false;
     }else if(!s.registerSystem(10,0,inputSystem) || !s.registerSystem(20,0,movement))return false;
+    if(collision) {
+        DetCollision2DConfig policy;policy.extended=true;policy.maxBodies=4;policy.maxTriggerPairs=1;
+        if(!installDetCollision2D(s,policy) || !s.registerSystem(25,0,[policy](DetTickContext& c){
+            int sign=1;for(const auto& command:c.input().commands)
+                if(command.source==1 && !command.payload.empty())sign=command.payload.front()%2?-1:1;
+            c.write(200,policy.bodySchema,DetBodyVelocity,ayt::math::DetVec2::fromInts(640*sign,0));
+            return c.pose(200).setPosition(V::fromInts(-5*sign,40,0));
+        }))return false;
+        DetActorState moving,trigger;DetSimTransformComponent pose;
+        (void)pose.setPosition(V::fromInts(-5,40,0));moving.pose=pose.snapshot();
+        (void)pose.setPosition(V::fromInts(0,40,0));trigger.pose=pose.snapshot();
+        moving.blocks[4]=detCollisionBodyState2D(policy,{DetBodyMode2D::Kinematic,ayt::math::DetVec2::fromInts(1,1)});
+        DetCollisionBody2D body;body.mode=DetBodyMode2D::Static;body.half=ayt::math::DetVec2::fromInts(1,1);body.trigger=true;
+        trigger.blocks[4]=detCollisionBodyState2D(policy,body);
+        if(!s.addEntity(200,moving) || !s.addEntity(201,trigger))return false;
+    }
     DetActorState a;DetSimTransformComponent p;(void)p.setRotation({});a.pose=p.snapshot();
     // Initial typed state uses the same checked codec as callback access.
     a.blocks[2]=detStateDefaults(actorSchema());writeDetState(actorSchema(),a.blocks[2],70,DetEntityRef{100});

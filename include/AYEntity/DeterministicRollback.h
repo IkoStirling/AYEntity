@@ -26,6 +26,13 @@ struct DetConfirmedEvent {
     DetTickCommand command;
     friend bool operator==(const DetConfirmedEvent&,const DetConfirmedEvent&)=default;
 };
+/// Owner-thread counters only; tick lags convert to time outside authoritative Sim.
+struct DetRollbackDiagnostics {
+    std::uint32_t epoch=0;
+    std::uint64_t head=0, confirmed=0, verified=0, oldest=0;
+    std::uint64_t rollbacks=0, replayedTicks=0, lastDepth=0, maxDepth=0;
+    std::uint64_t predictedTicks=0, bufferedBytes=0;
+};
 /** @brief Bounded input history, software-state rollback and confirmed effects.
  * @note Sole Session tick owner, on one thread at quiescent boundaries. Submit
  * complete per-member frames. Missing frames use the most recent EARLIER actual
@@ -56,6 +63,9 @@ public:
     bool hasInput(std::uint32_t member, std::uint64_t tick) const;
     std::vector<DetTickInput> actualInputs(std::uint32_t member) const;
     std::optional<DetSessionCheckpoint> checkpointAt(std::uint64_t nextTick) const;
+    /// Retained complete real merged frame only; predictions are never returned.
+    std::optional<DetTickInput> confirmedInputAt(std::uint64_t tick) const;
+    DetRollbackDiagnostics diagnostics() const;
     /// Drain once, in tick/(producer,sequence) order. Network callers additionally
     /// bound throughNextTick by the peer-verified hash frontier. Application owns
     /// reliable delivery after draining; Session.emit remains next-tick Sim input.
@@ -115,6 +125,11 @@ public:
     const std::string& error() const;
     const DetRollbackNetworkConfig& config() const;
     const DeterministicRollback& history() const;
+    DetRollbackDiagnostics diagnostics() const;
+    /// Read-only recovery evidence for recording; never drains presentation events.
+    std::uint64_t epochInitialTick() const;
+    std::uint64_t recoveryJournalStart() const;
+    std::vector<DetConfirmedEvent> recoveryJournal() const;
 private:
     struct Impl;
     std::unique_ptr<Impl> _impl;

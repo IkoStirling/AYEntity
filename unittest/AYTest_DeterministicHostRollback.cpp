@@ -51,13 +51,13 @@ TEST_CASE(pause_survives_ingress_and_authority_recovery_resumes_through_standard
     f.frame();CHECK(f.controller.session()->nextTick()==1 && samples==1);
     CHECK_TRUE(f.controller.resume());f.frame();CHECK(samples==2 && f.controller.session()->nextTick()==2);
 }
-TEST_CASE(rollback_recipe_rejects_record_replay_and_two_tick_owners_before_configuration) {
+TEST_CASE(rollback_recipe_rejects_replay_empty_record_path_and_two_tick_owners) {
     for(auto mode:{DetHostMode::Record,DetHostMode::Replay}) {Fixture f;unsigned samples=0;auto r=recipe(samples);r.mode=mode;
         CHECK_FALSE(f.bind(r));CHECK(samples==0);}
     Fixture f;unsigned samples=0;auto r=recipe(samples);r.lockstep=DetLockstepConfig{92,1,1,{1,2}};CHECK_FALSE(f.bind(r));
 }
 TEST_CASE(actual_host_matches_owned_baseline_after_10000_delayed_ticks_with_exact_effects) {
-    Fixture f;unsigned samples=0;CHECK_TRUE(f.bind(recipe(samples)));
+    Fixture f;unsigned samples=0;auto recording=recipe(samples);recording.mode=DetHostMode::Record;recording.replayPath=path("rollback-10000.rpl");recording.checkpointInterval=300;CHECK_TRUE(f.bind(recording));
     DeterministicSession s({1,1,1,64,0}),baseline({1,1,1,64,0});
     CHECK_TRUE(dettyped_scenario::configure(s,true));CHECK_TRUE(dettyped_scenario::configure(baseline));
     DeterministicRollbackNetwork remote(s,config(2));
@@ -78,5 +78,20 @@ TEST_CASE(actual_host_matches_owned_baseline_after_10000_delayed_ticks_with_exac
     CHECK(samples==10000 && f.controller.networkSynchronized() && actual==expected);
     CHECK(encodeDetCheckpoint(*f.controller.checkpoint())==encodeDetCheckpoint(*baseline.checkpoint()));
     CHECK(encodeDetCheckpoint(*s.checkpoint())==encodeDetCheckpoint(*baseline.checkpoint()));
+    const auto diagnostics=f.controller.rollbackDiagnostics();
+    CHECK(diagnostics.head==10000 && diagnostics.verified==10000 && diagnostics.maxDepth>0 && diagnostics.replayedTicks>=diagnostics.rollbacks);
+    const auto final=encodeDetCheckpoint(*baseline.checkpoint());const auto file=f.controller.recordingPath();
+    CHECK_TRUE(f.controller.stop());
+    DetRollbackReplayReader reader;CHECK_TRUE(reader.open(file));CHECK_TRUE(reader.restoreInitial(baseline));
+    std::vector<DetConfirmedEvent> replayEffects;
+    while(!reader.atEnd()){const bool progressed=reader.advance(baseline);CHECK_TRUE(progressed);if(!progressed)break;auto e=reader.takeConfirmedEvents();replayEffects.insert(replayEffects.end(),e.begin(),e.end());}
+    CHECK(replayEffects==expected && encodeDetCheckpoint(*baseline.checkpoint())==final);
+    CHECK_TRUE(reader.seek(baseline,1,7351));CHECK(reader.takeConfirmedEvents().empty());
+    while(!reader.atEnd()){const bool progressed=reader.advance(baseline);CHECK_TRUE(progressed);if(!progressed)break;}
+    CHECK(encodeDetCheckpoint(*baseline.checkpoint())==final);
+    f.controller.disconnect();CHECK_TRUE(f.bind(Fixture::recipe(DetHostMode::Replay,file)));
+    CHECK_TRUE(f.controller.seekRollback(1,9999));CHECK(f.controller.takeConfirmedEvents().empty());
+    CHECK_TRUE(f.controller.stepOnce());CHECK(f.controller.state()==DetHostState::Completed);
+    CHECK(encodeDetCheckpoint(*f.controller.checkpoint())==final && f.controller.takeConfirmedEvents().size()>0);
 }
 TEST_SUITE_END

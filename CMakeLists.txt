@@ -100,7 +100,7 @@ if(TARGET AYReplay)
     add_library(AYEntity::DeterminismKernel ALIAS AYEntityDeterminismKernel)
     ay_configure_entity_target(AYEntityDeterminismKernel)
     target_link_libraries(AYEntityDeterminismKernel PUBLIC AYMath AYReplay)
-    add_library(AYEntityDeterminism STATIC src/AYDeterministicSessionWorld.cpp src/AYDeterministicReplay.cpp)
+    add_library(AYEntityDeterminism STATIC src/AYDeterministicSessionWorld.cpp src/AYDeterministicReplay.cpp src/AYDeterministicRollbackReplay.cpp)
     add_library(AYEntity::Determinism ALIAS AYEntityDeterminism)
     ay_configure_entity_target(AYEntityDeterminism)
     target_link_libraries(AYEntityDeterminism PUBLIC AYEntityCore AYEntityDeterminismKernel AYReplay)
@@ -119,21 +119,26 @@ function(ay_entity_add_determinism_host_integration)
     target_compile_options(AYEntityDeterminismHost PRIVATE
         $<$<CXX_COMPILER_ID:MSVC>:/W4>
         $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
-    if(BUILD_TESTING)
+      if(BUILD_TESTING)
+        add_executable(AYEntity_DeterministicRollbackReplayWorker "${_root}/unittest/DeterministicRollbackReplayWorker.cpp")
+        target_link_libraries(AYEntity_DeterministicRollbackReplayWorker PRIVATE AYEntityDeterminism)
         add_executable(AYEntity_DeterministicHostSessionTests
             "${_root}/unittest/DeterministicHostSessionTestMain.cpp"
             "${_root}/unittest/AYTest_DeterministicHostSession.cpp"
             "${_root}/unittest/AYTest_DeterministicHostNetwork.cpp"
-            "${_root}/unittest/AYTest_DeterministicHostRollback.cpp")
+            "${_root}/unittest/AYTest_DeterministicHostRollback.cpp"
+            "${_root}/unittest/AYTest_DeterministicRollbackReplay.cpp")
         target_link_libraries(AYEntity_DeterministicHostSessionTests PRIVATE AYEntityDeterminismHost AYTest)
         ay_add_test(AYEntity_DeterministicHostSessionTests LABELS "ayentity;determinism;host;replay" TIMEOUT 240 RUN_SERIAL)
         if(TARGET AYNetwork AND WIN32)
             add_executable(AYEntity_DeterministicHostRollbackWorker "${_root}/unittest/DeterministicHostRollbackWorker.cpp")
             target_link_libraries(AYEntity_DeterministicHostRollbackWorker PRIVATE AYEntityDeterminismHost AYNetwork)
+            add_dependencies(AYEntity_DeterministicHostRollbackWorker AYEntity_DeterministicRollbackReplayWorker)
             add_test(NAME AYEntity_DeterministicHostRollbackProcesses COMMAND pwsh -NoProfile -File
                 "${_root}/unittest/RunDeterministicNetworkCheck.ps1" -Worker $<TARGET_FILE:AYEntity_DeterministicHostRollbackWorker>
-                -OutputDir "${CMAKE_CURRENT_BINARY_DIR}/host-rollback-process-check" -TimeoutSeconds 330 -CompareTrace)
-            set_tests_properties(AYEntity_DeterministicHostRollbackProcesses PROPERTIES TIMEOUT 720 RUN_SERIAL TRUE LABELS "ayentity;determinism;host;network;rollback;process")
+                -OutputDir "${CMAKE_CURRENT_BINARY_DIR}/host-rollback-process-check" -TimeoutSeconds 660 -CompareTrace
+                -ReplayWorker $<TARGET_FILE:AYEntity_DeterministicRollbackReplayWorker>)
+            set_tests_properties(AYEntity_DeterministicHostRollbackProcesses PROPERTIES TIMEOUT 1440 RUN_SERIAL TRUE LABELS "ayentity;determinism;host;network;rollback;process")
             add_executable(AYEntity_DeterministicHostNetworkWorker "${_root}/unittest/DeterministicHostNetworkWorker.cpp")
             target_link_libraries(AYEntity_DeterministicHostNetworkWorker PRIVATE AYEntityDeterminismHost AYNetwork)
             add_test(NAME AYEntity_DeterministicHostNetworkProcesses COMMAND pwsh -NoProfile -File

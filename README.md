@@ -341,13 +341,47 @@ prediction never reads future actual frames or previous guesses.
 
 DeterministicRollbackNetwork adds fixed admitted members, inputDelay, actual-only
 hashes, all-peer verified effects and trusted recoveryMember checkpoint/event-journal
-chunk transfer. Standard Host opts into Live recipe.rollback exclusively; input
+chunk transfer. Standard Host opts into Live/Record recipe.rollback exclusively; input
 request.tick includes delay, no sampling or Host clock advancement on resimulation.
 Controller exposes confirmed/verified/epoch diagnostics, takeConfirmedEvents and
-beginNetworkRecovery. Explicit pause persists. Record/Replay rollback recipes reject.
+beginNetworkRecovery. Explicit pause persists. Record appends peer-verified real input; Replay uses schema2 with no live rollback owner.
 
 Portable AYEntity_RollbackChecks exercises 10000-tick typed/RNG/topology and collision
 rollback, 0/2-tick delayed network loss/reordering/duplicates, budgets, identity,
 multi-chunk recovery and pending-effect preservation. Standard Host unit/process
 gates cover actual integration. Full bounds/contracts and recorded platform status:
 [Stage14](../../AYDocs/DETERMINISTIC-ROLLBACK-STAGE14.md).
+
+
+## Stage15: confirmed rollback recording and reproduction
+
+Link Determinism and include DeterministicRollbackReplay.h. The recording writer
+observes verified retained history, never advances/restores Sim and never writes
+predictions. Host Record+rollback syncs on ingress/forward/recovery, seals only the
+verified prefix, and records speculative head metadata. Host Replay auto-detects
+schema2; seekRollback(epoch,nextTick) and confirmed effects use the same controller.
+
+Existing .rpl container header.version=1 (current v2 player) gains adapter schema2 event0x20006: bounded LE/FNV
+profile1 initial state, real input+witness, epoch recovery snapshot+repair events,
+and completion seal. Schema1 is unchanged. Recovery may skip unavailable real
+input; segments expose skippedTicks, gap interior seek rejects, and snapshot gaps
+are trusted recovery rather than proof of simulation. Matching checkpoint/manifest
+and monotonic epoch/frontiers are validated before playback; missing seals,
+corruption, unknown records and incompatible witnesses fail. Bound: 256 MiB stored
+and decoded, 100000 container records, each adapter record <=8 MiB. No file rotation.
+
+Recorder sync must run after every network mutation/before recovery; failures stop
+recording. Reader seek clears pending effects and suppresses seek replay; backward
+playback needs presentation reset. Tick/confirmation/verification frontiers,
+rollback/replayed/last/max depth, speculative forward ticks and canonical history
+bytes are observable without writing Sim. Counters reset per epoch; byte count is
+not allocator heap size and network transfer buffers are separate.
+
+AYTest_DeterministicRollbackReplay covers prefix sealing, unsealed/overwrite and
+corruption rejection, exact effects, epoch seek, changed-logic first-field diagnosis
+and asymmetric snapshot-gap recovery. The actual Host/AYNetwork worker runs a
+10000-tick typed/RNG/topology/collision example, delayed/dropped/reordered inputs,
+epoch2 recovery, confirmed recording/replay/seek and diagnostic CSV output.
+See [Stage15](../../AYDocs/DETERMINISTIC-ROLLBACK-REPLAY-STAGE15.md).
+
+The offline AYEntity_DeterministicRollbackReplayWorker accepts recording.rpl, expected.state and optional epoch/nextTick; verifies full bytes and event identity trace, prints segment/gap/first-field diagnostics, without Host/network.

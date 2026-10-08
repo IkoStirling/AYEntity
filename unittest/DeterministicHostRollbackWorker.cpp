@@ -21,12 +21,18 @@ int main(int argc,char** argv) {
         cfg.sessionId=95;cfg.localMember=member;cfg.recoveryMember=1;cfg.rollback.members={1,2};
         cfg.rollback.historyTicks=16;cfg.rollback.maxPredictionTicks=8;
         cfg.rollback.prediction={{1,DetPredictionMode::Hold}};recipe.rollback=cfg;
-        recipe.configure=[member](auto& s){return dettyped_scenario::configure(s,member==2);};
+        recipe.mode=DetHostMode::Record;recipe.replayPath=output+".rpl";
+        recipe.configure=[member](auto& s){return dettyped_scenario::configure(s,member==2,false,true);};
         std::uint64_t samples=0,rollbacks=0;
         recipe.input=[&](const auto& request,auto& in){++samples;in=detsession_scenario::input(request.tick,member==2);
             std::erase_if(in.commands,[&](const auto& c){return c.source!=member;});return true;};
         if(!f.bind(recipe))throw std::runtime_error(f.controller.error());
-        DeterministicSession baseline({1,1,1,64,0});if(!dettyped_scenario::configure(baseline))throw std::runtime_error("baseline configure");
+        DeterministicSession baseline({1,1,1,64,0});if(!dettyped_scenario::configure(baseline,false,false,true))throw std::runtime_error("baseline configure");
+        std::ofstream diagnostics(output+".diagnostics.csv");
+        diagnostics<<"frame,epoch,head,confirmed,verified,rollbacks,replayed,last_depth,max_depth,predicted,canonical_bytes\n";
+        auto report=[&](std::uint64_t frame){const auto d=f.controller.rollbackDiagnostics();
+            diagnostics<<frame<<','<<d.epoch<<','<<d.head<<','<<d.confirmed<<','<<d.verified<<','<<d.rollbacks<<','<<d.replayedTicks<<','
+                <<d.lastDepth<<','<<d.maxDepth<<','<<d.predictedTicks<<','<<d.bufferedBytes<<'\n';};
         std::vector<DetConfirmedEvent> expected,actual;
         for(std::uint64_t tick=0;tick<10000;++tick){if(!baseline.advance(detsession_scenario::input(tick)))throw std::runtime_error(baseline.error());
             const auto cp=baseline.checkpoint();for(const auto& c:cp->pendingEvents)expected.push_back({tick<5000?1u:2u,tick,c});}
@@ -41,7 +47,7 @@ int main(int argc,char** argv) {
             const auto* begin=static_cast<const std::uint8_t*>(data);
             pending.push_back({Clock::now()+std::chrono::milliseconds(received%3),{begin,begin+size}});});
         if(member==1)net->listen(port);else net->connect("127.0.0.1",port);
-        const auto deadline=Clock::now()+std::chrono::seconds(300);
+        const auto deadline=Clock::now()+std::chrono::seconds(600);
         auto lastResend=Clock::time_point{},completed=Clock::time_point{};
         std::set<std::vector<std::uint8_t>> sent;
         std::uint64_t frame=0,lastTick=UINT64_MAX,lastSamples=UINT64_MAX,lastReport=0;
@@ -68,7 +74,7 @@ int main(int argc,char** argv) {
                 sent={packets.begin(),packets.end()};
                 if(resend)lastResend=Clock::now();lastTick=tick;lastSamples=samples;
             }
-            if(tick>=lastReport+1000){lastReport=tick;std::cout<<"PROGRESS member="<<member<<" tick="<<tick<<" verified="<<f.controller.networkVerifiedNextTick()<<" epoch="<<f.controller.networkEpoch()<<std::endl;}
+            if(tick>=lastReport+1000){lastReport=tick;report(frame);std::cout<<"PROGRESS member="<<member<<" tick="<<tick<<" verified="<<f.controller.networkVerifiedNextTick()<<" epoch="<<f.controller.networkEpoch()<<std::endl;}
             if(tick==10000 && f.controller.networkSynchronized()) {
                 if(completed==Clock::time_point{})completed=Clock::now();
                 if(Clock::now()-completed>std::chrono::seconds(1))break;
@@ -84,6 +90,17 @@ int main(int argc,char** argv) {
         {std::ofstream state(output,std::ios::binary);state.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());}
         {std::ofstream trace(output+".trace");for(const auto& e:actual)trace<<e.epoch<<' '<<e.tick<<' '<<e.command.source<<' '<<e.command.sequence<<' '<<e.command.type<<'\n';}
         rollbacks+=f.controller.rollbackCount();
-        std::cout<<"PASS actual Host/AYNetwork rollback 10000 ticks, samples="<<samples<<", rollbacks="<<rollbacks<<", confirmed effects="<<actual.size()<<", recovery epoch=2\n";
+        report(frame);if(!diagnostics)throw std::runtime_error("diagnostic CSV write failed");
+        const auto recording=f.controller.recordingPath();
+        if(!f.controller.stop())throw std::runtime_error(f.controller.error());
+        DetRollbackReplayReader reader;if(!reader.open(recording) || !reader.restoreInitial(baseline))throw std::runtime_error(reader.error());
+        std::vector<DetConfirmedEvent> replayEffects;
+        while(!reader.atEnd()){if(!reader.advance(baseline))throw std::runtime_error(reader.error());
+            auto e=reader.takeConfirmedEvents();replayEffects.insert(replayEffects.end(),e.begin(),e.end());}
+        if(replayEffects!=expected || encodeDetCheckpoint(*baseline.checkpoint())!=bytes)throw std::runtime_error("recorded state/effect baseline mismatch");
+        if(!reader.seek(baseline,2,7351) || !reader.takeConfirmedEvents().empty())throw std::runtime_error("epoch seek failed/not silent");
+        while(!reader.atEnd()) {if(!reader.advance(baseline))throw std::runtime_error(reader.error());(void)reader.takeConfirmedEvents();}
+        if(encodeDetCheckpoint(*baseline.checkpoint())!=bytes)throw std::runtime_error("seek final state mismatch");
+        std::cout<<"PASS actual Host/AYNetwork rollback + confirmed record/replay/epoch seek + collision 10000 ticks, samples="<<samples<<", rollbacks="<<rollbacks<<", confirmed effects="<<actual.size()<<", recovery epoch=2\n";
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }

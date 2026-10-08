@@ -43,6 +43,12 @@ void coreChecks() {
         require(r.confirmedNextTick()==10000 && encodeDetCheckpoint(*s.checkpoint())==encodeDetCheckpoint(*baseline.checkpoint()),"10000 corrected full bytes");
         require(actual==expected && r.takeConfirmedEvents().empty(),"confirmed effects exactly once and no predicted effects");
         require(r.rollbackCount()>1 && r.replayedTicks()>0 && r.oldestTick()>9000,"rollback and bounded eviction exercised");
+        const auto d=r.diagnostics();
+        require(d.head==10000 && d.confirmed==10000 && d.verified==10000 && d.epoch==1
+            && d.maxDepth>=d.lastDepth && d.maxDepth>0 && d.predictedTicks>0 && d.bufferedBytes<=r.config().maxBufferedBytes,
+            "read-only rollback diagnostics and canonical byte budget");
+        auto expectedReal=input(9999);std::string diagnostic;require(canonicalizeDetInput(expectedReal,diagnostic),diagnostic);
+        require(!r.confirmedInputAt(0) && r.confirmedInputAt(9999)==expectedReal,"only retained canonical real merged frames exposed");
         if(collision)require(detCheckpointHash(*s.checkpoint())==0x0e0940a868bb4d4dull,"existing extended collision golden");
         std::cout<<"PASS "<<(collision?"collision":"RNG/typed/structural")<<" rollback 10000 ticks, exact state/effects, replayed="<<r.replayedTicks()<<'\n';
     }

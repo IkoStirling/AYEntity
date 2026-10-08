@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Worker,[Parameter(Mandatory=$true)][string]$OutputDir,[int]$TimeoutSeconds=70,[switch]$CompareTrace)
+param([Parameter(Mandatory=$true)][string]$Worker,[Parameter(Mandatory=$true)][string]$OutputDir,[int]$TimeoutSeconds=70,[switch]$CompareTrace,[string]$ReplayWorker)
 $ErrorActionPreference='Stop'
 $ownedOutput=[IO.Path]::GetFullPath($OutputDir)
 $run=Join-Path $ownedOutput ([Guid]::NewGuid().ToString('N'))
@@ -17,6 +17,10 @@ try {
     foreach($peer in $peers){if(-not $peer.WaitForExit($TimeoutSeconds*1000)){throw 'Network worker timed out'}}
     foreach($member in 1,2){Get-Content (Join-Path $run "$member.log");Get-Content (Join-Path $run "$member.error")}
     foreach($peer in $peers){if($peer.ExitCode -ne 0){throw "Network worker exit $($peer.ExitCode)"}}
+    if($ReplayWorker){foreach($member in 1,2){
+        & $ReplayWorker (Join-Path $run "$member.state_000.rpl") (Join-Path $run "$member.state") 2 7351
+        if($LASTEXITCODE -ne 0){throw "Offline rollback replay worker exit $LASTEXITCODE"}
+    }}
     $a=[IO.File]::ReadAllBytes((Join-Path $run '1.state'));$b=[IO.File]::ReadAllBytes((Join-Path $run '2.state'))
     if([Convert]::ToBase64String($a) -cne [Convert]::ToBase64String($b)){throw 'Peer checkpoint bytes differ'}
     if($CompareTrace){

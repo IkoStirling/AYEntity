@@ -309,4 +309,12 @@ bool DeterministicRollbackNetwork::faulted() const{return _impl->faulted();}
 const std::string& DeterministicRollbackNetwork::error() const{return _impl->error.empty()?_impl->core->error():_impl->error;}
 const DetRollbackNetworkConfig& DeterministicRollbackNetwork::config() const{return _impl->cfg;}
 const DeterministicRollback& DeterministicRollbackNetwork::history() const{return *_impl->core;}
+DetRollbackDiagnostics DeterministicRollbackNetwork::diagnostics() const {
+    auto d=_impl->core->diagnostics();d.verified=_impl->verified;return d;
+}
+std::uint64_t DeterministicRollbackNetwork::epochInitialTick() const{return _impl->initial;}
+std::uint64_t DeterministicRollbackNetwork::recoveryJournalStart() const{return _impl->journalStart;}
+std::vector<DetConfirmedEvent> DeterministicRollbackNetwork::recoveryJournal() const {
+    return {_impl->journal.begin(),_impl->journal.end()};
+}
 } // namespace ayt::entity
