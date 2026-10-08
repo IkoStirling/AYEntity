@@ -93,6 +93,7 @@ public:
     const std::optional<DetStateDifference>& difference() const;
 private:
     friend class DetRollbackReplayArchive;
+    friend class DetReplayRegression;
     struct Impl; std::unique_ptr<Impl> _impl;
 };
 struct DetReplayArchiveReport {

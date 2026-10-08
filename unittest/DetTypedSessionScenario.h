@@ -11,7 +11,7 @@ inline DetTypedStateSchema actorSchema() {
     return {2,1,{{10,std::uint64_t{0}},{20,std::uint64_t{0}},{30,D::fromBits(0x3f000000u)},
         {40,V{}},{50,Q{}},{60,false},{70,DetEntityRef{}},{80,ayt::math::DetVec2{}},{90,std::int32_t{0}}}};
 }
-inline bool configure(DeterministicSession& s,bool reversed=false,bool altered=false,bool collision=false) {
+inline bool configure(DeterministicSession& s,bool reversed=false,bool altered=false,bool collision=false,std::uint64_t alteredAt=0) {
     if(!s.registerTypedSchema(actorSchema()) || !s.registerTypedSchema({3,1,{{1,std::uint64_t{0}},{2,std::uint64_t{0}}}})
         || !s.registerGlobalState(3) || !s.registerRandomStream(7,42) || !s.registerRandomStream(8,0))return false;
     auto inputSystem=[](DetTickContext& c){
@@ -24,11 +24,11 @@ inline bool configure(DeterministicSession& s,bool reversed=false,bool altered=f
         if(c.tick()%997==0)c.spawn(1000+c.tick());
         if(c.tick()%997==1)c.despawn(1000+c.tick()-1);return true;
     };
-    auto movement=[altered,collision](DetTickContext& c){
+    auto movement=[altered,collision,alteredAt](DetTickContext& c){
         for(auto id:c.entities()) {
             if(collision && (id==200 || id==201))continue; // Collision is their sole XY owner.
             c.write(id,2,10,c.read<std::uint64_t>(id,2,10)+ayt::math::random_uint(c.random(7),100));
-            c.write(id,2,20,c.read<std::uint64_t>(id,2,20)+1+static_cast<unsigned>(altered));
+            c.write(id,2,20,c.read<std::uint64_t>(id,2,20)+1+static_cast<unsigned>(altered && c.tick()>=alteredAt));
             const auto speed=c.read<D>(id,2,30);
             const V velocity{speed,D::fromInt(ayt::math::random_int(c.random(8),-2,2)),{}};
             c.write(id,2,40,velocity);

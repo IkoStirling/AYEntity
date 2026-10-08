@@ -1631,3 +1631,36 @@ exact prefix state and source preservation. Fixed checked-in Windows 128-tick,
 five-file/two-epoch archive and state/event byte oracles are read by native CI
 with actual AYReplay/AYIO/LZ4 adapters. Full Host/AYNetwork remains Windows-only.
 See [Stage18](../../AYDocs/DETERMINISTIC-REPLAY-RECOVERY-STAGE18.md).
+
+## Stage19: executable regressions, witness comparison and short repros
+
+Include `DeterministicReplayRegression.h`, link `AYEntity::Determinism`. Supply an
+application factory returning a fresh configured/sealed Session to `verify` or
+`runnerMain`. `compare` sequentially compares logical input/state/event records,
+ignoring physical segmentation and restart layout; equal recorded witnesses are
+not an executable proof. Reports distinguish version/initial/input/state/event/
+recovery/range/file/execution/budget failures, with exact stable field/input details.
+Trusted recovery gaps and event repair remain explicit, separately counted; recovered
+prefix flags persist after successful verification. No Sim is invented from a file.
+
+`writeArtifacts` publishes report.json in a NEW directory. Locatable failures also
+export independently sealed schema2 left/right_000.rpl cases (previous full
+checkpoint plus one input/recovery), original manifest and available actual state.
+These are constructed diagnostic cases, not full original sessions. Re-reading
+checks reported record identity. Registered-state closure is required for a
+one-step repro; hidden callback/external state cannot be reconstructed.
+
+`ayreplay verify SOURCE RUNNER NEW_DIR [TIMEOUT_MS]`, `compare LEFT RIGHT NEW_DIR`
+and `reproduce PACKAGE_DIR RUNNER NEW_DIR [TIMEOUT_MS]` complement Stage18 commands.
+The tool uses AYPlatform owned shell-free processes, default300s/bounded output;
+exit0 without a bounded protocol report is rejected. Application runners use
+`--ayreplay-verify SOURCE NEW_DIR`. Global logical record and decoded artifact
+budgets apply, in addition to existing file/record bounds. Inputs stay immutable.
+
+ReplayRegressionChecks executes the fixed Windows archive, checks layout-independent
+equality and input/state/event/version/gap/range distinctions, source identity,
+budgets and short repros. ReplayRegressionProcesses injects an epoch2/tick96 fault
+after physical transitions; an independent one-tick run must reproduce all difference
+fields. Spaced/special paths, deadlines, missing runner/report and bad arguments are
+tested. Native CI uploads reports, repros, actual state and exact module/root revisions
+even on failure. See [Stage19](../../AYDocs/DETERMINISTIC-REGRESSION-STAGE19.md).

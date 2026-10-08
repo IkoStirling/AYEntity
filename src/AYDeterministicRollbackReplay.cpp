@@ -1,4 +1,5 @@
 #include <AYEntity/DeterministicRollbackReplay.h>
+#include <AYEntity/DeterministicReplayRegression.h>
 #include <AYReplay/FileReplayRecorder.h>
 #include <AYReplay/FileReplayPlayer.h>
 #include "detail/DetSessionWire.h"
@@ -207,6 +208,7 @@ const std::string& DetRollbackReplayWriter::error() const{return _impl->error;}
 struct DetRollbackReplayReader::Impl {
     struct Entry {
         std::uint32_t epoch=0;
+        std::uint64_t offset=0,recordHash=0;
         DetSessionCheckpoint state;
         std::optional<DetTickInput> input;
         std::vector<DetConfirmedEvent> repair;
@@ -291,7 +293,7 @@ bool DetRollbackReplayReader::open(std::string path) {
                     throw std::runtime_error("Invalid rollback replay completion");
                 p.speculativeHead=head;sealed=true;continue;
             }
-            Impl::Entry e;e.epoch=epoch;
+            Impl::Entry e;e.epoch=epoch;e.offset=offset;e.recordHash=replay::fnv1a64(data.data(),data.size());
             std::uint64_t previous=0;
             if(kind==1) {
                 const auto restart=r.u32();if(restart>1)throw std::runtime_error("Invalid restart flag");e.restart=restart!=0;
@@ -528,3 +530,5 @@ DetReplayArchiveReport DetRollbackReplayArchive::rebuildIndex(const std::string&
     return report;
 }
 } // namespace ayt::entity
+
+#include "detail/DetReplayRegression.inl"
