@@ -1609,3 +1609,25 @@ See [Stage17](../../AYDocs/DETERMINISTIC-ROLLBACK-ARCHIVE-STAGE17.md).
 Windows x64 MSVC Host/replay regression: Release8.70s, Debug144.49s; actual dual
 process network/archive + offline playback/seek589.45s PASS. Each archive11 files,
 10000 ticks/30910 exact events; Release independently reads both Debug archives.
+
+## Stage18: offline interruption recovery and archive inspection
+
+Link `AYEntity::Determinism`, include `DeterministicRollbackReplay.h` and call
+`DetRollbackReplayArchive::inspect`, `scan` or `rebuildIndex`. Build
+`AYEntity_ReplayArchiveTool` for `ayreplay inspect|scan|recover|rebuild` JSON CLI.
+Scanning derives ordinal filenames from .rpi/.rpi.partial, ignoring source index
+bytes. Stop at the first missing/invalid/discontinuous/budget segment; retain only
+independently sealed files. Rebuild copies into a NEW directory, verifies hashes
+and serialized metadata, then publishes profile2 .rpi. Original files stay intact.
+Recovered prefixes remain explicitly marked by Reader.recovery() and Host
+replayRecovery(), even when atEnd()/playbackCompleted(). No unsealed-tail salvage,
+gap skipping, Sim execution proof, authentication or power-loss durability promise.
+Inputs/output must be quiescent. Budgets and naming rules remain Stage17's.
+Profile1 writer and schema2 .rpl stay unchanged; older readers reject profile2.
+
+ArchiveChecks covers a process exiting without destructors, malformed recovery
+metadata, lost/corrupt index, middle gaps, truncated tail, discontinuous splice,
+exact prefix state and source preservation. Fixed checked-in Windows 128-tick,
+five-file/two-epoch archive and state/event byte oracles are read by native CI
+with actual AYReplay/AYIO/LZ4 adapters. Full Host/AYNetwork remains Windows-only.
+See [Stage18](../../AYDocs/DETERMINISTIC-REPLAY-RECOVERY-STAGE18.md).

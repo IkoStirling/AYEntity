@@ -113,6 +113,8 @@ public:
     std::optional<DetSessionCheckpoint> checkpoint() const;
     const DeterministicSession* session() const;
     std::string recordingPath() const;
+    /// Replay source status: present for recovered prefixes, independent of Completed.
+    std::optional<DetReplayArchiveRecovery> replayRecovery() const;
     const std::optional<DetStateDifference>& difference() const;
 private:
     struct Impl;

@@ -434,6 +434,9 @@ std::optional<DetSessionCheckpoint> DeterministicHostController::checkpoint() co
 }
 const DeterministicSession* DeterministicHostController::session() const { return _impl->session.get(); }
 std::string DeterministicHostController::recordingPath() const { return _impl->lastRecordingPath; }
+std::optional<DetReplayArchiveRecovery> DeterministicHostController::replayRecovery() const {
+    return _impl->rollbackReader?_impl->rollbackReader->recovery():std::nullopt;
+}
 const std::optional<DetStateDifference>& DeterministicHostController::difference() const { return _impl->difference; }
 DeterministicHostController* deterministicHost(app::IEngineHost& host) noexcept {
     return host.service<DeterministicHostController>(kDeterministicHostService);

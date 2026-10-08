@@ -67,3 +67,53 @@ add_test(NAME AYEntity_LockstepProtocolChecks COMMAND AYEntity_LockstepProtocolC
 set_tests_properties(AYEntity_LockstepProtocolChecks PROPERTIES TIMEOUT 60)
 add_test(NAME AYEntity_TypedStateChecks COMMAND AYEntity_TypedStateChecks)
 set_tests_properties(AYEntity_TypedStateChecks PROPERTIES TIMEOUT 60)
+
+# Actual production file adapters, not an in-memory substitute. IO sources are
+# compiled from the exact pinned module revisions, with the system LZ4 library.
+set(AYREPLAY_ROOT "${AYENGINE_ROOT}/AYFoundation/AYReplay")
+set(AYIO_ROOT "${AYENGINE_ROOT}/AYFoundation/AYIO")
+set(AYASSETFORMAT_ROOT "${AYENGINE_ROOT}/AYFoundation/AYAssetFormat")
+find_path(REPLAY_LZ4_INCLUDE lz4.h REQUIRED)
+find_library(REPLAY_LZ4_LIBRARY NAMES lz4 REQUIRED)
+add_library(ReplayFileBackend STATIC "${AYREPLAY_ROOT}/src/FileReplayRecorder.cpp" "${AYREPLAY_ROOT}/src/FileReplayPlayer.cpp"
+    "${AYIO_ROOT}/src/File.cpp" "${AYIO_ROOT}/src/Directory.cpp" "${AYIO_ROOT}/src/Path.cpp" "${AYIO_ROOT}/src/Env.cpp"
+    "${AYASSETFORMAT_ROOT}/src/AssetFormat.cpp")
+target_compile_features(ReplayFileBackend PUBLIC cxx_std_23)
+target_include_directories(ReplayFileBackend PUBLIC "${AYREPLAY_ROOT}/include" "${AYIO_ROOT}/include"
+    "${AYENGINE_ROOT}/AYFoundation/AYTime/include" "${AYENGINE_ROOT}/AYFoundation/AYTime"
+    "${AYENGINE_ROOT}/AYFoundation/AYString/include" "${AYENGINE_ROOT}/AYFoundation/AYString"
+    "${AYASSETFORMAT_ROOT}/include" "${REPLAY_LZ4_INCLUDE}" PRIVATE "${AYIO_ROOT}/include/AYIO")
+target_link_libraries(ReplayFileBackend PUBLIC "${REPLAY_LZ4_LIBRARY}" Threads::Threads)
+if(MSVC)
+    target_compile_definitions(ReplayFileBackend PUBLIC NOMINMAX PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(ReplayFileBackend PUBLIC /utf-8)
+endif()
+add_library(ReplayArchiveKernel STATIC "${AYENTITY_ROOT}/src/AYDeterministicSession.cpp" "${AYENTITY_ROOT}/src/AYDeterministicSessionWire.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicState.cpp" "${AYENTITY_ROOT}/src/AYDeterministicCollision2D.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicRollback.cpp" "${AYENTITY_ROOT}/src/AYDeterministicRollbackNetwork.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicRollbackReplay.cpp" "${AYMATH_ROOT}/src/DetFloat.cpp" "${AYMATH_ROOT}/src/DetMath.cpp"
+    $<TARGET_OBJECTS:TypedStateBackend>)
+target_compile_features(ReplayArchiveKernel PUBLIC cxx_std_23)
+target_include_directories(ReplayArchiveKernel PUBLIC "${AYENTITY_ROOT}/include" "${AYMATH_ROOT}/include" "${AYMATH_ROOT}/third_party/softfloat/include")
+target_link_libraries(ReplayArchiveKernel PUBLIC ReplayFileBackend)
+if(MSVC)
+    target_compile_options(ReplayArchiveKernel PRIVATE /utf-8 /fp:fast)
+else()
+    target_compile_options(ReplayArchiveKernel PRIVATE -ffast-math)
+endif()
+add_executable(AYEntity_ReplayArchiveChecks replayarchive.cpp)
+target_link_libraries(AYEntity_ReplayArchiveChecks PRIVATE ReplayArchiveKernel)
+add_executable(AYEntity_ReplayArchiveTool "${AYENTITY_ROOT}/tools/detreplay/main.cpp")
+set_target_properties(AYEntity_ReplayArchiveTool PROPERTIES OUTPUT_NAME ayreplay)
+target_link_libraries(AYEntity_ReplayArchiveTool PRIVATE ReplayArchiveKernel)
+add_executable(AYIO_FileErrorChecks "${AYIO_ROOT}/unittest/portable/main.cpp")
+target_link_libraries(AYIO_FileErrorChecks PRIVATE ReplayFileBackend)
+set(_archive_fixture "${AYENTITY_ROOT}/unittest/fixtures/replay-stage18")
+set(_crash_marker "${CMAKE_CURRENT_BINARY_DIR}/crash-recording-path.txt")
+add_test(NAME AYEntity_ReplayCrashWriter COMMAND AYEntity_ReplayArchiveChecks --interrupt "${_crash_marker}")
+set_tests_properties(AYEntity_ReplayCrashWriter PROPERTIES FIXTURES_SETUP ArchiveCrash TIMEOUT 60)
+add_test(NAME AYEntity_ReplayArchiveChecks COMMAND AYEntity_ReplayArchiveChecks --check "${_archive_fixture}" "${_crash_marker}")
+set_tests_properties(AYEntity_ReplayArchiveChecks PROPERTIES FIXTURES_REQUIRED ArchiveCrash TIMEOUT 120)
+add_test(NAME AYEntity_ReplayArchiveCLI COMMAND AYEntity_ReplayArchiveTool inspect "${_archive_fixture}/sample.rpi")
+set_tests_properties(AYEntity_ReplayArchiveCLI PROPERTIES TIMEOUT 60)
+add_test(NAME AYIO_FileErrorChecks COMMAND AYIO_FileErrorChecks)

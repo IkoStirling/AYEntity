@@ -63,6 +63,18 @@ TEST_CASE(archive_options_require_rollback_record_mode) {
     Fixture f;auto r=Fixture::recipe(DetHostMode::Record,path("archive-no-rollback.rpl"));
     r.rollbackArchive=DetRollbackReplayArchiveOptions{};CHECK_FALSE(f.bind(r));
 }
+TEST_CASE(host_exposes_recovered_source_status_separately_from_playback_completion) {
+    const auto directory=std::filesystem::temp_directory_path()/("host-recovered-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    CHECK_TRUE(std::filesystem::create_directory(directory));
+    DeterministicSession source({1,1,1,64,0});CHECK_TRUE(dettyped_scenario::configure(source));
+    auto cfg=config();cfg.rollback.members={1};DeterministicRollbackNetwork net(source,cfg);
+    DetRollbackReplayWriter writer;CHECK_TRUE(writer.begin(net,(directory/"sample.rpl").string(),DetRollbackReplayArchiveOptions{}));
+    CHECK_TRUE(net.submitLocal(input(1,0)) && net.advance() && writer.finish(net));
+    const auto rebuilt=DetRollbackReplayArchive::rebuildIndex(writer.path(),(directory/"recovered").string());CHECK_TRUE(rebuilt.valid);
+    Fixture f;CHECK_TRUE(f.bind(Fixture::recipe(DetHostMode::Replay,rebuilt.path)));CHECK(f.controller.replayRecovery().has_value());
+    CHECK_TRUE(f.controller.seekRollback(1,1));CHECK(f.controller.state()==DetHostState::Completed);
+    CHECK(f.controller.replayRecovery().has_value() && f.controller.takeConfirmedEvents().empty());
+}
 TEST_CASE(actual_host_matches_owned_baseline_after_10000_delayed_ticks_with_exact_effects) {
     Fixture f;unsigned samples=0;auto recording=recipe(samples);recording.mode=DetHostMode::Record;
     recording.replayPath=path(("rollback-10000-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".rpl").c_str());
