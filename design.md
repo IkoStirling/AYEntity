@@ -1502,3 +1502,37 @@ Native acceptance run 37653449840 passed all four GCC13.3/Clang18.1 x64/ARM64 jo
 actual shared Session and both solver profiles, 10000 ticks and 5000 checkpoint replay,
 legacy/extended complete hashes match the previously verified Windows Host.
 Full engine Host presentation and AYNetwork transport remain Windows integration gates.
+
+### 14.5.10 Bounded rollback, prediction and recovery (Stage14)
+
+The shared kernel contains DeterministicRollback and DeterministicRollbackNetwork.
+The core stores boundary checkpoints, canonical per-member actual frames, used
+merged frames and the last actual predictor seed retained on eviction. Replay
+rebuilds guesses from nearest EARLIER real frames, advances the same actual Session
+callbacks and replaces speculative witnesses. A matching late frame needs no replay
+when subsequent merged frames remain equal. Current complete input cannot bypass
+older unconfirmed gaps. Execution/budget failure restores pre-operation registered
+state and faults the owner; no rollback of external effects or C++ hidden captures.
+
+Input-confirmed and all-peer-hash-verified boundaries are distinct. Only confirmed
+state is hashed/published; predicted state does not trigger terminal divergence.
+Effect IDs are epoch/emissionTick/stable producer/sequence. Sim delivery remains
+next-tick, presentation drains copies only when committed; replay never redelivers.
+The application owns reliable dispatch after draining. InputDelay bootstraps neutral
+frames then samples nextTick+delay exactly once per forward Host tick.
+
+Network uses a separate profile1 LE/FNV envelope, fixed roster and normalized
+prediction policy in hello. Prediction/historical verification both bound progress.
+Trusted recoveryMember explicitly begins a strictly newer epoch from latest confirmed
+checkpoint. Bounded chunks stage checkpoint plus canonical old-epoch event journal;
+complete checksum/manifest/state/presentation-frontier validation precedes restore,
+new roster hello precedes advancement/event delivery. Undelivered events are repaired,
+played effects are skipped. Journal expiry is rejected, never silently loses effects.
+No authentication, authority election, dynamic membership or timeout policy.
+
+Standard Host Live recipe.rollback owns this coordinator exclusively. Record/Replay
+or simultaneous strict lockstep rejects before configure. Resimulation ingress changes
+no Host scheduling tick or input sampling. Horizon wait uses fixed Blocked; external
+input/new-epoch handshake resumes only network wait, preserving manual pause.
+Protocol shape, canonical-byte budgets and portable/Host evidence are in Stage14;
+checkpoint/input/.rpl and sealed Session manifest formats remain unchanged.

@@ -1,6 +1,7 @@
 #pragma once
 #include <AYEntity/DeterministicReplay.h>
 #include <AYEntity/DeterministicLockstep.h>
+#include <AYEntity/DeterministicRollback.h>
 #include <AYGameLoop/IGameLoop.h>
 #include <AYModule/IModule.h>
 
@@ -28,6 +29,9 @@ struct DetHostedSceneRecipe {
     /// Opt-in fixed-roster networking in Live/Record; Replay consumes recorded inputs.
     /// Host owns advance; input samples one local contribution per session tick.
     std::optional<DetLockstepConfig> lockstep;
+    /// Live-only predictive owner, mutually exclusive with lockstep. input request
+    /// targets localInputTick (including delay); samples once, never on resimulation.
+    std::optional<DetRollbackNetworkConfig> rollback;
 };
 struct DetHostOptions {
     /// nullopt explicitly selects ordinary World Sim, e.g. for Edit/preview scenes.
@@ -84,6 +88,15 @@ public:
     /// Live-only agreed checkpoint recovery, paused, with a strictly newer epoch.
     /// Every peer must agree the same checkpoint/epoch; no automatic state transfer.
     bool resetNetwork(const DetSessionCheckpoint&, std::uint32_t newEpoch);
+    /// Rollback authority initiates bounded checkpoint transfer/new epoch; Live only.
+    /// Wait for matching fixed-roster hellos before ticking. Explicit pause persists.
+    bool beginNetworkRecovery(std::uint32_t newEpoch);
+    std::uint64_t networkConfirmedNextTick() const;
+    std::uint64_t networkVerifiedNextTick() const;
+    std::uint32_t networkEpoch() const;
+    std::uint64_t rollbackCount() const;
+    /// Quarantined presentation effects, released only after all peer hashes agree.
+    std::vector<DetConfirmedEvent> takeConfirmedEvents();
     DetHostState state() const;
     /// Host diagnostic, or active session diagnostic (including checkpoint rejection).
     const std::string& error() const;

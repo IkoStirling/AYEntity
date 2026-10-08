@@ -29,6 +29,21 @@ elseif(AYSTATE_CHECK_FAST_MATH)
     target_compile_options(AYEntity_TypedStateChecks PRIVATE -ffast-math)
 endif()
 enable_testing()
+add_executable(AYEntity_RollbackChecks rollback.cpp
+    "${AYENTITY_ROOT}/src/AYDeterministicSession.cpp" "${AYENTITY_ROOT}/src/AYDeterministicSessionWire.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicState.cpp" "${AYENTITY_ROOT}/src/AYDeterministicCollision2D.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicRollback.cpp" "${AYENTITY_ROOT}/src/AYDeterministicRollbackNetwork.cpp"
+    "${AYMATH_ROOT}/src/DetFloat.cpp" "${AYMATH_ROOT}/src/DetMath.cpp" $<TARGET_OBJECTS:TypedStateBackend>)
+target_compile_features(AYEntity_RollbackChecks PRIVATE cxx_std_23)
+target_include_directories(AYEntity_RollbackChecks PRIVATE "${AYENTITY_ROOT}/include" "${AYMATH_ROOT}/include"
+    "${AYMATH_ROOT}/third_party/softfloat/include" "${AYENGINE_ROOT}/AYFoundation/AYReplay/include")
+if(MSVC)
+    target_compile_options(AYEntity_RollbackChecks PRIVATE /utf-8 /fp:fast)
+else()
+    target_compile_options(AYEntity_RollbackChecks PRIVATE -ffast-math -Wall -Wextra -Wpedantic)
+endif()
+add_test(NAME AYEntity_RollbackChecks COMMAND AYEntity_RollbackChecks)
+set_tests_properties(AYEntity_RollbackChecks PROPERTIES TIMEOUT 240)
 add_executable(AYEntity_SessionCollisionChecks session.cpp
     "${AYENTITY_ROOT}/src/AYDeterministicSession.cpp" "${AYENTITY_ROOT}/src/AYDeterministicSessionWire.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicState.cpp" "${AYENTITY_ROOT}/src/AYDeterministicCollision2D.cpp"

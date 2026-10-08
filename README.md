@@ -329,3 +329,25 @@ Live 恢复使用 resetNetwork(agreedCheckpoint,newerEpoch)，再明确握手/re
 Replay 禁止 live lockstep、Record 不改写历史，无自动 checkpoint 传输或 rollback。
 实现、范围、10000 tick 实际 Host/network 与 Session/collision 原生检查见
 [完成阶段](../../AYDocs/DETERMINISTIC-COMPLETION-STAGE13.md)。
+
+## Stage14: bounded rollback and predictive networking
+
+Include AYEntity/DeterministicRollback.h and link DeterminismKernel (owned) or
+Determinism (World). DeterministicRollback is the sole Session owner: bounded
+actual/merged input history and checkpoints, per-type Omit/Hold/Zero prediction,
+late correction/resimulation, confirmed effect drain and atomic registered-state
+restoration on executing failure. Held input frames explicitly include releases;
+prediction never reads future actual frames or previous guesses.
+
+DeterministicRollbackNetwork adds fixed admitted members, inputDelay, actual-only
+hashes, all-peer verified effects and trusted recoveryMember checkpoint/event-journal
+chunk transfer. Standard Host opts into Live recipe.rollback exclusively; input
+request.tick includes delay, no sampling or Host clock advancement on resimulation.
+Controller exposes confirmed/verified/epoch diagnostics, takeConfirmedEvents and
+beginNetworkRecovery. Explicit pause persists. Record/Replay rollback recipes reject.
+
+Portable AYEntity_RollbackChecks exercises 10000-tick typed/RNG/topology and collision
+rollback, 0/2-tick delayed network loss/reordering/duplicates, budgets, identity,
+multi-chunk recovery and pending-effect preservation. Standard Host unit/process
+gates cover actual integration. Full bounds/contracts and recorded platform status:
+[Stage14](../../AYDocs/DETERMINISTIC-ROLLBACK-STAGE14.md).

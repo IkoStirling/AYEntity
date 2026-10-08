@@ -275,6 +275,7 @@ bool DeterministicSession::restore(const DetSessionCheckpoint& s) {
     p.outgoing.clear();p.mutations.clear();p.faulted=false;p.accessFailed=false;p.error.clear();return true;
 }
 std::uint64_t DeterministicSession::nextTick() const {return _impl->state.nextTick;}
+std::uint32_t DeterministicSession::inputVersion() const {return _impl->config.inputVersion;}
 math::DetFloat32 DeterministicSession::fixedStep() const {return _impl->dt;}
 bool DeterministicSession::sealed() const {return _impl->sealed;}
 bool DeterministicSession::faulted() const {return _impl->faulted;}

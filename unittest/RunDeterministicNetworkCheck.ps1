@@ -23,5 +23,5 @@ try {
         $a=[IO.File]::ReadAllBytes((Join-Path $run '1.state.trace'));$b=[IO.File]::ReadAllBytes((Join-Path $run '2.state.trace'))
         if([Convert]::ToBase64String($a) -cne [Convert]::ToBase64String($b)){throw 'Peer per-tick traces differ'}
     }
-    Write-Output "PASS actual AYNetwork two-process state bytes, retransmission and replay/seek; artifacts $run"
+    Write-Output "PASS actual AYNetwork two-process state bytes and requested trace checks; artifacts $run"
 } finally {foreach($peer in $peers){if(-not $peer.HasExited){Stop-Process -Id $peer.Id -Force}}}

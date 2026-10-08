@@ -163,6 +163,8 @@ public:
     /// Same manifest required; invalid data rejected before changing any Sim state.
     bool restore(const DetSessionCheckpoint& state);
     std::uint64_t nextTick() const;
+    /// Immutable input schema version used by tick owners and neutral bootstrap frames.
+    std::uint32_t inputVersion() const;
     math::DetFloat32 fixedStep() const;
     bool sealed() const;
     bool faulted() const;

@@ -1,5 +1,6 @@
 #pragma once
 #include <AYEntity/DeterministicLockstep.h>
+#include <AYEntity/DeterministicRollback.h>
 #include <AYNetwork/INetwork.h>
 
 namespace ayt::entity {
@@ -14,6 +15,12 @@ namespace ayt::entity {
 inline void sendDetLockstepPackets(DeterministicLockstep& lockstep,net::INetworkSubSystem& network,
     std::span<net::NetConnection* const> admittedPeers,std::uint8_t channel=net::CHANNEL_RELIABLE) {
     for(const auto& packet:lockstep.packets())for(auto* peer:admittedPeers)
+        if(peer)network.sendTo(peer,channel,packet.data(),packet.size());
+}
+/// Predictive counterpart; same admission/channel/owner-thread transport contract.
+inline void sendDetRollbackPackets(DeterministicRollbackNetwork& owner,net::INetworkSubSystem& network,
+    std::span<net::NetConnection* const> admittedPeers,std::uint8_t channel=net::CHANNEL_RELIABLE) {
+    for(const auto& packet:owner.packets())for(auto* peer:admittedPeers)
         if(peer)network.sendTo(peer,channel,packet.data(),packet.size());
 }
 } // namespace ayt::entity

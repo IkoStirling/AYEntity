@@ -28,6 +28,7 @@ struct DeterministicHostController::Impl final : IEntitySimulationDriver {
     std::unique_ptr<DetReplayWriter> writer;
     std::unique_ptr<DetReplayReader> reader;
     std::unique_ptr<DeterministicLockstep> peers;
+    std::unique_ptr<DeterministicRollbackNetwork> rollback;
     std::optional<std::uint64_t> submittedTick;
     bool networkBlocked = false, manualPause = false;
     std::vector<event::ConnectionId> subscriptions;
@@ -50,14 +51,14 @@ struct DeterministicHostController::Impl final : IEntitySimulationDriver {
             if (writer && state == DetHostState::Running && !session->faulted()) {
                 if (!writer->finish()) { fail(writer->error()); ok = false; }
             }
-            peers.reset(); submittedTick.reset(); networkBlocked = false; writer.reset(); reader.reset(); session.reset(); recipe.reset(); step.reset();
+            rollback.reset(); peers.reset(); submittedTick.reset(); networkBlocked = false; writer.reset(); reader.reset(); session.reset(); recipe.reset(); step.reset();
             if (world && world->_hostedSimulationObserver == this)
                 world->_hostedSimulationObserver = nullptr;
             world = nullptr; lastHostTick.reset();
             if (state != DetHostState::Faulted) state = DetHostState::Stopped;
         } catch (...) {
             // Destruction still releases ownership before World storage disappears.
-            peers.reset(); submittedTick.reset(); networkBlocked = false; writer.reset(); reader.reset(); session.reset(); recipe.reset(); step.reset();
+            rollback.reset(); peers.reset(); submittedTick.reset(); networkBlocked = false; writer.reset(); reader.reset(); session.reset(); recipe.reset(); step.reset();
             if (world && world->_hostedSimulationObserver == this)
                 world->_hostedSimulationObserver = nullptr;
             world = nullptr; state = DetHostState::Faulted; ok = false;
@@ -86,6 +87,8 @@ struct DeterministicHostController::Impl final : IEntitySimulationDriver {
             if (!recipe->configure) return fail("Scene recipe needs a configuration callback");
             if (recipe->lockstep && recipe->mode == DetHostMode::Replay)
                 return fail("Replay cannot install a live network owner");
+            if (recipe->rollback && (recipe->lockstep || recipe->mode != DetHostMode::Live))
+                return fail("Rollback requires Live mode and one exclusive network owner");
             step = game::FixedTimestep::fromRatio(recipe->config.stepNumerator, recipe->config.stepDenominator);
             if (!step || !matches(host->gameLoop().getFixedStep()))
                 return fail("Host/session rational fixed step mismatch");
@@ -114,6 +117,7 @@ struct DeterministicHostController::Impl final : IEntitySimulationDriver {
                         return writer->advance(std::move(input));
                     }} : DeterministicLockstep::TickSink{});
             }
+            if (recipe->rollback) rollback = std::make_unique<DeterministicRollbackNetwork>(*session, *recipe->rollback);
             state = reader && reader->atEnd() ? DetHostState::Completed : DetHostState::Running;
             if (state == DetHostState::Completed) host->gameLoop().pause();
             return true;
@@ -139,6 +143,23 @@ struct DeterministicHostController::Impl final : IEntitySimulationDriver {
                 ok = reader->advance(*session);
                 difference = reader->difference();
                 if (!ok) return fail(reader->error());
+            } else if (rollback) {
+                if (rollback->faulted()) return fail(rollback->error());
+                const auto target = rollback->localInputTick();
+                if (!submittedTick || *submittedTick != target) {
+                    DetTickInput packet{target, recipe->config.inputVersion, {}};
+                    const DetHostInputRequest request{target, context.simTick,
+                        context.hostFrameIndex, context.inputFrameIndex, packet.version};
+                    if (recipe->input && !recipe->input(request, packet)) return fail("Host predictive input rejected");
+                    if (packet.tick != target || packet.version != recipe->config.inputVersion)
+                        return fail("Host predictive input tick/version mismatch");
+                    if (!rollback->submitLocal(std::move(packet))) return fail(rollback->error());
+                    submittedTick = target;
+                }
+                if (!rollback->ready()) { networkBlocked = true; error.clear(); return false; }
+                networkBlocked = false;
+                ok = rollback->advance();
+                if (!ok) return fail(rollback->error());
             } else if (peers) {
                 if (peers->faulted()) return fail(peers->error());
                 if (!submittedTick || *submittedTick != session->nextTick()) {
@@ -237,6 +258,7 @@ bool DeterministicHostController::resume() {
         (p.state != DetHostState::Running && p.state != DetHostState::Ordinary)) return false;
     p.manualPause = false;
     if (p.peers && p.networkBlocked && !p.peers->ready()) return true;
+    if (p.rollback && p.networkBlocked && !p.rollback->ready() && !p.rollback->synchronized()) return true;
     p.host->gameLoop().resume(); return true;
 }
 bool DeterministicHostController::stepOnce() {
@@ -246,7 +268,7 @@ bool DeterministicHostController::stepOnce() {
 }
 bool DeterministicHostController::restore(const DetSessionCheckpoint& checkpoint) {
     auto& p = *_impl;
-    if (!p.host || p.dispatching || !p.session || !p.recipe || p.recipe->mode != DetHostMode::Live || p.peers) return false;
+    if (!p.host || p.dispatching || !p.session || !p.recipe || p.recipe->mode != DetHostMode::Live || p.peers || p.rollback) return false;
     p.host->gameLoop().pause();
     if (!p.session->restore(checkpoint)) { p.error = p.session->error(); return false; }
     p.state = DetHostState::Running; p.error.clear(); p.difference.reset(); return true;
@@ -263,6 +285,19 @@ bool DeterministicHostController::seek(std::uint64_t tick) {
 }
 bool DeterministicHostController::receiveNetwork(std::uint32_t member, std::span<const std::uint8_t> packet) {
     auto& p = *_impl;
+    if (p.host && !p.dispatching && p.rollback &&
+        (p.state == DetHostState::Running || p.state == DetHostState::Faulted)) {
+        const auto oldEpoch = p.rollback->config().epoch;
+        const bool ok = p.rollback->receive(member, packet);
+        if (p.rollback->faulted()) return p.fail(p.rollback->error());
+        if (p.rollback->config().epoch != oldEpoch) {
+            p.submittedTick.reset(); p.lastHostTick.reset(); p.networkBlocked = true;
+            p.state = DetHostState::Running; p.host->gameLoop().pause();
+        }
+        p.error = ok ? std::string{} : p.rollback->error();
+        if (ok && p.networkBlocked && (p.rollback->ready() || p.rollback->synchronized()) && !p.manualPause) p.host->gameLoop().resume();
+        return ok;
+    }
     if (!p.host || p.dispatching || !p.peers || p.state != DetHostState::Running) return false;
     const bool ok = p.peers->receive(member, packet);
     if (p.peers->faulted()) return p.fail(p.peers->error());
@@ -274,16 +309,25 @@ bool DeterministicHostController::receiveNetwork(std::uint32_t member, std::span
 }
 std::vector<std::vector<std::uint8_t>> DeterministicHostController::networkPackets() const {
     const auto& p = *_impl;
+    if (!p.dispatching && p.rollback && p.state == DetHostState::Running) return p.rollback->packets();
     return !p.dispatching && p.peers && p.state == DetHostState::Running ? p.peers->packets()
         : std::vector<std::vector<std::uint8_t>>{};
 }
-bool DeterministicHostController::networkWaiting() const { return _impl->peers && !_impl->peers->ready(); }
-bool DeterministicHostController::networkSynchronized() const { return _impl->peers && _impl->peers->synchronized(); }
+bool DeterministicHostController::networkWaiting() const {
+    return (_impl->peers && !_impl->peers->ready()) || (_impl->rollback && !_impl->rollback->ready());
+}
+bool DeterministicHostController::networkSynchronized() const {
+    return _impl->rollback ? _impl->rollback->synchronized() : _impl->peers && _impl->peers->synchronized();
+}
 std::vector<std::uint32_t> DeterministicHostController::networkMissing() const {
-    return _impl->peers ? _impl->peers->missing() : std::vector<std::uint32_t>{};
+    return _impl->rollback ? _impl->rollback->missing() : _impl->peers ? _impl->peers->missing() : std::vector<std::uint32_t>{};
 }
 bool DeterministicHostController::disconnectNetworkMember(std::uint32_t member) {
     auto& p = *_impl;
+    if (p.host && !p.dispatching && p.rollback && p.state == DetHostState::Running) {
+        p.rollback->disconnect(member);
+        return p.rollback->faulted() ? p.fail(p.rollback->error()) : true;
+    }
     if (!p.host || p.dispatching || !p.peers || p.state != DetHostState::Running) return false;
     p.peers->disconnect(member);
     if (p.peers->faulted()) return p.fail(p.peers->error());
@@ -306,6 +350,29 @@ bool DeterministicHostController::resetNetwork(const DetSessionCheckpoint& check
     } catch (const std::exception& e) { return p.fail(e.what()); }
 }
 DetHostState DeterministicHostController::state() const { return _impl->state; }
+bool DeterministicHostController::beginNetworkRecovery(std::uint32_t epoch) {
+    auto& p = *_impl;
+    if (!p.host || p.dispatching || !p.rollback) return false;
+    if (!p.rollback->beginRecovery(epoch)) { p.error = p.rollback->error(); return false; }
+    p.host->gameLoop().pause(); p.networkBlocked = true; p.submittedTick.reset(); p.lastHostTick.reset();
+    p.state = DetHostState::Running; p.error.clear(); return true;
+}
+std::uint64_t DeterministicHostController::networkConfirmedNextTick() const {
+    return _impl->rollback ? _impl->rollback->confirmedNextTick() : _impl->session ? _impl->session->nextTick() : 0;
+}
+std::uint64_t DeterministicHostController::networkVerifiedNextTick() const {
+    return _impl->rollback ? _impl->rollback->verifiedNextTick() : _impl->session ? _impl->session->nextTick() : 0;
+}
+std::uint64_t DeterministicHostController::rollbackCount() const {
+    return _impl->rollback ? _impl->rollback->history().rollbackCount() : 0;
+}
+std::uint32_t DeterministicHostController::networkEpoch() const {
+    return _impl->rollback ? _impl->rollback->config().epoch :
+        _impl->recipe && _impl->recipe->lockstep ? _impl->recipe->lockstep->epoch : 0;
+}
+std::vector<DetConfirmedEvent> DeterministicHostController::takeConfirmedEvents() {
+    return !_impl->dispatching && _impl->rollback ? _impl->rollback->takeConfirmedEvents() : std::vector<DetConfirmedEvent>{};
+}
 const std::string& DeterministicHostController::error() const {
     if (_impl->error.empty() && _impl->session) return _impl->session->error();
     return _impl->error;
