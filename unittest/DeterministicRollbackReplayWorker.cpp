@@ -7,7 +7,7 @@
 #include <iostream>
 using namespace ayt::entity;
 int main(int argc,char** argv) {
-    if(argc!=3 && argc!=5){std::cerr<<"usage: recording.rpl expected.state [epoch nextTick]\n";return 2;}
+    if(argc!=3 && argc!=5){std::cerr<<"usage: recording.rpl|recording.rpi expected.state [epoch nextTick]\n";return 2;}
     try {
         DeterministicSession session({1,1,1,64,0});
         if(!dettyped_scenario::configure(session,true,false,true))throw std::runtime_error(session.error());
@@ -32,6 +32,7 @@ int main(int argc,char** argv) {
         const auto traceBytes=read(std::string(argv[2])+".trace");const auto actualTrace=trace.str();
         std::string expectedTrace(traceBytes.begin(),traceBytes.end());std::erase(expectedTrace,'\r');
         if(actualTrace!=expectedTrace)throw std::runtime_error("Replay event identity oracle mismatch");
+        std::cout<<"FILES "<<reader.files().size()<<'\n';
         for(const auto& s:reader.segments())std::cout<<"SEGMENT epoch="<<s.epoch<<" first="<<s.firstTick<<" end="<<s.endTick<<" skipped="<<s.skippedTicks<<'\n';
         if(argc==5) {
             const auto epoch=std::stoul(argv[3]);if(epoch>UINT32_MAX)throw std::runtime_error("Invalid epoch");

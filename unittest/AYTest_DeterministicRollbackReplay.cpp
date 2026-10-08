@@ -2,6 +2,7 @@
 #include <AYTest.h>
 #include <AYReplay/FileReplayRecorder.h>
 #include <fstream>
+#include <chrono>
 using namespace dethost_test;
 namespace {
 DetRollbackNetworkConfig replayConfig(unsigned member=1) {
@@ -17,6 +18,15 @@ void step(DeterministicRollbackNetwork& net,DeterministicSession& s) {
     CHECK_TRUE(net.submitLocal(ownedInput(net.config().localMember,s.nextTick())));
     CHECK_TRUE(net.advance());
 }
+std::string archivePath(const char* name) {
+    return path((std::string(name)+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".rpl").c_str());
+}
+std::vector<char> readBytes(const std::string& path) {
+    std::ifstream f(path,std::ios::binary);return {std::istreambuf_iterator<char>(f),std::istreambuf_iterator<char>()};
+}
+void writeBytes(const std::string& path,const std::vector<char>& bytes) {
+    std::ofstream f(path,std::ios::binary|std::ios::trunc);f.write(bytes.data(),bytes.size());
+}
 }
 TEST_SUITE(DeterministicRollbackReplay)
 TEST_CASE(recording_seals_verified_prefix_and_rejects_missing_seal_and_overwrite) {
@@ -26,11 +36,15 @@ TEST_CASE(recording_seals_verified_prefix_and_rejects_missing_seal_and_overwrite
     c.localMember=2;DeterministicRollbackNetwork remote(peer,c);
     for(const auto& p:remote.packets())CHECK_TRUE(net.receive(2,p));
     const auto base=path("rollback-prefix.rpl");std::string file;
+    DetRollbackReplayWriter archived;CHECK_TRUE(archived.begin(net,archivePath("archive-prefix"),DetRollbackReplayArchiveOptions{}));
     {DetRollbackReplayWriter w;CHECK_TRUE(w.begin(net,base));file=w.path();
         step(net,s);CHECK_TRUE(w.sync(net));CHECK(w.recordedNextTick()==0);
         CHECK(!net.history().confirmedInputAt(0));
         auto d=net.diagnostics();CHECK(d.head==1 && d.confirmed==0 && d.verified==0 && d.predictedTicks==1 && d.bufferedBytes>0);
         CHECK_TRUE(w.finish(net));}
+    CHECK_TRUE(archived.finish(net));DetRollbackReplayReader archiveReader;CHECK_TRUE(archiveReader.open(archived.path()));
+    CHECK(archiveReader.endTick()==0 && archiveReader.speculativeHeadAtSeal()==1 && archiveReader.files().size()==1);
+    CHECK_TRUE(archiveReader.restoreInitial(peer));CHECK(archiveReader.atEnd());
     DetRollbackReplayReader r;CHECK_TRUE(r.open(file));CHECK(r.endTick()==0 && r.speculativeHeadAtSeal()==1);
     CHECK_TRUE(r.restoreInitial(peer));CHECK(r.atEnd());
     DetRollbackReplayWriter overwrite;CHECK_FALSE(overwrite.begin(net,base));
@@ -86,7 +100,8 @@ TEST_CASE(asymmetric_recovery_records_snapshot_gap_and_old_epoch_events_once) {
     DeterministicSession a({1,1,1,64,0}),b({1,1,1,64,0});
     CHECK_TRUE(dettyped_scenario::configure(a));CHECK_TRUE(dettyped_scenario::configure(b));
     auto c=replayConfig();c.rollback.members={1,2};DeterministicRollbackNetwork authority(a,c);c.localMember=2;DeterministicRollbackNetwork peer(b,c);
-    DetRollbackReplayWriter writer;CHECK_TRUE(writer.begin(peer,path("rollback-gap.rpl"),2));
+    DetRollbackReplayWriter writer;DetRollbackReplayArchiveOptions options;options.maxSegmentRecords=2;
+    CHECK_TRUE(writer.begin(peer,archivePath("rollback-gap"),options,2));
     auto exchange=[&] {
         for(const auto& p:authority.packets()) {CHECK_TRUE(peer.receive(1,p));CHECK_TRUE(writer.sync(peer));}
         for(const auto& p:peer.packets())CHECK_TRUE(authority.receive(2,p));
@@ -109,5 +124,91 @@ TEST_CASE(asymmetric_recovery_records_snapshot_gap_and_old_epoch_events_once) {
     while(!reader.atEnd()){const bool progressed=reader.advance(replay);CHECK_TRUE(progressed);if(!progressed)break;auto e=reader.takeConfirmedEvents();events.insert(events.end(),e.begin(),e.end());}
     CHECK(events==expected && encodeDetCheckpoint(*replay.checkpoint())==encodeDetCheckpoint(*a.checkpoint()));
     CHECK_FALSE(reader.seek(replay,2,2));CHECK_TRUE(reader.seek(replay,1,2));CHECK(reader.takeConfirmedEvents().empty());
+    CHECK(reader.files().size()>=3);CHECK_TRUE(reader.seek(replay,2,3));CHECK(reader.atEnd());
+}
+TEST_CASE(indexed_archive_rotates_seeks_and_preserves_exact_events_across_files_and_epochs) {
+    DeterministicSession s({1,1,1,64,0});CHECK_TRUE(dettyped_scenario::configure(s));
+    DeterministicRollbackNetwork net(s,replayConfig());DetRollbackReplayWriter w;
+    DetRollbackReplayArchiveOptions options;options.maxSegmentRecords=4;
+    CHECK_TRUE(w.begin(net,archivePath("archive-epochs"),options,3));const auto index=w.path();
+    CHECK(std::filesystem::path(index).extension()==".rpi" && !std::filesystem::exists(index));
+    std::vector<DetConfirmedEvent> expected;std::vector<std::vector<std::uint8_t>> states;
+    states.push_back(encodeDetCheckpoint(*s.checkpoint()));
+    for(unsigned tick=0;tick<12;++tick) {
+        if(tick==6){CHECK_TRUE(net.beginRecovery(2));CHECK_TRUE(w.sync(net));}
+        step(net,s);CHECK_TRUE(w.sync(net));auto e=net.takeConfirmedEvents();expected.insert(expected.end(),e.begin(),e.end());
+        states.push_back(encodeDetCheckpoint(*s.checkpoint()));
+    }
+    CHECK_TRUE(w.finish(net));CHECK(w.path()==index && w.fileSegmentCount()>=5);
+    CHECK(!std::filesystem::exists(index+".partial"));
+    DetRollbackReplayReader r;CHECK_TRUE(r.open(index));CHECK(r.files().size()==w.fileSegmentCount());CHECK(r.segments().size()==2);
+    for(const auto& file:r.files()) {DetRollbackReplayReader part;CHECK_TRUE(part.open(file.path));
+        CHECK(part.files().empty() && file.records<=options.maxSegmentRecords && file.storedBytes<=options.maxSegmentBytes);}
+    DeterministicSession playback({1,1,1,64,0});CHECK_TRUE(dettyped_scenario::configure(playback,true));
+    CHECK_TRUE(r.restoreInitial(playback));std::vector<DetConfirmedEvent> actual;
+    while(!r.atEnd()){const auto ok=r.advance(playback);CHECK_TRUE(ok);if(!ok)break;
+        auto e=r.takeConfirmedEvents();actual.insert(actual.end(),e.begin(),e.end());}
+    CHECK(actual==expected && encodeDetCheckpoint(*playback.checkpoint())==states.back());
+    for(const auto tick:{10u,2u,6u,0u,12u,7u,3u}) {
+        CHECK_TRUE(r.seek(playback,tick>=6?2:1,tick));
+        CHECK(encodeDetCheckpoint(*playback.checkpoint())==states[tick] && r.takeConfirmedEvents().empty());
+    }
+    for(const auto& file:r.files()) {CHECK_TRUE(r.seek(playback,file.firstEpoch,file.firstTick));CHECK(r.takeConfirmedEvents().empty());}
+    CHECK_TRUE(r.seek(playback,1,5));CHECK_TRUE(r.advance(playback));CHECK(r.epoch()==1);
+    CHECK_TRUE(r.advance(playback));CHECK(r.epoch()==2 && playback.nextTick()==7);
+    CHECK_TRUE(r.seek(playback,2,12));CHECK(r.atEnd());
+    DeterministicSession fresh({1,1,1,64,0});CHECK_TRUE(dettyped_scenario::configure(fresh));
+    DeterministicRollbackNetwork newOwner(fresh,replayConfig());
+    DetRollbackReplayWriter overwrite;CHECK_FALSE(overwrite.begin(newOwner,index,options));
+    CHECK(overwrite.error().find("already exists")!=std::string::npos);
+    // A sealed index is mandatory; any truncation, chain change or trailing bytes fails.
+    const auto original=readBytes(index);auto corrupt=original;corrupt.pop_back();writeBytes(index,corrupt);
+    DetRollbackReplayReader bad;CHECK_FALSE(bad.open(index));
+    corrupt=original;corrupt[30]^=1;writeBytes(index,corrupt);CHECK_FALSE(bad.open(index));
+    corrupt=original;corrupt.push_back(0);writeBytes(index,corrupt);CHECK_FALSE(bad.open(index));writeBytes(index,original);
+}
+TEST_CASE(archive_later_corruption_is_rejected_before_seek_or_boundary_mutates_session) {
+    DeterministicSession s({1,1,1,64,0});CHECK_TRUE(dettyped_scenario::configure(s));
+    DeterministicRollbackNetwork net(s,replayConfig());DetRollbackReplayWriter w;
+    DetRollbackReplayArchiveOptions options;options.maxSegmentRecords=3;
+    CHECK_TRUE(w.begin(net,archivePath("archive-damage"),options));
+    for(unsigned i=0;i<8;++i){step(net,s);CHECK_TRUE(w.sync(net));(void)net.takeConfirmedEvents();}CHECK_TRUE(w.finish(net));
+    DetRollbackReplayReader r;CHECK_TRUE(r.open(w.path()));const auto files=r.files();CHECK(files.size()>=4);
+    const auto original=readBytes(files[1].path);auto corrupt=original;corrupt[corrupt.size()/2]^=1;writeBytes(files[1].path,corrupt);
+    CHECK_TRUE(r.open(w.path())); // lazy: unchanged size, first file remains valid
+    DeterministicSession playback({1,1,1,64,0});CHECK_TRUE(dettyped_scenario::configure(playback));CHECK_TRUE(r.restoreInitial(playback));
+    const auto before=encodeDetCheckpoint(*playback.checkpoint());
+    CHECK_FALSE(r.seek(playback,1,files[1].firstTick+1));CHECK(encodeDetCheckpoint(*playback.checkpoint())==before);
+    CHECK_TRUE(r.advance(playback));CHECK_TRUE(r.advance(playback));(void)r.takeConfirmedEvents();
+    const auto boundary=encodeDetCheckpoint(*playback.checkpoint());CHECK_FALSE(r.advance(playback));
+    CHECK(encodeDetCheckpoint(*playback.checkpoint())==boundary && r.takeConfirmedEvents().empty());
+    writeBytes(files[1].path,original);CHECK_TRUE(r.advance(playback));
+    // Physical file metadata is checked even before lazy payload loading.
+    std::filesystem::rename(files.back().path,files.back().path+".missing");CHECK_FALSE(r.open(w.path()));
+    std::filesystem::rename(files.back().path+".missing",files.back().path);
+    const auto last=readBytes(files.back().path);auto shortFile=last;shortFile.pop_back();writeBytes(files.back().path,shortFile);CHECK_FALSE(r.open(w.path()));
+    writeBytes(files.back().path,last);CHECK_TRUE(r.open(w.path()));
+}
+TEST_CASE(archive_byte_limits_unsealed_output_and_segment_exhaustion_fail_explicitly) {
+    DeterministicSession s({1,1,1,64,0});CHECK_TRUE(dettyped_scenario::configure(s));
+    DeterministicRollbackNetwork net(s,replayConfig());
+    DetRollbackReplayArchiveOptions options;options.maxSegmentBytes=8192;options.maxSegmentRecords=99996;
+    DetRollbackReplayWriter w;CHECK_TRUE(w.begin(net,archivePath("archive-bytes"),options));
+    for(unsigned i=0;i<32;++i){step(net,s);CHECK_TRUE(w.sync(net));(void)net.takeConfirmedEvents();}CHECK_TRUE(w.finish(net));
+    DetRollbackReplayReader r;CHECK_TRUE(r.open(w.path()));CHECK(r.files().size()>1);
+    for(const auto& f:r.files())CHECK(f.storedBytes<=options.maxSegmentBytes);
+    // New owners start at tick zero; no publication for interruption or invalid budgets.
+    DeterministicSession initial({1,1,1,64,0});CHECK_TRUE(dettyped_scenario::configure(initial));
+    DeterministicRollbackNetwork fresh(initial,replayConfig());std::string unfinished;
+    {DetRollbackReplayWriter partial;CHECK_TRUE(partial.begin(fresh,archivePath("archive-partial"),options));unfinished=partial.path();}
+    CHECK(!std::filesystem::exists(unfinished));CHECK_FALSE(r.open(unfinished+".partial"));
+    options.maxSegmentRecords=2;options.maxSegments=1;DetRollbackReplayWriter capped;
+    CHECK_TRUE(capped.begin(fresh,archivePath("archive-capped"),options));step(fresh,initial);CHECK_TRUE(capped.sync(fresh));
+    step(fresh,initial);CHECK_FALSE(capped.sync(fresh));CHECK_FALSE(capped.finish(fresh));CHECK(!std::filesystem::exists(capped.path()));
+    DeterministicSession zero({1,1,1,64,0});CHECK_TRUE(dettyped_scenario::configure(zero));DeterministicRollbackNetwork healthy(zero,replayConfig());
+    options.maxSegmentRecords=1;DetRollbackReplayWriter invalid;CHECK_FALSE(invalid.begin(healthy,archivePath("archive-invalid"),options));
+    options.maxSegmentRecords=2;options.maxSegmentBytes=1024;DetRollbackReplayWriter tiny;
+    const bool started=tiny.begin(healthy,archivePath("archive-tiny"),options);
+    if(started){step(healthy,zero);CHECK_FALSE(tiny.sync(healthy));}CHECK(!std::filesystem::exists(tiny.path()));
 }
 TEST_SUITE_END

@@ -94,6 +94,8 @@ struct DeterministicHostController::Impl final : IEntitySimulationDriver {
                 return fail("Replay cannot install a live network owner");
             if (recipe->rollback && (recipe->lockstep || recipe->mode == DetHostMode::Replay))
                 return fail("Rollback requires Live/Record mode and one exclusive network owner");
+            if (recipe->rollbackArchive && (recipe->mode != DetHostMode::Record || !recipe->rollback))
+                return fail("Indexed archive options require Record+rollback");
             step = game::FixedTimestep::fromRatio(recipe->config.stepNumerator, recipe->config.stepDenominator);
             if (!step || !matches(host->gameLoop().getFixedStep()))
                 return fail("Host/session rational fixed step mismatch");
@@ -130,7 +132,10 @@ struct DeterministicHostController::Impl final : IEntitySimulationDriver {
                 rollback = std::make_unique<DeterministicRollbackNetwork>(*session, *recipe->rollback);
                 if (recipe->mode == DetHostMode::Record) {
                     rollbackWriter = std::make_unique<DetRollbackReplayWriter>();
-                    if (!rollbackWriter->begin(*rollback, recipe->replayPath, recipe->checkpointInterval)) return fail(rollbackWriter->error());
+                    const bool opened = recipe->rollbackArchive
+                        ? rollbackWriter->begin(*rollback, recipe->replayPath, *recipe->rollbackArchive, recipe->checkpointInterval)
+                        : rollbackWriter->begin(*rollback, recipe->replayPath, recipe->checkpointInterval);
+                    if (!opened) return fail(rollbackWriter->error());
                     lastRecordingPath = rollbackWriter->path();
                 }
             }

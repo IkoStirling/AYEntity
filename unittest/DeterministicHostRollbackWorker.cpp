@@ -22,6 +22,7 @@ int main(int argc,char** argv) {
         cfg.rollback.historyTicks=16;cfg.rollback.maxPredictionTicks=8;
         cfg.rollback.prediction={{1,DetPredictionMode::Hold}};recipe.rollback=cfg;
         recipe.mode=DetHostMode::Record;recipe.replayPath=output+".rpl";
+        recipe.rollbackArchive=DetRollbackReplayArchiveOptions{};recipe.rollbackArchive->maxSegmentRecords=1000;
         recipe.configure=[member](auto& s){return dettyped_scenario::configure(s,member==2,false,true);};
         std::uint64_t samples=0,rollbacks=0;
         recipe.input=[&](const auto& request,auto& in){++samples;in=detsession_scenario::input(request.tick,member==2);

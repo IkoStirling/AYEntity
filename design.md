@@ -1593,3 +1593,19 @@ recovery chunks to bulk. Existing wire/profile, hashes, checkpoints and replay
 formats are unchanged. The Windows Host process uses the public scheduler and
 checked AYNetwork path; portable tests bound in-flight queues and inject loss and
 backpressure across 10000 ticks and multi-chunk epoch recovery.
+
+## Stage17: automatic replay file segmentation and indexed seek
+
+Opt-in `DetRollbackReplayArchiveOptions` on writer.begin or Host recipe.rollbackArchive
+(Record+rollback only) rotates complete records by byte/count budgets. Healthy finish
+publishes .rpi; each physical .rpl remains independently sealed schema2. Reader files()
+exposes physical metadata; segments() remains logical recovery epochs. Indexed seek
+loads a bounded target file, silently replays, rejects gaps; continuous transitions
+preserve exact state and emit boundary effects once. One decoded file retained, two
+temporarily during replacement. Missing/corrupt files fail before use; partial output
+is not automatically salvaged. Fresh single-writer output and immutable playback.
+Defaults64 MiB/10000 records; hard per-file256 MiB, index16 MiB/65536 files/epochs.
+See [Stage17](../../AYDocs/DETERMINISTIC-ROLLBACK-ARCHIVE-STAGE17.md).
+Windows x64 MSVC Host/replay regression: Release8.70s, Debug144.49s; actual dual
+process network/archive + offline playback/seek589.45s PASS. Each archive11 files,
+10000 ticks/30910 exact events; Release independently reads both Debug archives.

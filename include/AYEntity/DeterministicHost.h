@@ -33,6 +33,9 @@ struct DetHostedSceneRecipe {
     /// Live/Record predictive owner, mutually exclusive with lockstep. input request
     /// targets localInputTick (including delay); samples once, never on resimulation.
     std::optional<DetRollbackNetworkConfig> rollback;
+    /// Record+rollback only: bounded automatic .rpl segmentation and .rpi index.
+    /// Replay auto-detects .rpi through replayPath; legacy single-file is unchanged.
+    std::optional<DetRollbackReplayArchiveOptions> rollbackArchive;
 };
 struct DetHostOptions {
     /// nullopt explicitly selects ordinary World Sim, e.g. for Edit/preview scenes.

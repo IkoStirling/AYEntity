@@ -1,5 +1,6 @@
 #include "DetHostFixture.h"
 #include <AYTest.h>
+#include <chrono>
 using namespace dethost_test;
 namespace {
 DetRollbackNetworkConfig config(unsigned member=1,unsigned delay=0) {
@@ -56,8 +57,17 @@ TEST_CASE(rollback_recipe_rejects_replay_empty_record_path_and_two_tick_owners) 
         CHECK_FALSE(f.bind(r));CHECK(samples==0);}
     Fixture f;unsigned samples=0;auto r=recipe(samples);r.lockstep=DetLockstepConfig{92,1,1,{1,2}};CHECK_FALSE(f.bind(r));
 }
+TEST_CASE(archive_options_require_rollback_record_mode) {
+    for(auto mode:{DetHostMode::Live,DetHostMode::Replay}) {Fixture f;auto r=Fixture::recipe(mode);
+        r.rollbackArchive=DetRollbackReplayArchiveOptions{};CHECK_FALSE(f.bind(r));}
+    Fixture f;auto r=Fixture::recipe(DetHostMode::Record,path("archive-no-rollback.rpl"));
+    r.rollbackArchive=DetRollbackReplayArchiveOptions{};CHECK_FALSE(f.bind(r));
+}
 TEST_CASE(actual_host_matches_owned_baseline_after_10000_delayed_ticks_with_exact_effects) {
-    Fixture f;unsigned samples=0;auto recording=recipe(samples);recording.mode=DetHostMode::Record;recording.replayPath=path("rollback-10000.rpl");recording.checkpointInterval=300;CHECK_TRUE(f.bind(recording));
+    Fixture f;unsigned samples=0;auto recording=recipe(samples);recording.mode=DetHostMode::Record;
+    recording.replayPath=path(("rollback-10000-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".rpl").c_str());
+    recording.rollbackArchive=DetRollbackReplayArchiveOptions{};recording.rollbackArchive->maxSegmentRecords=1000;
+    recording.checkpointInterval=300;CHECK_TRUE(f.bind(recording));
     DeterministicSession s({1,1,1,64,0}),baseline({1,1,1,64,0});
     CHECK_TRUE(dettyped_scenario::configure(s,true));CHECK_TRUE(dettyped_scenario::configure(baseline));
     DeterministicRollbackNetwork remote(s,config(2));
@@ -82,7 +92,7 @@ TEST_CASE(actual_host_matches_owned_baseline_after_10000_delayed_ticks_with_exac
     CHECK(diagnostics.head==10000 && diagnostics.verified==10000 && diagnostics.maxDepth>0 && diagnostics.replayedTicks>=diagnostics.rollbacks);
     const auto final=encodeDetCheckpoint(*baseline.checkpoint());const auto file=f.controller.recordingPath();
     CHECK_TRUE(f.controller.stop());
-    DetRollbackReplayReader reader;CHECK_TRUE(reader.open(file));CHECK_TRUE(reader.restoreInitial(baseline));
+    DetRollbackReplayReader reader;CHECK_TRUE(reader.open(file));CHECK(reader.files().size()>10);CHECK_TRUE(reader.restoreInitial(baseline));
     std::vector<DetConfirmedEvent> replayEffects;
     while(!reader.atEnd()){const bool progressed=reader.advance(baseline);CHECK_TRUE(progressed);if(!progressed)break;auto e=reader.takeConfirmedEvents();replayEffects.insert(replayEffects.end(),e.begin(),e.end());}
     CHECK(replayEffects==expected && encodeDetCheckpoint(*baseline.checkpoint())==final);

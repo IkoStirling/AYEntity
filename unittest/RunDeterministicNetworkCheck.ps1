@@ -18,7 +18,9 @@ try {
     foreach($member in 1,2){Get-Content (Join-Path $run "$member.log");Get-Content (Join-Path $run "$member.error")}
     foreach($peer in $peers){if($peer.ExitCode -ne 0){throw "Network worker exit $($peer.ExitCode)"}}
     if($ReplayWorker){foreach($member in 1,2){
-        & $ReplayWorker (Join-Path $run "$member.state_000.rpl") (Join-Path $run "$member.state") 2 7351
+        $recording=Join-Path $run "$member.state.rpi"
+        if(-not (Test-Path -LiteralPath $recording)){$recording=Join-Path $run "$member.state_000.rpl"}
+        & $ReplayWorker $recording (Join-Path $run "$member.state") 2 7351
         if($LASTEXITCODE -ne 0){throw "Offline rollback replay worker exit $LASTEXITCODE"}
     }}
     $a=[IO.File]::ReadAllBytes((Join-Path $run '1.state'));$b=[IO.File]::ReadAllBytes((Join-Path $run '2.state'))
