@@ -485,10 +485,12 @@ DetReplayArchiveReport DetRollbackReplayArchive::scan(const std::string& source)
 }
 DetReplayArchiveReport DetRollbackReplayArchive::rebuildIndex(const std::string& source,const std::string& directory) {
     auto report=scan(source);if(!report.valid)return report;
+    std::string currentPath=directory;
     try {
         const auto index=detarchive::sourceIndexPath(source);const auto destination=std::filesystem::path(directory);
         if(directory.empty() || !std::filesystem::create_directory(destination))throw std::runtime_error("Recovery requires a new output directory");
         const auto output=(destination/std::filesystem::path(index).filename()).string(),partial=output+".partial";
+        currentPath=partial;
         std::ofstream out(partial,std::ios::binary|std::ios::trunc);if(!out)throw std::runtime_error("Recovery index open failed");
         std::uint64_t chain=0,total=0;
         auto append=[&](Writer w){auto bytes=w.finish();if(total+4+bytes.size()>detarchive::indexLimit)throw std::runtime_error("Recovery index byte budget");
@@ -496,7 +498,8 @@ DetReplayArchiveReport DetRollbackReplayArchive::rebuildIndex(const std::string&
             out.write(prefix,4);out.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());out.flush();
             if(!out)throw std::runtime_error("Recovery index write/flush failed");
             Reader tail{std::span<const std::uint8_t>(bytes).last(8)};chain=tail.u64();total+=4+bytes.size();};
-        DetRollbackReplayReader initial;if(!initial.open(report.files.front().path))throw std::runtime_error(initial.error());
+        DetRollbackReplayReader initial;if(!initial.open(report.files.front().path))
+            throw detarchive::FileError(report.files.front().path,initial.issue()?initial.issue()->offset:std::nullopt,initial.error());
         auto head=detarchive::header(0,0,2);head.blob(initial._impl->entries.front().state.manifest);
         head.u32(static_cast<unsigned>(report.recovery->reason));head.u32(report.recovery->stopOrdinal);append(std::move(head));
         initial._impl.reset(); // Keep memory bounded while copying the closed prefix.
@@ -515,10 +518,13 @@ DetReplayArchiveReport DetRollbackReplayArchive::rebuildIndex(const std::string&
         if(!out)throw std::runtime_error("Recovery index close failed");
         (void)detarchive::readIndex(partial,output); // Validate serialized metadata before publication.
         std::filesystem::rename(partial,output);
+        currentPath=output;
         auto checked=inspect(output);if(!checked.valid)throw std::runtime_error("Recovery output validation failed: "+checked.error);
         return checked;
     }catch(const detarchive::FileError& e){report.valid=false;report.error=e.what();report.issue=e.issue;}
-    catch(const std::exception& e){report.valid=false;report.error=e.what();}
+    catch(const std::filesystem::filesystem_error& e){report.valid=false;report.error=e.what();
+        report.issue=DetReplayFileIssue{e.path1().empty()?currentPath:e.path1().string(),std::nullopt};}
+    catch(const std::exception& e){report.valid=false;report.error=e.what();report.issue=DetReplayFileIssue{currentPath,std::nullopt};}
     return report;
 }
 } // namespace ayt::entity

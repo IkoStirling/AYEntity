@@ -77,7 +77,8 @@ void checks(const fs::path& fixture,const fs::path& crash) {
     require(!r.open(rebuilt.path),"invalid recovery reason with valid checksums rejected");
     auto badCount=recoveredBytes;put(badCount,4+20+4+u32(badCount,4+20)+4,4,4);rechain(badCount);write(rebuilt.path,badCount);
     require(!r.open(rebuilt.path),"recovered prefix ordinal/count mismatch rejected");write(rebuilt.path,recoveredBytes);
-    require(!DetRollbackReplayArchive::rebuildIndex(path,(working/"rebuilt").string()).valid,"refuse existing destination");
+    const auto refused=DetRollbackReplayArchive::rebuildIndex(path,(working/"rebuilt").string());
+    require(!refused.valid && refused.issue && refused.issue->path==(working/"rebuilt").string(),"existing destination reports output failure, not scan stop");
     const Bytes badIndex{1,2,3,4,5};write(lost/"sample.rpi",badIndex);
     require(!DetRollbackReplayArchive::inspect((lost/"sample.rpi").string()).valid,"bad index inspection");
     const auto rebuiltBad=DetRollbackReplayArchive::rebuildIndex((lost/"sample.rpi").string(),(working/"bad-index-rebuilt").string());
