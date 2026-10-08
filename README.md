@@ -385,3 +385,19 @@ epoch2 recovery, confirmed recording/replay/seek and diagnostic CSV output.
 See [Stage15](../../AYDocs/DETERMINISTIC-ROLLBACK-REPLAY-STAGE15.md).
 
 The offline AYEntity_DeterministicRollbackReplayWorker accepts recording.rpl, expected.state and optional epoch/nextTick; verifies full bytes and event identity trace, prints segment/gap/first-field diagnostics, without Host/network.
+
+## Stage16: bounded external transport scheduling
+
+`AYEntity::DeterminismKernel` + `DeterministicTransport.h` provides
+`DetTransportScheduler`: fixed remote member IDs, atomic bounded retained-set
+replacement, per-peer byte-rate/burst and per-frame byte/packet attempt budgets,
+unsent-first incremental egress, periodic resends, and weighted realtime/recovery
+round robin. Failed sends stay pending; one pressured peer cannot block others.
+
+After ingress/forward/recovery, call `sync(detRollbackTransportBatch(networkPackets))`
+and `pumpDetTransport` with authenticated connections and monotonic milliseconds.
+The AYNetwork adapter is in `DeterministicNetwork.h`; link AYNetwork explicitly.
+Lockstep uses `detLockstepTransportBatch`. Keep clocks/policy outside Sim. Inspect
+retained/pending bytes, retries, resends and disconnected state; explicit admitted
+rebind uses `resumePeer`. Do not pump legacy unbudgeted helpers alongside it.
+See [Stage16](../../AYDocs/DETERMINISTIC-TRANSPORT-STAGE16.md).

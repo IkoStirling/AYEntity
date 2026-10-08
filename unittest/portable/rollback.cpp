@@ -2,6 +2,8 @@
 #include "../DetTypedSessionScenario.h"
 #include "../DetExtendedCollisionScenario.h"
 #include <AYEntity/DeterministicRollback.h>
+#include <AYEntity/DeterministicTransport.h>
+void transportChecks();
 #include <iostream>
 #include <cfenv>
 #if defined(_M_X64) || defined(__x86_64__)
@@ -101,16 +103,29 @@ void networkChecks(std::uint32_t delay) {
         const auto cp=baseline.checkpoint();for(const auto& c:cp->pendingEvents)expected.push_back({1,tick,c});
     }
     struct Queued {std::uint64_t at;std::uint32_t sender;std::vector<std::uint8_t> bytes;};std::vector<Queued> queue;
-    std::uint64_t packets=0,round=0,samplesA=0,samplesB=0;
+    std::uint64_t packets=0,round=0,samplesA=0,samplesB=0,retries=0,peakQueue=0;
+    DetTransportConfig tx;tx.peers={2};tx.bytesPerSecond=32*1024;tx.packetsPerPump=3;tx.resendMs=40;tx.retryMs=5;
+    DetTransportScheduler sx(tx);tx.peers={1};DetTransportScheduler sy(tx);
+    auto transmit=[&](auto& net,auto& scheduler) {
+        require(scheduler.sync(detRollbackTransportBatch(net.packets())),scheduler.error());
+        require(scheduler.pump(round*5,[&](auto,auto bytes){
+            // Bounded two-frame transport queue; RetryLater cannot lose a frame.
+            const auto sender=net.config().localMember;
+            const auto waiting=std::count_if(queue.begin(),queue.end(),[&](const auto& q){return q.sender==sender;});
+            if(waiting>=2){++retries;return DetTransportSendResult::RetryLater;}
+            if(++packets%37!=0)queue.push_back({round+1+(packets%3),sender,{bytes.begin(),bytes.end()}});
+            peakQueue=std::max<std::uint64_t>(peakQueue,queue.size());return DetTransportSendResult::Accepted;
+        }),scheduler.error());
+        const auto d=scheduler.diagnostics();require(d.retainedBytes<=tx.maxBufferedBytes && d.peers[0].lastPumpPackets<=3
+            && d.peers[0].lastPumpBytes<=tx.bytesPerPump,"bounded scheduler per-frame/cache");
+    };
     auto sample=[&](auto& net,auto& s,std::uint32_t member,std::uint64_t& samples){
         if(s.nextTick()>=count || net.history().hasInput(member,net.localInputTick()))return;
         auto in=part(detsession_scenario::input(net.localInputTick()-delay),member);in.tick=net.localInputTick();
         require(net.submitLocal(std::move(in)),net.error());++samples;};
     for(;round<100000 && !(a.nextTick()==count && b.nextTick()==count && x.synchronized() && y.synchronized());++round) {
         sample(x,a,1,samplesA);sample(y,b,2,samplesB);
-        for(auto* net:{&x,&y}) {auto list=net->packets();if(net==&y)std::reverse(list.begin(),list.end());
-            for(auto& packet:list) {if(++packets%37==0)continue;
-                queue.push_back({round+(packets%3),net->config().localMember,std::move(packet)});}}
+        transmit(x,sx);transmit(y,sy);
         // Deliver newest ready packets first; retransmission repairs application-level loss.
         for(auto it=queue.end();it!=queue.begin();) {--it;if(it->at>round)continue;
             auto& target=it->sender==1?y:x;
@@ -120,7 +135,7 @@ void networkChecks(std::uint32_t delay) {
         auto e=x.takeConfirmedEvents();xe.insert(xe.end(),e.begin(),e.end());e=y.takeConfirmedEvents();ye.insert(ye.end(),e.begin(),e.end());
     }
     auto e=x.takeConfirmedEvents();xe.insert(xe.end(),e.begin(),e.end());e=y.takeConfirmedEvents();ye.insert(ye.end(),e.begin(),e.end());
-    require(round<100000 && samplesA==count && samplesB==count,"network horizon/retransmit and sampling");
+    require(round<100000 && samplesA==count && samplesB==count && retries>0 && peakQueue<=4,"congested bounded network horizon/retransmit and sampling");
     require(encodeDetCheckpoint(*a.checkpoint())==encodeDetCheckpoint(*baseline.checkpoint()) &&
         encodeDetCheckpoint(*b.checkpoint())==encodeDetCheckpoint(*baseline.checkpoint()),"network corrected complete bytes");
     require(xe==expected && ye==expected && x.takeConfirmedEvents().empty(),"all-peer verified effects exactly once");
@@ -163,6 +178,36 @@ void transferChecks() {
         for(const auto& p:y.packets())require(x.receive(2,p),x.error());
     }
     require(x.synchronized()&&y.synchronized()&&encodeDetCheckpoint(*a.checkpoint())==before,"multi-chunk recovery bytes/handshake");
+    // Repeat a real multi-chunk epoch under the production scheduler, limited
+    // to one in-flight message per peer. Loss of a chunk requires periodic repair.
+    require(x.beginRecovery(3),x.error());
+    DetTransportConfig tc;tc.peers={2};tc.bytesPerSecond=32*1024;tc.burstBytes=70000;
+    tc.bytesPerPump=70000;tc.packetsPerPump=2;tc.resendMs=100;tc.retryMs=10;
+    DetTransportScheduler sx(tc);tc.peers={1};DetTransportScheduler sy(tc);
+    struct Flight {std::uint64_t at;unsigned sender;std::vector<std::uint8_t> bytes;};
+    std::vector<Flight> queue;std::uint64_t attempts=0,retries=0,bulk=0,control=0,steps=0;
+    for(;steps<4000 && !(x.synchronized()&&y.synchronized()&&y.config().epoch==3);++steps) {
+        auto send=[&](auto& owner,auto& scheduler){
+            require(scheduler.sync(detRollbackTransportBatch(owner.packets())),scheduler.error());
+            require(scheduler.pump(steps*10,[&](auto,auto bytes){
+                const auto member=owner.config().localMember;
+                if(std::any_of(queue.begin(),queue.end(),[&](const auto& f){return f.sender==member;})) {
+                    ++retries;return DetTransportSendResult::RetryLater;
+                }
+                if(bytes[24]==4)++bulk;else ++control;
+                if(++attempts%7!=0)queue.push_back({steps+3,member,{bytes.begin(),bytes.end()}});
+                require(queue.size()<=2,"chunk transport queue bounded");return DetTransportSendResult::Accepted;
+            }),scheduler.error());
+        };
+        send(x,sx);send(y,sy);
+        for(auto it=queue.end();it!=queue.begin();) {--it;if(it->at>steps)continue;
+            auto& target=it->sender==1?y:x;require(target.receive(it->sender,it->bytes),target.error());it=queue.erase(it);}
+    }
+    require(steps<4000 && retries>0 && bulk>4 && control>0 && encodeDetCheckpoint(*b.checkpoint())==before,
+        "rate-limited recovery chunks/hello complete through backpressure/loss");
+    require(sx.sync(detRollbackTransportBatch(x.packets())),sx.error());
+    require(sx.diagnostics().retainedBytes<16384,"obsolete recovery chunks retire after handshake");
+    std::cout<<"PASS scheduled multi-chunk recovery with 32 KiB/s, bounded queues, loss, retries and control service\n";
     // Different immutable prediction semantics fail even with identical Session manifests.
     DeterministicSession m,n;require(m.seal()&&n.seal(),"policy mismatch state");
     cfg.sessionId=94;cfg.localMember=1;DeterministicRollbackNetwork left(m,cfg);
@@ -210,5 +255,5 @@ int main(){try {
 #if defined(_M_X64) || defined(__x86_64__)
     _mm_setcsr(_mm_getcsr()|0x8040u);
 #endif
-    coreChecks();networkChecks(0);networkChecks(2);transferChecks();effectRecoveryChecks();
+    transportChecks();coreChecks();networkChecks(0);networkChecks(2);transferChecks();effectRecoveryChecks();
 }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

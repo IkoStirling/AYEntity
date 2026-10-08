@@ -96,7 +96,7 @@ if(TARGET AYReplay)
         src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp src/AYDeterministicState.cpp
         src/AYDeterministicCollision2D.cpp
         src/AYDeterministicLockstepProtocol.cpp src/AYDeterministicLockstep.cpp
-        src/AYDeterministicRollback.cpp src/AYDeterministicRollbackNetwork.cpp)
+        src/AYDeterministicRollback.cpp src/AYDeterministicRollbackNetwork.cpp src/AYDeterministicTransport.cpp)
     add_library(AYEntity::DeterminismKernel ALIAS AYEntityDeterminismKernel)
     ay_configure_entity_target(AYEntityDeterminismKernel)
     target_link_libraries(AYEntityDeterminismKernel PUBLIC AYMath AYReplay)

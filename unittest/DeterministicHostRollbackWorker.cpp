@@ -6,7 +6,7 @@
 #include <iostream>
 #include <thread>
 #include <cfenv>
-#include <set>
+#include <AYEntity/DeterministicNetwork.h>
 using namespace dethost_test;
 using namespace ayt::net;
 int main(int argc,char** argv) {
@@ -48,9 +48,12 @@ int main(int argc,char** argv) {
             pending.push_back({Clock::now()+std::chrono::milliseconds(received%3),{begin,begin+size}});});
         if(member==1)net->listen(port);else net->connect("127.0.0.1",port);
         const auto deadline=Clock::now()+std::chrono::seconds(600);
-        auto lastResend=Clock::time_point{},completed=Clock::time_point{};
-        std::set<std::vector<std::uint8_t>> sent;
-        std::uint64_t frame=0,lastTick=UINT64_MAX,lastSamples=UINT64_MAX,lastReport=0;
+        auto completed=Clock::time_point{};
+        DetTransportConfig egress;egress.peers={member==1?2u:1u};egress.bytesPerSecond=96*1024;
+        egress.packetsPerPump=12;egress.resendMs=100;DetTransportScheduler scheduler(egress);
+        const auto started=Clock::now();std::ofstream transportStats(output+".transport.csv");
+        transportStats<<"frame,retained_bytes,pending,accepted,retransmits,retry_later,pump_bytes,pump_packets\n";
+        std::uint64_t frame=0,lastReport=0;
         while(Clock::now()<deadline) {
             net->update(0.001f);
             for(auto it=pending.end();it!=pending.begin();) {--it;if(it->at>Clock::now())continue;
@@ -65,15 +68,17 @@ int main(int argc,char** argv) {
                 rollbacks+=f.controller.rollbackCount();
                 if(!f.controller.beginNetworkRecovery(2))throw std::runtime_error(f.controller.error());
             }
-            const bool resend=Clock::now()-lastResend>std::chrono::milliseconds(100);
-            if(tick!=lastTick || samples!=lastSamples || resend) {
-                auto packets=f.controller.networkPackets();if(member==2)std::reverse(packets.begin(),packets.end());
-                auto send=[&](NetConnection* c){for(const auto& p:packets)if(resend || !sent.contains(p))
-                    net->sendTo(c,CHANNEL_RELIABLE,p.data(),p.size());};
-                if(member==1){for(auto* c:net->getConnections())send(c);}else if(auto* c=net->getConnection())send(c);
-                sent={packets.begin(),packets.end()};
-                if(resend)lastResend=Clock::now();lastTick=tick;lastSamples=samples;
-            }
+            if(!scheduler.sync(detRollbackTransportBatch(f.controller.networkPackets())))throw std::runtime_error(scheduler.error());
+            std::vector<DetTransportPeer> links;
+            if(member==1){for(auto* c:net->getConnections())if(c && c->isConnected())links.push_back({2,c});}
+            else if(auto* c=net->getConnection();c && c->isConnected())links.push_back({1,c});
+            const auto now=std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now()-started).count();
+            if(!pumpDetTransport(scheduler,static_cast<std::uint64_t>(now),*net,links,CHANNEL_RELIABLE,128*1024))throw std::runtime_error(scheduler.error());
+            const auto td=scheduler.diagnostics();const auto& peer=td.peers.front();
+            if(td.retainedBytes>egress.maxBufferedBytes || peer.lastPumpBytes>egress.bytesPerPump || peer.lastPumpPackets>egress.packetsPerPump)
+                throw std::runtime_error("egress budget exceeded");
+            if(tick>=lastReport+1000 || tick==10000)transportStats<<frame<<','<<td.retainedBytes<<','<<peer.pendingPackets<<','
+                <<peer.accepted<<','<<peer.retransmits<<','<<peer.retryLater<<','<<peer.lastPumpBytes<<','<<peer.lastPumpPackets<<'\n';
             if(tick>=lastReport+1000){lastReport=tick;report(frame);std::cout<<"PROGRESS member="<<member<<" tick="<<tick<<" verified="<<f.controller.networkVerifiedNextTick()<<" epoch="<<f.controller.networkEpoch()<<std::endl;}
             if(tick==10000 && f.controller.networkSynchronized()) {
                 if(completed==Clock::time_point{})completed=Clock::now();
@@ -90,7 +95,7 @@ int main(int argc,char** argv) {
         {std::ofstream state(output,std::ios::binary);state.write(reinterpret_cast<const char*>(bytes.data()),bytes.size());}
         {std::ofstream trace(output+".trace");for(const auto& e:actual)trace<<e.epoch<<' '<<e.tick<<' '<<e.command.source<<' '<<e.command.sequence<<' '<<e.command.type<<'\n';}
         rollbacks+=f.controller.rollbackCount();
-        report(frame);if(!diagnostics)throw std::runtime_error("diagnostic CSV write failed");
+        report(frame);if(!transportStats)throw std::runtime_error("transport CSV write failed");if(!diagnostics)throw std::runtime_error("diagnostic CSV write failed");
         const auto recording=f.controller.recordingPath();
         if(!f.controller.stop())throw std::runtime_error(f.controller.error());
         DetRollbackReplayReader reader;if(!reader.open(recording) || !reader.restoreInitial(baseline))throw std::runtime_error(reader.error());
@@ -101,6 +106,6 @@ int main(int argc,char** argv) {
         if(!reader.seek(baseline,2,7351) || !reader.takeConfirmedEvents().empty())throw std::runtime_error("epoch seek failed/not silent");
         while(!reader.atEnd()) {if(!reader.advance(baseline))throw std::runtime_error(reader.error());(void)reader.takeConfirmedEvents();}
         if(encodeDetCheckpoint(*baseline.checkpoint())!=bytes)throw std::runtime_error("seek final state mismatch");
-        std::cout<<"PASS actual Host/AYNetwork rollback + confirmed record/replay/epoch seek + collision 10000 ticks, samples="<<samples<<", rollbacks="<<rollbacks<<", confirmed effects="<<actual.size()<<", recovery epoch=2\n";
+        std::cout<<"PASS budgeted actual Host/AYNetwork rollback + confirmed record/replay/epoch seek + collision 10000 ticks, samples="<<samples<<", rollbacks="<<rollbacks<<", confirmed effects="<<actual.size()<<", recovery epoch=2\n";
     }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}
 }

@@ -33,6 +33,7 @@ add_executable(AYEntity_RollbackChecks rollback.cpp
     "${AYENTITY_ROOT}/src/AYDeterministicSession.cpp" "${AYENTITY_ROOT}/src/AYDeterministicSessionWire.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicState.cpp" "${AYENTITY_ROOT}/src/AYDeterministicCollision2D.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRollback.cpp" "${AYENTITY_ROOT}/src/AYDeterministicRollbackNetwork.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicTransport.cpp" transport.cpp
     "${AYMATH_ROOT}/src/DetFloat.cpp" "${AYMATH_ROOT}/src/DetMath.cpp" $<TARGET_OBJECTS:TypedStateBackend>)
 target_compile_features(AYEntity_RollbackChecks PRIVATE cxx_std_23)
 target_include_directories(AYEntity_RollbackChecks PRIVATE "${AYENTITY_ROOT}/include" "${AYMATH_ROOT}/include"

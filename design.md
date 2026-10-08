@@ -1570,3 +1570,26 @@ epoch2 recovery, confirmed recording/replay/seek and diagnostic CSV output.
 See [Stage15](../../AYDocs/DETERMINISTIC-ROLLBACK-REPLAY-STAGE15.md).
 
 The offline AYEntity_DeterministicRollbackReplayWorker accepts recording.rpl, expected.state and optional epoch/nextTick; verifies full bytes and event identity trace, prints segment/gap/first-field diagnostics, without Host/network.
+
+## Stage16: egress scheduling boundary
+
+The portable scheduler stores payloads once, with at most eight delivery records,
+and atomically replaces the complete current owner retransmission set. Exact-byte
+identity preserves per-peer accepted timestamps; obsolete history/epoch/recovery
+chunks retire on sync. Resource failure rejects replacement without losing old
+work. Payload bounds exclude allocator/metadata; replacement can hold two sets.
+
+Each external frame pumps independent member token buckets and byte/packet attempt
+budgets. Failures consume budget, RetryLater sets bounded retry backoff without
+marking accepted, Disconnected parks until explicit resume, unsupported/permanent
+rejection or sender exception faults this scheduler. No Session mutation or hidden
+clock. Weighted realtime/recovery cursors service unsent before due resends within
+each lane; a selected large packet accumulates credit instead of starving forever.
+Network send acceptance does not acknowledge protocol delivery. Retained periodic
+resends repair loss; registered Sim still controls confirmation/recovery.
+
+The trusted-local profile1 classifier routes hello/input/hash to realtime and
+recovery chunks to bulk. Existing wire/profile, hashes, checkpoints and replay
+formats are unchanged. The Windows Host process uses the public scheduler and
+checked AYNetwork path; portable tests bound in-flight queues and inject loss and
+backpressure across 10000 ticks and multi-chunk epoch recovery.
