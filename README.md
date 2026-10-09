@@ -472,3 +472,83 @@ after physical transitions; an independent one-tick run must reproduce all diffe
 fields. Spaced/special paths, deadlines, missing runner/report and bad arguments are
 tested. Native CI uploads reports, repros, actual state and exact module/root revisions
 even on failure. See [Stage19](../../AYDocs/DETERMINISTIC-REGRESSION-STAGE19.md).
+
+## Stage20: simulation fault boundaries, scene queries and sustained campaigns
+
+`DetTickContext` access and request errors now fault the tick even when a callback
+catches the exception and returns success. This includes pose, legacy/typed state,
+RNG and structural/event requests. Malformed or over-budget requests are rejected
+before append; existing/retired spawn IDs and unknown nonzero despawn IDs remain
+ordered, prospective-boundary topology checks. A failed tick does not advance and
+cannot be checkpointed or resumed until a valid explicit restore. Earlier successful
+writes are not automatically undone. Event limits are shared across all producers:
+1024 commands and 64 KiB of aggregate payload plus 16 bytes per command, checked
+before allocation/append. Exactly 65520 payload bytes in one command fit the budget.
+
+Include `DeterministicCollisionQuery2D.h` and capture `DetCollisionQuery2D` from a
+system's context, or a matching Session checkpoint at a quiescent boundary, using
+the installed `DetCollision2DConfig`. Both paths validate typed body/history data,
+policy and represented XY bounds. Checkpoint capture additionally checks manifest
+numeric profiles, body/history schema IDs, field types/versions and pose snapshot
+validity; it does not establish application/content/code compatibility or run
+arbitrary game validators. At most `config.maxBodies` active bodies, with a hard maximum of 64,
+are copied. Disabled bodies are omitted. The value owns no World/context pointers:
+callback (priority,id) order determines which writes it sees; recapture after
+movement or restore while existing snapshots keep their original values.
+
+Queries use world XY AABBs and offsets; Z, rotation and scale do not affect shape.
+`overlap` returns all matching stable IDs in ascending order, including touching
+by default (`interior=true` excludes mere face/corner touching). `raycast` takes
+a displacement, not a normalized direction or an unbounded ray: its closed
+segment includes both endpoints; inside/boundary starts hit at zero with zero
+normal. `sweep` requires positive area, reports initial penetration and inward
+face entry, and excludes outward/tangent motion and grazing corners. Targets stay
+frozen, including moving obstacles. Ray/sweep hits sort by software fraction, axis
+and stable ID; X wins exact entry-time ties. Reciprocal layer/mask filtering supports
+an ignored stable ID and optional trigger exclusion. Invalid capture/query data or
+arithmetic throws without returning a partial result. A caught pure query exception
+does not itself set a Session fault; illegal context access during capture remains
+sticky, and an uncaught exception follows the normal system fault path.
+
+`AYEntity_SimulationCampaign` starts fresh owned Sessions for each seed and compares
+three lanes: real-input forward execution, corrected prediction/rollback, and
+random checkpoint restore/replay. It varies registration order, rational dt,
+payloads, late/shuffled/duplicate ingress and restore points; structural state, RNG,
+typed state and optional collision histories remain registered authority. Full
+canonical checkpoints are checked at each confirmed boundary, with exact committed
+event identities/payloads and repeated-drain checks for exactly-once delivery.
+
+```
+AYEntity_SimulationCampaign --seed 20261010 --cases 8 --seconds 18000 --output NEW_OUTPUT_DIRECTORY
+AYEntity_SimulationCampaign --seed 189145 --cases 1 --ticks 16 --output NEW_OUTPUT_DIRECTORY
+```
+
+`--output` is required; a fresh run subdirectory is created. `--seed` accepts the
+full UInt64 range (default 1), `--cases` is 1..1000000 (default 8), `--seconds` is
+0..86400 (default 0), and optional `--ticks` is 16..8192 (otherwise 256..512 per
+seed). Sustained mode performs new cases until both the steady-clock deadline and
+minimum case count are satisfied; it finishes the current case without idle sleeps.
+`--context-only` runs the directed fault/restore checks. Seed 189145/ticks16 is a
+fixed harness regression: an explicit bootstrap duplicate guarantees duplicate
+coverage even when the random schedule contains none; this corrects a false
+coverage failure, not a product defect.
+
+Per-case references are pruned to the confirmation/rollback horizon (16..48 history
+ticks, 16 MiB canonical history budget); each completed case releases its Sessions
+and reference state. `progress.json` periodically records case/tick/checkpoint/event,
+restore, rollback, replay and duplicate counters. Failures include seed, lane, first
+available field difference, available canonical checkpoint/input witnesses and the
+complete single-seed command recipe. These witnesses localize the failure; they
+are not universally standalone one-step replays of the arrival/rollback schedule.
+
+The bounded external runner report now checks the complete schema/source/result/
+identity/recovery and exit-status protocol rather than accepting matching text.
+This is protocol validation for a trusted application runner, not authentication or
+proof of its implementation. Root and portable builds register
+`AYEntity_ContextFaultChecks`, `AYEntity_SimulationCampaign`,
+`AYEntity_SimulationCampaignShortCase`, `AYEntity_CollisionQueryChecks` and
+`AYEntity_RunnerReportChecks`. See [Stage20](../../AYDocs/DETERMINISTIC-SIMULATION-STAGE20.md)
+for the protocol contract and actual build, sustained campaign and cross-platform
+acceptance evidence; running/planned checks remain distinct from completed results.
+The portable rollback gate keeps its full 100000+ advance workload in Debug; its
+checked-iterator/unoptimized budget is 1500s, while Release/native CI stays 240s.

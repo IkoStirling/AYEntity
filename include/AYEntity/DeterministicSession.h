@@ -73,8 +73,11 @@ class DeterministicSession;
  * @note Iterate entities() by stable SimEntityId. Hidden mutable callback state,
  * runtime Entity IDs, native floats and external effects are outside the contract.
  * All mutable gameplay data must use pose(), typed read/write, legacy word
- * blocks, or registered RNG. Typed access throws on ID/shape/type/value errors;
- * the tick faults even if a callback catches the exception.
+ * blocks, or registered RNG. Access/request errors throw and fault the tick even
+ * if a callback catches the exception. Malformed/over-budget requests are rejected
+ * before append; deferred identity/topology is checked at the prospective boundary.
+ * Event count and aggregate payload+16-byte command budgets are checked before
+ * allocation/append. Earlier successful writes still require explicit restore.
  */
 class DetTickContext {
 public:

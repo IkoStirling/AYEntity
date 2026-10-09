@@ -36,6 +36,7 @@ ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
     for(unsigned i=0;i<n;++i) {
         const auto id=r.u32(),version=r.u32(),count=r.count(maxFields);
         if(id<=previous || id==UINT32_MAX || !version || !count)throw std::runtime_error("Invalid manifest schema");previous=id;
+        layout.schemaVersions.emplace(id,version);
         auto& fields=layout.schemas[id];std::uint32_t previousField=0;
         for(unsigned j=0;j<count;++j) {
             auto field=r.u32();if(field<=previousField)throw std::runtime_error("Invalid manifest field ID");previousField=field;

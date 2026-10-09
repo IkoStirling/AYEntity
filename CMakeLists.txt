@@ -119,6 +119,7 @@ if(TARGET AYReplay)
         add_test(NAME AYEntity_ReplayArchiveCLI COMMAND AYEntity_ReplayArchiveTool inspect "${_archive_fixture}/sample.rpi")
         set(AYENTITY_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
         include(unittest/ReplayRegression.cmake)
+        include(unittest/SimulationCampaign.cmake)
     endif()
 endif()
 

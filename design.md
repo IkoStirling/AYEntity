@@ -1664,3 +1664,146 @@ after physical transitions; an independent one-tick run must reproduce all diffe
 fields. Spaced/special paths, deadlines, missing runner/report and bad arguments are
 tested. Native CI uploads reports, repros, actual state and exact module/root revisions
 even on failure. See [Stage19](../../AYDocs/DETERMINISTIC-REGRESSION-STAGE19.md).
+
+## Stage20: simulation fault boundaries, immutable queries and seed campaigns
+
+Tick-context failures share the existing sticky access-fault path. A callback may
+catch an exception for diagnostics, but cannot turn an invalid context access or
+request into a successful tick by returning true. Pose, legacy/typed actor/global
+state, RNG and spawn/despawn/emit paths use this rule. Malformed or over-budget
+requests do not append; successful earlier writes/requests are not rolled back
+automatically. The Session remains faulted at the unchanged tick boundary and
+rejects checkpoint/advance until a valid explicit restore. Restore clears the
+fault and transient request/event accounting. Pre-tick invalid input still follows
+its existing rejection contract, without making a previously healthy Session faulted.
+
+Structural identity validation stays deferred and ordered. A well-formed request
+to spawn an existing/retired stable ID or despawn an unknown nonzero stable ID can
+be appended, but the prospective boundary must reject the resulting topology
+before structural commit. It must not be documented as a successful mutation or
+as an immediate malformed-request check. This preserves spawn/despawn ordering,
+retired-ID rules, the existing restore contract and checkpoint/wire profiles.
+
+Event accounting is tick-wide, including all producer callbacks, rather than a
+per-context allowance. Each command costs payload bytes plus its 16-byte canonical
+header. Count (1024), aggregate bytes (65536), type, individual payload and sequence
+limits are checked before copying/appending a command; counters advance only after
+successful append. A single 65520-byte payload, two 32752-byte payloads from different
+producers, or 1024 empty commands are legal upper-bound cases. The next command is
+rejected and faults the tick even if the producer catches that exception. Directed
+checks also exercise malformed requests, missing accesses, deferred topology, later
+system suppression, blocked checkpoint/retry and canonical equality after restore.
+
+### Scene query acquisition and validation
+
+`DetCollisionQuery2D` is a bounded immutable value facade over registered collision
+bodies, acquired from `DetTickContext` during a system callback or from a matching
+Session checkpoint at a quiescent boundary. Use the exact installed collision
+policy. The checkpoint path reads the manifest, checks numeric profiles and exact
+body/history schema identity (schema ID/version, field IDs/types/lane widths),
+validates policy globals/body lanes/history ordering and restores each represented
+pose through its snapshot validity checks. Disabled bodies do not enter the copied
+proxy list; active bounds must remain valid after software XY arithmetic and must
+fit `config.maxBodies` (hard maximum 64). Invalid data/capacity is rejected rather
+than yielding a truncated scene. This is collision-data validation, not application
+logic/content compatibility, authentication or an arbitrary user-validator proof;
+file decoding alone does not establish the application factory contract.
+
+Capture copies stable ID, represented XY bounds, layer/mask and trigger status.
+It stores no World/context pointer, authority outside registered state or hidden
+mutable cache. A callback capture observes preceding writes in (priority,id)
+system order; a boundary capture observes the supplied checkpoint. Capturing again
+after movement or restore is required to query the new state; older copies continue
+to describe their original state. Query operations do not mutate poses, RNG,
+collision history, events or the originating Session. Offsets are world XY;
+rotation, scale and Z do not transform these axis-aligned shapes.
+
+### Exact geometric query contract
+
+The facade retains AYMath's software Float32 geometry semantics, without epsilon
+or native physics. `overlap(box,filter,interior)` returns every matching stable ID
+in ascending order; the default is closed overlap, including face/corner touching,
+whereas interior overlap requires positive intersection on both axes. Raycast is
+the finite closed segment `origin + displacement*t`, `t` in [0,1]. Zero displacement
+is handled explicitly; an inside/boundary start returns fraction zero and zero
+normal. Sweep requires a positive-area moving box; initial penetration is reported,
+inward face entry blocks, outward/tangent face motion and grazing corner contacts
+do not block, and a true entry at the segment endpoint does block. Every target is
+frozen at capture, including moving obstacles; this does not predict target motion
+or perform collision response.
+
+Ray/sweep return all matching hits ordered by software fraction, axis, then stable
+ID. Exact geometric entry-time ties select X; signed zeros follow software numeric
+comparison. Filtering is reciprocal (`body.mask & filter.layer` and
+`filter.mask & body.layer`), with nonzero query layer, intentional empty mask zero,
+optional ignored stable ID and trigger inclusion by default. Capture validates
+bodies before filtering, so filtering cannot conceal invalid represented data.
+Queries validate their own arguments even for an empty scene. Invalid shapes,
+policy/filter, represented bounds or unrepresentable coordinate differences throw;
+quotients outside binary32 range may use software infinities to classify intervals
+outside the segment. Callers receive no partial result vector on an exception.
+A caught pure geometric query exception does not set the
+context access-fault flag. Illegal context reads made during capture remain sticky;
+an uncaught capture/query exception faults the normal system execution path.
+
+### Sustained simulation verification and diagnostics
+
+The campaign constructs three fresh owned/sealed Sessions per seed. The forward
+lane receives all true inputs. The corrected lane receives Hold/Zero/Omit member
+prediction with bounded late arrivals, shuffled ingress, duplicate contributions
+and explicit replay-history probes. The restore lane receives true inputs and
+returns to seed-selected earlier checkpoints, replaying each boundary. Reversed
+schema/RNG/system/actor registration order must produce identical canonical state.
+Rational dt, command payload lengths, registered structural decisions, RNG draws,
+typed fields, collision trigger histories and restore points vary deterministically
+with the seed. Callback captures contain immutable policy only; mutable simulation
+authority remains registered in the Session.
+
+Forward/restore checks compare complete canonical checkpoint bytes. Every newly
+confirmed corrected boundary must match the forward reference, not merely its
+final checksum. Committed events must match epoch/tick/source/sequence and payload,
+and repeated drains must be empty after delivery. Intermediate references are
+pruned only outside both confirmed comparison and rollback needs. The harness uses
+16..48 history ticks, a 16 MiB canonical history budget, 2..6 arrival-delay ticks,
+4..8 prediction ticks, eight future-input ticks and at most 8192 forward ticks per
+case. Fresh Sessions and references are discarded per completed case, so sustained
+mode does not accumulate every case's state in memory. These are harness limits,
+not a claim that arbitrary application callbacks have bounded allocation.
+
+The executable accepts `--seed` (UInt64, default 1), `--cases` (1..1000000, default 8),
+`--seconds` (0..86400, default 0), optional `--ticks` (16..8192; default 256..512 per
+seed), required `--output DIRECTORY`, and `--context-only`. Unknown/missing/invalid
+arguments exit 2. It creates a fresh run directory under an ordinary output directory.
+With positive seconds, the steady-clock deadline and minimum case count must both
+be satisfied; it finishes a whole case, then advances the seed, without sleeping to
+consume time. Context-only mode runs the directed fault checks without seed cases.
+The fixed seed189145/ticks16 test forces an idempotent tick0/member1 bootstrap
+duplicate in every case: a valid short random schedule could contain no duplicate,
+so this is a coverage-harness correction rather than an engine regression.
+
+Schema1 `progress.json` is updated at case boundaries approximately every 15 seconds
+and at completion/failure. It records base/last/next seeds, requested time, minimum
+cases, elapsed time, cases/ticks, checkpoint/event comparisons, restored ticks,
+rollback/replay/duplicate counts, last hash and output path. Updates are operational
+progress, without atomic publication or power-loss durability promises. A failure
+report records seed, case length, failing tick/lane, first available canonical field
+difference and a complete `--seed S --cases 1 --ticks N --output NEW_OUTPUT_DIRECTORY`
+recipe for the same executable. Available before/expected/actual checkpoint and
+canonical input bytes are saved as localization witnesses; a corrected-lane failure
+can depend on ingress/history, so those binaries alone are not universally a one-step
+reproduction. Exit 0 means pass, 1 regression/harness/setup failure, 2 bad arguments,
+and 3 failure while publishing diagnostic artifacts.
+
+`AYEntity_CollisionQueryChecks` adds directed geometry/filter/order/capture/restore
+checks and seeded independent integer oracles for overlap, ray and sweep. Root and
+portable builds register it alongside `AYEntity_ContextFaultChecks`,
+`AYEntity_SimulationCampaign`, `AYEntity_SimulationCampaignShortCase` and
+`AYEntity_RunnerReportChecks`. The external runner now uses a bounded structural
+JSON protocol check for required fields, source identity, result/recovery consistency
+and exit status; malformed/duplicate-key/trailing reports cannot become success
+through matching text. Existing legal reports remain within the protocol. See
+[Stage20](../../AYDocs/DETERMINISTIC-SIMULATION-STAGE20.md) for its complete contract.
+That record tracks actual build, sustained campaign and cross-platform acceptance
+separately from the implementation contract, retaining incomplete and failed runs.
+Portable rollback validation retains identical fixed workloads across configurations;
+Debug has a 1500s budget for checked iterators/unoptimized execution, Release 240s.

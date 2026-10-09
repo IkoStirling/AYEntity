@@ -60,6 +60,9 @@ public:
     static std::string toJson(const DetReplayRegressionReport&);
     /// Application executable protocol: --ayreplay-verify SOURCE NEW_DIRECTORY.
     /// JSON stdout; exit0 success,1 regression,2 arguments,3 artifact I/O failure.
+    /// ayreplay validates bounded schema1 UTF-8 reports and source/result/exit
+    /// consistency; it cannot prove runner honesty. The current Windows replay
+    /// file pipeline supports ASCII paths; Unicode JSON is a separate boundary.
     static int runnerMain(int argc,char** argv,const DetReplaySessionFactory&,DetReplayRegressionOptions={});
 private:
     struct Cursor;

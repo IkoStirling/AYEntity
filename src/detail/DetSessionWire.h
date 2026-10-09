@@ -68,6 +68,7 @@ inline constexpr std::uint32_t checkpointMagic=0x43534441,inputMagic=0x49534441,
 struct LayoutField {std::uint32_t id;DetStateType type;std::uint32_t width;};
 struct ManifestLayout {
     std::map<std::uint32_t,std::vector<LayoutField>> schemas;
+    std::map<std::uint32_t,std::uint32_t> schemaVersions;
     std::set<std::uint32_t> globals;
 };
 ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes);

@@ -34,12 +34,17 @@ struct DeterministicSession::Impl {
     DetSessionCheckpoint state,last;
     DetTickInput input;
     std::vector<DetTickCommand> outgoing;
+    std::size_t outgoingBytes=0;
     std::vector<Mutation> mutations;
     bool sealed=false,faulted=false,inTick=false;
     bool accessFailed=false;
     mutable std::string error;
     Impl(std::unique_ptr<DetSessionStorage> value,DetSessionConfig c):storage(std::move(value)),config(c),dt(math::DetFloat32::fromUInt(c.stepNumerator)/math::DetFloat32::fromUInt(c.stepDenominator)) {}
     bool fail(std::string e) const {if(validating)validationRejected=true;error=std::move(e);return false; }
+    [[noreturn]] void contextFailure(std::string operation,const std::exception& e) {
+        accessFailed=true;fail("Tick context "+std::move(operation)+": "+e.what());
+        throw std::runtime_error(error);
+    }
     bool configuring() {
         if (!storage->owns(owner))
             return fail("Session lost World ownership");
@@ -221,7 +226,7 @@ bool DeterministicSession::advance(DetTickInput input) {
     if(!canonicalizeDetInput(input,p.error))return false;
     auto before=p.capture();if(!before)return false;
     if(!sameState(p.last,*before))return p.fail("Registered Sim state changed outside the session tick");
-    p.input=std::move(input);p.inTick=true;p.accessFailed=false;p.mutations.clear();p.outgoing.clear();
+    p.input=std::move(input);p.inTick=true;p.accessFailed=false;p.mutations.clear();p.outgoing.clear();p.outgoingBytes=0;
     try {
         for(const auto& [id,a]:p.actors)a.pose->beginSimulationStep();
         for(auto& s:p.systems){DetTickContext context(*this,s.id);if(!s.callback(context))throw std::runtime_error("Session system rejected tick: "+std::to_string(s.id));
@@ -272,7 +277,7 @@ bool DeterministicSession::restore(const DetSessionCheckpoint& s) {
     for(const auto& [id,a]:p.actors)if(!replacement.contains(id) || replacement.at(id).pose!=a.pose)
         p.storage->destroy(a);
     p.actors.swap(replacement);p.state=std::move(newState);p.last=std::move(newLast);
-    p.outgoing.clear();p.mutations.clear();p.faulted=false;p.accessFailed=false;p.error.clear();return true;
+    p.outgoing.clear();p.outgoingBytes=0;p.mutations.clear();p.faulted=false;p.accessFailed=false;p.error.clear();return true;
 }
 std::uint64_t DeterministicSession::nextTick() const {return _impl->state.nextTick;}
 std::uint32_t DeterministicSession::inputVersion() const {return _impl->config.inputVersion;}
@@ -290,15 +295,26 @@ std::uint64_t DetTickContext::tick() const {return _session._impl->state.nextTic
 math::DetFloat32 DetTickContext::dt() const {return _session._impl->dt;}
 const DetTickInput& DetTickContext::input() const {return _session._impl->input;}
 std::span<const DetTickCommand> DetTickContext::events() const {return _session._impl->state.pendingEvents;}
-std::vector<SimEntityId> DetTickContext::entities() const {std::vector<SimEntityId> v;for(const auto& [id,a]:_session._impl->actors)v.push_back(id);return v;}
-DetSimTransformComponent& DetTickContext::pose(SimEntityId id) {return *_session._impl->actors.at(id).pose;}
+std::vector<SimEntityId> DetTickContext::entities() const {
+    auto& p=*_session._impl;
+    try {std::vector<SimEntityId> v;for(const auto& [id,a]:p.actors)v.push_back(id);return v;}
+    catch(const std::exception& e){p.contextFailure("entities",e);}
+}
+DetSimTransformComponent& DetTickContext::pose(SimEntityId id) {
+    auto& p=*_session._impl;
+    try {return *p.actors.at(id).pose;}
+    catch(const std::exception& e){p.contextFailure("pose [entity="+std::to_string(id)+"]",e);}
+}
 std::span<std::uint64_t> DetTickContext::words(SimEntityId id,std::uint32_t schema) {
-    auto& p=*_session._impl;if(p.schemas.at(schema).typed){p.accessFailed=true;p.fail("Typed schema requires typed access");throw std::logic_error(p.error);}
-    return (*p.actors.at(id).blocks).at(schema);
+    auto& p=*_session._impl;
+    try {if(p.schemas.at(schema).typed)throw std::logic_error("Typed schema requires typed access");
+        return (*p.actors.at(id).blocks).at(schema);}
+    catch(const std::exception& e){p.contextFailure("words [entity="+std::to_string(id)+", schema="+std::to_string(schema)+"]",e);}
 }
 std::span<std::uint64_t> DetTickContext::globals(std::uint32_t schema) {
-    auto& p=*_session._impl;if(p.schemas.at(schema).typed){p.accessFailed=true;p.fail("Typed schema requires typed access");throw std::logic_error(p.error);}
-    return p.state.globals.at(schema);
+    auto& p=*_session._impl;
+    try {if(p.schemas.at(schema).typed)throw std::logic_error("Typed schema requires typed access");return p.state.globals.at(schema);}
+    catch(const std::exception& e){p.contextFailure("globals [schema="+std::to_string(schema)+"]",e);}
 }
 DetStateValue DetTickContext::readValue(SimEntityId id,std::uint32_t schema,std::uint32_t field,DetStateType type) {
     auto& p=*_session._impl;
@@ -317,15 +333,32 @@ void DetTickContext::writeValue(SimEntityId id,std::uint32_t schema,std::uint32_
         p.schemas.at(schema).layout->write(words,field,value);
     }catch(const std::exception& e){p.accessFailed=true;p.fail("Typed state write [entity="+std::to_string(id)+", schema="+std::to_string(schema)+", field="+std::to_string(field)+"]: "+e.what());throw std::runtime_error(p.error);}
 }
-math::pcg32_state& DetTickContext::random(std::uint32_t stream) {return _session._impl->state.randomStreams.at(stream);}
+math::pcg32_state& DetTickContext::random(std::uint32_t stream) {
+    auto& p=*_session._impl;
+    try {return p.state.randomStreams.at(stream);}
+    catch(const std::exception& e){p.contextFailure("random [stream="+std::to_string(stream)+"]",e);}
+}
 void DetTickContext::spawn(SimEntityId id,DetActorState a) {
-    auto& p=*_session._impl;if(p.mutations.size()>=maxCommands)throw std::length_error("Structural command limit");p.defaults(a);p.mutations.push_back({id,true,std::move(a)});
+    auto& p=*_session._impl;
+    try {if(p.mutations.size()>=maxCommands)throw std::length_error("Structural command limit");
+        if(!id)throw std::invalid_argument("Zero spawn identity");
+        p.defaults(a);if(!p.validActor(a))throw std::invalid_argument("Invalid spawn state/schema");
+        p.mutations.push_back({id,true,std::move(a)});}
+    catch(const std::exception& e){p.contextFailure("spawn [entity="+std::to_string(id)+"]",e);}
 }
 void DetTickContext::despawn(SimEntityId id) {
-    auto& p=*_session._impl;if(p.mutations.size()>=maxCommands)throw std::length_error("Structural command limit");p.mutations.push_back({id,false,{}});
+    auto& p=*_session._impl;
+    try {if(p.mutations.size()>=maxCommands)throw std::length_error("Structural command limit");
+        if(!id)throw std::invalid_argument("Zero despawn identity");p.mutations.push_back({id,false,{}});}
+    catch(const std::exception& e){p.contextFailure("despawn [entity="+std::to_string(id)+"]",e);}
 }
 void DetTickContext::emit(std::uint32_t type,std::span<const std::uint8_t> payload) {
-    auto& p=*_session._impl;if(p.outgoing.size()>=maxCommands || payload.size()>maxInputBytes || _sequence==UINT32_MAX)throw std::length_error("Event limit");
-    p.outgoing.push_back({_system,_sequence++,type,{payload.begin(),payload.end()}});
+    auto& p=*_session._impl;
+    try {if(!type)throw std::invalid_argument("Zero event type");
+        if(p.outgoing.size()>=maxCommands || payload.size()>maxInputBytes || _sequence==UINT32_MAX
+            || payload.size()+16>maxInputBytes-p.outgoingBytes)throw std::length_error("Event count/aggregate byte limit");
+        p.outgoing.push_back({_system,_sequence,type,{payload.begin(),payload.end()}});
+        ++_sequence;p.outgoingBytes+=payload.size()+16;}
+    catch(const std::exception& e){p.contextFailure("emit [type="+std::to_string(type)+"]",e);}
 }
 } // namespace ayt::entity

@@ -1,16 +1,15 @@
 #include <AYEntity/DeterministicRollbackReplay.h>
 #include <AYEntity/DeterministicReplayRegression.h>
 #include <AYPlatform/ChildProcess.h>
+#include "detail/RunnerReport.h"
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <fstream>
 using namespace ayt::entity;
 namespace {
 std::string quote(const std::string& value) {
-    std::ostringstream out;out<<'"';
-    for(unsigned char c:value) {switch(c){case '"':out<<"\\\"";break;case '\\':out<<"\\\\";break;
-        default:if(c<32)out<<"\\u"<<std::hex<<std::setw(4)<<std::setfill('0')<<unsigned(c)<<std::dec;else out<<c;}}
-    out<<'"';return out.str();
+    return replay_tool::quoteRunnerBytes(value);
 }
 void print(const DetReplayArchiveReport& r) {
     std::cout<<"{\"valid\":"<<(r.valid?"true":"false")<<",\"state\":"
@@ -52,14 +51,21 @@ int main(int argc,char** argv) {
             ayt::platform::ProcessOptions options;options.executable=fs::absolute(argv[3]);
             options.arguments={"--ayreplay-verify",fs::absolute(source).string(),fs::absolute(argv[4]).string()};
             options.timeout=std::chrono::milliseconds(timeout);options.outputLimit=1024*1024;
-            const auto process=ayt::platform::runProcess(options);
             const auto reportPath=fs::absolute(argv[4])/"report.json";
-            const bool reportPresent=!fs::is_symlink(reportPath) && fs::is_regular_file(reportPath) && fs::file_size(reportPath)<=65536;
+            const auto process=ayt::platform::runProcess(options);
+            auto stored=replay_tool::readRunnerReport(reportPath,options.arguments[1],process.exitCode);
+            const bool reportPresent=stored.present;auto protocol=std::move(stored.protocol);
+            auto reject=[&](std::string error){protocol.valid=false;protocol.error=std::move(error);};
+            if(process.timedOut)reject("Runner deadline expired");
+            else if(process.cancelled)reject("Runner was cancelled");
+            else if(!process.launched || !process.error.empty())reject(process.error.empty()?"Runner was not launched":process.error);
+            else if(process.outputTruncated)reject("Runner output exceeded capture budget");
             std::cout<<"{\"schema\":1,\"runner\":"<<quote(options.executable.string())<<",\"launched\":"<<(process.launched?"true":"false")
                 <<",\"timedOut\":"<<(process.timedOut?"true":"false")<<",\"outputTruncated\":"<<(process.outputTruncated?"true":"false")
                 <<",\"exitCode\":"<<process.exitCode<<",\"reportPresent\":"<<(reportPresent?"true":"false")<<",\"reportPath\":"<<quote(reportPath.string())
+                <<",\"protocolValid\":"<<(protocol.valid?"true":"false")<<",\"protocolError\":"<<quote(protocol.error)
                 <<",\"error\":"<<quote(process.error)<<",\"runnerOutput\":"<<quote(process.output)<<"}\n";
-            return process.launched && !process.timedOut && !process.cancelled && !process.outputTruncated && process.error.empty() && reportPresent && process.exitCode==0?0:1;
+            return process.launched && !process.timedOut && !process.cancelled && !process.outputTruncated && process.error.empty() && protocol.valid && protocol.success && process.exitCode==0?0:1;
         }
         if(command=="inspect" && argc==3)report=DetRollbackReplayArchive::inspect(argv[2]);
         else if(command=="scan" && argc==3)report=DetRollbackReplayArchive::scan(argv[2]);

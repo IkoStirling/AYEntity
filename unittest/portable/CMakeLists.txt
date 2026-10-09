@@ -44,7 +44,9 @@ else()
     target_compile_options(AYEntity_RollbackChecks PRIVATE -ffast-math -Wall -Wextra -Wpedantic)
 endif()
 add_test(NAME AYEntity_RollbackChecks COMMAND AYEntity_RollbackChecks)
-set_tests_properties(AYEntity_RollbackChecks PROPERTIES TIMEOUT 240)
+# Debug retains the complete 100000+ advance workload with checked iterators.
+# Its measured unoptimized run needs a separate budget; native Release stays 240s.
+set_tests_properties(AYEntity_RollbackChecks PROPERTIES TIMEOUT "$<IF:$<CONFIG:Debug>,1500,240>")
 add_executable(AYEntity_SessionCollisionChecks session.cpp
     "${AYENTITY_ROOT}/src/AYDeterministicSession.cpp" "${AYENTITY_ROOT}/src/AYDeterministicSessionWire.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicState.cpp" "${AYENTITY_ROOT}/src/AYDeterministicCollision2D.cpp"
@@ -126,3 +128,5 @@ set_tests_properties(AYEntity_ReplayArchiveCLI PROPERTIES TIMEOUT 60)
 add_test(NAME AYIO_FileErrorChecks COMMAND AYIO_FileErrorChecks)
 set(_replay_regression_library ReplayArchiveKernel)
 include("${AYENTITY_ROOT}/unittest/ReplayRegression.cmake")
+set(_simulation_campaign_library ReplayArchiveKernel)
+include("${AYENTITY_ROOT}/unittest/SimulationCampaign.cmake")

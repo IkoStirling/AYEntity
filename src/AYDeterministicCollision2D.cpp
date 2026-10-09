@@ -1,4 +1,6 @@
 #include <AYEntity/DeterministicCollision2D.h>
+#include <AYEntity/DeterministicCollisionQuery2D.h>
+#include "detail/DetSessionWire.h"
 #include <algorithm>
 #include <stdexcept>
 #include <set>
@@ -74,21 +76,27 @@ void move(Body& b,const std::vector<Body>& bodies,D dt) {
     for(const auto& wall:bodies)if(blocks(b,wall) && b.box.interiorOverlap(wall.box))invalid();
 }
 #include "detail/DetCollision2DExtended.h"
-std::vector<DetCollisionPair2D> history(DetTickContext& c,const DetCollision2DConfig& policy) {
-    const auto schema=policy.historySchema;
-    if(c.readGlobal<std::uint32_t>(schema,1)!=profile(policy) || c.readGlobal<std::uint32_t>(schema,2)!=policy.maxBodies
-        || c.readGlobal<std::uint32_t>(schema,3)!=policy.maxTriggerPairs || c.readGlobal<std::uint32_t>(schema,4)!=policy.eventType
-        || c.readGlobal<std::uint32_t>(schema,6)!=math::kDetGeometry2DProfileVersion)invalid();
-    if(policy.extended && (!c.readGlobal<bool>(schema,7) || c.readGlobal<std::uint32_t>(schema,8)!=policy.maxContactIterations))invalid();
-    const auto count=c.readGlobal<std::uint32_t>(schema,5);if(count>policy.maxTriggerPairs)invalid();
+template<class Read> std::vector<DetCollisionPair2D> readHistory(Read read,const DetCollision2DConfig& policy) {
+    const auto u32=[&](auto field){return std::get<std::uint32_t>(read(field));};
+    if(u32(1)!=profile(policy) || u32(2)!=policy.maxBodies || u32(3)!=policy.maxTriggerPairs
+        || u32(4)!=policy.eventType || u32(6)!=math::kDetGeometry2DProfileVersion)invalid();
+    if(policy.extended && (!std::get<bool>(read(7)) || u32(8)!=policy.maxContactIterations))invalid();
+    const auto count=u32(5);if(count>policy.maxTriggerPairs)invalid();
     std::vector<DetCollisionPair2D> result;
-    for(std::uint32_t i=0;i<policy.maxTriggerPairs;++i){DetCollisionPair2D pair{c.readGlobal<DetEntityRef>(schema,10+2*i).value,c.readGlobal<DetEntityRef>(schema,11+2*i).value};
+    for(std::uint32_t i=0;i<policy.maxTriggerPairs;++i){DetCollisionPair2D pair{std::get<DetEntityRef>(read(10+2*i)).value,std::get<DetEntityRef>(read(11+2*i)).value};
         if(i<count){if(!pair.first || pair.first>=pair.second || (!result.empty() && !(result.back()<pair)))invalid();result.push_back(pair);}
         else if(pair.first || pair.second)invalid();
     }return result;
 }
-void tick(DetTickContext& c,const DetCollision2DConfig& policy) {
-    const auto previous=history(c,policy);std::vector<Body> bodies;
+std::vector<DetCollisionPair2D> history(DetTickContext& c,const DetCollision2DConfig& policy) {
+    return readHistory([&](std::uint32_t field)->DetStateValue {
+        if(field>=10)return c.readGlobal<DetEntityRef>(policy.historySchema,field);
+        if(field==7)return c.readGlobal<bool>(policy.historySchema,field);
+        return c.readGlobal<std::uint32_t>(policy.historySchema,field);
+    },policy);
+}
+std::vector<Body> readBodies(DetTickContext& c,const DetCollision2DConfig& policy) {
+    std::vector<Body> bodies;
     for(const auto id:c.entities()) {
         const auto s=policy.bodySchema;
         DetCollisionBody2D data{static_cast<DetBodyMode2D>(c.read<std::uint32_t>(id,s,DetBodyMode)),
@@ -99,6 +107,10 @@ void tick(DetTickContext& c,const DetCollision2DConfig& policy) {
     }
     if(bodies.size()>policy.maxBodies)invalid();
     std::sort(bodies.begin(),bodies.end(),[](const auto& a,const auto& b){return a.id<b.id;});
+    return bodies;
+}
+void tick(DetTickContext& c,const DetCollision2DConfig& policy) {
+    const auto previous=history(c,policy);const auto bodies=readBodies(c,policy);
     auto solved=bodies;
     std::vector<TraceStep> trace;
     if(policy.extended)moveTogether(solved,c.dt(),policy.maxContactIterations,trace);
@@ -172,5 +184,82 @@ bool decodeDetTriggerEvent2D(std::span<const std::uint8_t> bytes,DetTriggerEvent
     const auto phase=get(4,4);DetTriggerEvent2D decoded{static_cast<DetTriggerPhase2D>(phase),{get(8,8),get(16,8)}};
     if(get(0,4)!=kDetCollision2DProfileVersion || phase<1 || phase>3 || !decoded.pair.first || decoded.pair.first>=decoded.pair.second)return false;
     out=decoded;return true;
+}
+
+DetCollisionQuery2D::DetCollisionQuery2D(DetTickContext& context,DetCollision2DConfig config) {
+    if(!validConfig(config))invalid();
+    (void)history(context,config);
+    for(const auto& b:readBodies(context,config))
+        _proxies.push_back({b.id,b.box,b.data.layer,b.data.mask,b.data.trigger});
+}
+DetCollisionQuery2D::DetCollisionQuery2D(const DetSessionCheckpoint& state,DetCollision2DConfig config) {
+    if(!validConfig(config) || state.actors.size()>detwire::maxActors)invalid();
+    const auto layout=detwire::manifestLayout(state.manifest);
+    const auto matchesSchema=[&](const DetTypedStateSchema& expected){
+        const auto found=layout.schemas.find(expected.id);
+        const auto version=layout.schemaVersions.find(expected.id);
+        if(found==layout.schemas.end() || version==layout.schemaVersions.end() || version->second!=expected.version
+            || found->second.size()!=expected.fields.size())return false;
+        for(std::size_t i=0;i<expected.fields.size();++i){const auto& field=expected.fields[i];const auto& actual=found->second[i];
+            if(actual.id!=field.id || actual.type!=detStateType(field.initial) || actual.width!=encodeDetStateValue(field.initial).size())return false;}
+        return true;
+    };
+    if(!matchesSchema(bodySchema(config)) || !matchesSchema(historySchema(config)) || !layout.globals.contains(config.historySchema))invalid();
+    const DetStateLayout bodies(bodySchema(config)),hist(historySchema(config));
+    const auto found=state.globals.find(config.historySchema);
+    if(found==state.globals.end() || !hist.valid(found->second))invalid();
+    (void)readHistory([&](std::uint32_t field){return hist.read(found->second,field);},config);
+    for(const auto& [id,actor]:state.actors) {
+        const auto block=actor.blocks.find(config.bodySchema);
+        if(!id || block==actor.blocks.end() || !bodies.valid(block->second))invalid();
+        const auto read=[&]<class T>(std::uint32_t field){return std::get<T>(bodies.read(block->second,field));};
+        DetCollisionBody2D data{static_cast<DetBodyMode2D>(read.operator()<std::uint32_t>(DetBodyMode)),
+            read.operator()<V>(DetBodyHalf),read.operator()<V>(DetBodyOffset),read.operator()<V>(DetBodyVelocity),
+            read.operator()<std::uint32_t>(DetBodyLayer),read.operator()<std::uint32_t>(DetBodyMask),
+            read.operator()<bool>(DetBodyTrigger)};
+        DetSimTransformComponent restored;
+        if(!restored.restore(actor.pose))invalid();
+        validateBody(data,config.extended);if(data.mode==DetBodyMode2D::Disabled)continue;
+        const V position{D::fromBits(actor.pose.position[0]),D::fromBits(actor.pose.position[1])};
+        const Body b{id,data,position,D::fromBits(actor.pose.position[2]),{}};
+        _proxies.push_back({id,bounds(b),data.layer,data.mask,data.trigger});
+        if(_proxies.size()>config.maxBodies)invalid();
+    }
+}
+namespace {
+void validateFilter(const DetCollisionQueryFilter2D& filter) {
+    if(!filter.layer)throw std::invalid_argument("deterministic query 2D: zero query layer");
+}
+bool matches(const DetCollisionProxy2D& proxy,const DetCollisionQueryFilter2D& filter) {
+    return proxy.id!=filter.ignore && (filter.includeTriggers || !proxy.trigger)
+        && masks(proxy.layer,proxy.mask,filter.layer,filter.mask);
+}
+void sortHits(std::vector<DetCollisionQueryHit2D>& hits) {
+    std::sort(hits.begin(),hits.end(),[](const auto& a,const auto& b){
+        return a.hit.fraction<b.hit.fraction || (a.hit.fraction==b.hit.fraction
+            && (a.hit.axis<b.hit.axis || (a.hit.axis==b.hit.axis && a.entity<b.entity)));
+    });
+}
+}
+std::vector<SimEntityId> DetCollisionQuery2D::overlap(const math::DetAabb2& box,DetCollisionQueryFilter2D filter,bool interior) const {
+    validateFilter(filter);
+    if(!box.valid())throw std::invalid_argument("deterministic query 2D: invalid overlap bounds");
+    std::vector<SimEntityId> ids;
+    for(const auto& p:_proxies)if(matches(p,filter) && (interior?p.box.interiorOverlap(box):p.box.overlap(box)))ids.push_back(p.id);
+    return ids;
+}
+std::vector<DetCollisionQueryHit2D> DetCollisionQuery2D::raycast(V origin,V displacement,DetCollisionQueryFilter2D filter) const {
+    validateFilter(filter);
+    if(!origin.isFinite() || !displacement.isFinite())throw std::invalid_argument("deterministic query 2D: invalid ray segment");
+    std::vector<DetCollisionQueryHit2D> hits;
+    for(const auto& p:_proxies)if(matches(p,filter))if(const auto hit=math::detRaycast2D(p.box,origin,displacement))hits.push_back({p.id,*hit});
+    sortHits(hits);return hits;
+}
+std::vector<DetCollisionQueryHit2D> DetCollisionQuery2D::sweep(const math::DetAabb2& box,V displacement,DetCollisionQueryFilter2D filter) const {
+    validateFilter(filter);
+    if(!box.hasArea() || !displacement.isFinite())throw std::invalid_argument("deterministic query 2D: invalid sweep shape/displacement");
+    std::vector<DetCollisionQueryHit2D> hits;
+    for(const auto& p:_proxies)if(matches(p,filter))if(const auto hit=math::detSweepAabb2D(box,displacement,p.box))hits.push_back({p.id,*hit});
+    sortHits(hits);return hits;
 }
 } // namespace ayt::entity
