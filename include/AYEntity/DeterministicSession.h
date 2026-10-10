@@ -69,6 +69,7 @@ std::vector<std::uint8_t> encodeDetInput(const DetTickInput& input);
 bool decodeDetInput(std::span<const std::uint8_t> bytes,DetTickInput& input,std::string& error);
 
 class DeterministicSession;
+struct DetCharacterController2DConfig;
 /** @brief One sealed tick's authoritative access, valid only during its system callback.
  * @note Iterate entities() by stable SimEntityId. Hidden mutable callback state,
  * runtime Entity IDs, native floats and external effects are outside the contract.
@@ -177,6 +178,11 @@ public:
     Entity* presentationEntity(SimEntityId id) const;
 private:
     friend class DetTickContext;
+    friend bool installDetCharacterController2D(DeterministicSession&,DetCharacterController2DConfig);
+    // Narrow installer preflight; no public configuration-inspection surface.
+    bool characterRegistrationAvailable(std::span<const std::uint32_t> schemas,
+        std::span<const std::uint32_t> systems,std::span<const std::uint32_t> validators,
+        std::span<const std::uint32_t> logicProfiles) const;
     DeterministicSession(std::unique_ptr<DetSessionStorage>,DetSessionConfig);
     struct Impl;
     std::unique_ptr<Impl> _impl;

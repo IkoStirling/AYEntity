@@ -92,6 +92,7 @@ if(MSVC)
 endif()
 add_library(ReplayArchiveKernel STATIC "${AYENTITY_ROOT}/src/AYDeterministicSession.cpp" "${AYENTITY_ROOT}/src/AYDeterministicSessionWire.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicState.cpp" "${AYENTITY_ROOT}/src/AYDeterministicCollision2D.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicCharacterController2D.cpp" "${AYENTITY_ROOT}/src/AYDeterministicReplay.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRollback.cpp" "${AYENTITY_ROOT}/src/AYDeterministicRollbackNetwork.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRollbackReplay.cpp" "${AYMATH_ROOT}/src/DetFloat.cpp" "${AYMATH_ROOT}/src/DetMath.cpp"
     $<TARGET_OBJECTS:TypedStateBackend>)
@@ -130,3 +131,6 @@ set(_replay_regression_library ReplayArchiveKernel)
 include("${AYENTITY_ROOT}/unittest/ReplayRegression.cmake")
 set(_simulation_campaign_library ReplayArchiveKernel)
 include("${AYENTITY_ROOT}/unittest/SimulationCampaign.cmake")
+
+set(_det_character_library ReplayArchiveKernel)
+include("${AYENTITY_ROOT}/unittest/CharacterController.cmake")

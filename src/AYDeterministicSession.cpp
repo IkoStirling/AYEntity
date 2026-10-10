@@ -156,6 +156,21 @@ DeterministicSession::~DeterministicSession() {
     if(p.storage->owns(this))for(const auto& [id,a]:p.actors)p.storage->destroy(a);
     p.storage->release(this);
 }
+bool DeterministicSession::characterRegistrationAvailable(std::span<const std::uint32_t> schemas,
+    std::span<const std::uint32_t> systems,std::span<const std::uint32_t> validators,
+    std::span<const std::uint32_t> logicProfiles) const {
+    const auto& p=*_impl;
+    if(p.sealed || p.faulted || p.inTick || p.validating || !p.storage->owns(this) || !p.actors.empty())return false;
+    const auto unique=[](auto ids){std::set<std::uint32_t> seen;for(auto id:ids)if(!id || !seen.insert(id).second)return false;return true;};
+    if(!unique(schemas) || !unique(systems) || !unique(validators) || !unique(logicProfiles)
+        || schemas.size()>maxSchemas-p.schemas.size() || systems.size()>maxSchemas-p.systems.size()
+        || validators.size()>maxSchemas-p.validators.size() || logicProfiles.size()>maxSchemas-p.logicProfiles.size())return false;
+    for(auto id:schemas)if(id<2 || id==UINT32_MAX || p.schemas.contains(id) || p.state.globals.contains(id))return false;
+    for(auto id:systems)if(std::any_of(p.systems.begin(),p.systems.end(),[&](const auto& s){return s.id==id;}))return false;
+    for(auto id:validators)if(p.validators.contains(id))return false;
+    for(auto id:logicProfiles)if(p.logicProfiles.contains(id))return false;
+    return true;
+}
 bool DeterministicSession::registerLogicProfile(std::uint32_t id,std::uint32_t version,std::uint64_t hash) {
     auto& p=*_impl;if(!p.configuring())return false;
     if(!id || !version || p.logicProfiles.size()>=maxSchemas || p.logicProfiles.contains(id))return p.fail("Invalid/duplicate logic profile");

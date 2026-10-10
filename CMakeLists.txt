@@ -95,6 +95,7 @@ if(TARGET AYReplay)
     add_library(AYEntityDeterminismKernel STATIC
         src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp src/AYDeterministicState.cpp
         src/AYDeterministicCollision2D.cpp
+        src/AYDeterministicCharacterController2D.cpp
         src/AYDeterministicLockstepProtocol.cpp src/AYDeterministicLockstep.cpp
         src/AYDeterministicRollback.cpp src/AYDeterministicRollbackNetwork.cpp src/AYDeterministicTransport.cpp)
     add_library(AYEntity::DeterminismKernel ALIAS AYEntityDeterminismKernel)
@@ -120,6 +121,7 @@ if(TARGET AYReplay)
         set(AYENTITY_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
         include(unittest/ReplayRegression.cmake)
         include(unittest/SimulationCampaign.cmake)
+        include(unittest/CharacterController.cmake)
     endif()
 endif()
 
@@ -172,6 +174,14 @@ function(ay_entity_add_determinism_host_integration)
                 -P "${_root}/unittest/RunDeterministicHostProcessCheck.cmake")
         set_tests_properties(AYEntity_DeterministicHostSessionProcesses PROPERTIES
             LABELS "ayentity;determinism;host;replay;process" TIMEOUT 960 RUN_SERIAL TRUE)
+        add_executable(AYEntity_DeterministicCharacterControllerHostWorker "${_root}/unittest/DeterministicCharacterControllerHostWorker.cpp")
+        target_link_libraries(AYEntity_DeterministicCharacterControllerHostWorker PRIVATE AYEntityDeterminismHost)
+        add_test(NAME AYEntity_CharacterControllerProcesses
+            COMMAND ${CMAKE_COMMAND} -DWORKER=$<TARGET_FILE:AYEntity_DeterministicCharacterControllerHostWorker>
+                -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/character-controller-host-process-check
+                -P "${_root}/unittest/RunDeterministicCharacterControllerHost.cmake")
+        set_tests_properties(AYEntity_CharacterControllerProcesses PROPERTIES
+            LABELS "ayentity;determinism;character;2d;host;replay;process" TIMEOUT 600 RUN_SERIAL TRUE)
         add_executable(AYEntity_DeterministicCollisionHostWorker "${_root}/unittest/DeterministicCollisionHostWorker.cpp")
         target_link_libraries(AYEntity_DeterministicCollisionHostWorker PRIVATE AYEntityDeterminismHost)
         add_executable(AYEntity_DeterministicExtendedCollisionHostWorker "${_root}/unittest/DeterministicCollisionHostWorker.cpp")

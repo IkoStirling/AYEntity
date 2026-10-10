@@ -1807,3 +1807,80 @@ That record tracks actual build, sustained campaign and cross-platform acceptanc
 separately from the implementation contract, retaining incomplete and failed runs.
 Portable rollback validation retains identical fixed workloads across configurations;
 Debug has a 1500s budget for checked iterators/unoptimized execution, Release 240s.
+
+## Stage21: registered character movement and platform support
+
+The character facade composes a pre-intent callback, the existing profile2 relative
+collision solver and a post-settlement callback in one priority. Default system
+IDs are 20/30/40; input precedes pre, and consumers follow post. Installation
+preflights schema/system/validator/logic-profile collisions and capacity before
+registration. Policy/schema/profile hashes enter the manifest, and a registered
+semantic validator binds policy globals and each actor policy to the installed
+immutable configuration. Installation must precede actors/seal; allocation failure
+during registration can leave partial configuration, requiring abandonment.
+
+Only collision advances pose. Pre approaches the held target own X speed using
+acceleration/deceleration, applies downward gravity/fall limits, recognizes top
+support, consumes the jump request and writes body world velocity. Post uses the
+solver response to settle own velocity and support. Ground adhesion extends a
+downward velocity intent toward the still-overlapping previous support; the same
+solver resolves obstacles and continuous trigger crossings. It does not teleport
+or add a second position writer. Jump resets own Y to jumpSpeed after gravity,
+then optional inheritance adds the carrier; support recognition is suppressed for
+the complete jumping tick. Zero jumpSpeed disables the request while retaining
+support, and zero gravity/maxFallSpeed are valid.
+
+Support requires reciprocal collision masks, positive horizontal overlap and a
+solid Static/MovingObstacle top face. Candidate ordering is gap then stable ID.
+Probe distance identifies candidates; actual grounded state additionally requires
+explicit contact tolerance and nonascending relative Y. No implicit host-float
+epsilon or frozen moving-target sweep is introduced. A snap cannot manufacture
+grounded state for an open gap beyond tolerance. Direct support changes replace
+the carrier without an old-platform velocity kick.
+
+Own velocity excludes active carrier velocity. Each pre adds the full carrier XY
+velocity once; each post subtracts the applied carry from solved velocity. The
+horizontal settlement clips this result to the intended direction/range so a wall
+blocking a platform cannot manufacture reverse own velocity. Discard removes the
+carrier on release/jump; Inherit transfers the last observed carrier once. Repeated
+inheritance and solver pushes are bounded: own X by maxHorizontalSpeed plus
+maxPlatformSpeed, own Y by jumpSpeed plus maxFallSpeed plus maxPlatformSpeed.
+These bookkeeping caps affect subsequent motion rather than the solver's already
+solved pose. The next pre also limits downward own Y by maxFallSpeed. Unrepresentable
+motion still follows the collision failure contract.
+
+Enable/ground/support/own velocity/carrier velocity, held target, jump request and
+support boundary stamp are typed fields. Temporary applied-carry/intent/jumped/
+snapped fields are registered for intra-tick authority but must be zero at every
+committed boundary. Disabled actors have canonical zero controller state and keep
+ordinary collision behavior. A despawn queued during the tick is invisible to post;
+the checkpoint may contain a freshly stamped retired support ID for one boundary,
+which the next pre releases. Unknown/unissued IDs, stale stamps, invalid enabled
+bodies, policy mismatch and invalid finite speeds reject restore atomically.
+
+Pure invalid input throws before writes; catching it cannot make the input applied.
+Illegal context access remains sticky, and uncaught executing errors fault Session.
+Applications must not write private intent fields, body velocity after pre, or pose
+outside the collision owner. The profile retains collision's maximum 64 bodies and
+axis-aligned world XY boxes. No step-up, slopes, one-way/capsule/rotated shapes,
+dynamic mass/friction, crouch, coyote/buffered jump or 3D behavior is implied.
+
+The directed portable gate combines hand-computed motion boundaries with a shared
+2048-tick dyadic-lattice oracle and explicit trigger payloads. It compares complete
+canonical checkpoints under reversed registration, restore continuation and actual
+late-input rollback, with exact confirmed-event identities and repeated empty drains.
+Real replay/archive artifacts and standard Host process checks provide separate
+integration coverage. Host runs use 1/64 versus 1/128 presentation frames, live
+pause/restore/single-step and checkpoint seek. See
+[Stage21](../../AYDocs/DETERMINISTIC-CHARACTER-CONTROLLER-STAGE21.md) for executable
+recipes and actual acceptance evidence. Local Release passed16/16 portable gates.
+The new controller passed Debug and AddressSanitizer with identical fixed2048-tick
+summary/hash, and standard Host process/portable checks passed Release/Debug. The
+first descending-platform fixture had an invalid jump premise and was repaired to
+a legal initially supported state without changing production behavior. The first
+AddressSanitizer run exceeded the ordinary240s budget; its preserved retry passed
+in240.87s with a separate900s instrumented budget. Debug uses600s; ordinary native
+Release remains240s and every configuration keeps the full workload. These checks
+cover fixed3-tick corrections and a single-member logical archive owner; they do not
+claim new real network transport or native Linux/ARM64 Host integration. Native
+shared-kernel acceptance and any remaining checks are recorded separately in Stage21.

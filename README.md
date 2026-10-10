@@ -552,3 +552,44 @@ for the protocol contract and actual build, sustained campaign and cross-platfor
 acceptance evidence; running/planned checks remain distinct from completed results.
 The portable rollback gate keeps its full 100000+ advance workload in Debug; its
 checked-iterator/unoptimized budget is 1500s, while Release/native CI stays 240s.
+
+## Stage21: registered character movement and platform support
+
+Include `<AYEntity/DeterministicCharacterController2D.h>` and link
+`AYEntity::DeterminismKernel` (owned Session), `AYEntity::Determinism` (real replay
+files), or `AYEntity::DeterminismHost` (standard World/Host). Install
+`installDetCharacterController2D(session, config)` before adding actors or sealing.
+This facade includes extended profile2 collision; use `config.collision` for all
+body defaults and queries. A separate collision installation is not adopted.
+
+A character is an enabled solid Kinematic box. Build its body with
+`detCollisionBodyState2D(config.collision, body)` and its controller block with
+`detCharacterState2D(config, state)` after setting `state.enabled=true`. Other
+actors receive the canonical disabled controller defaults. An input callback
+before `config.preSystemId` calls `detCharacterInput2D(context, id, config, input)`;
+`targetSpeed` holds and `jumpPressed` is consumed once. The state getter returns
+own velocity, grounded/support identity and the last carrier velocity. Mutable
+authority is registered typed state, so checkpoint restore and rollback include it.
+
+The first profile covers software `DetFloat32` acceleration/deceleration, gravity,
+supported jumping, contact tolerance, downward ground adhesion and full XY moving
+platform carry. Discard/Inherit selects whether release/jump keeps carrier velocity,
+with explicit finite own-speed caps. It retains collision's single XY position
+writer and continuous-trigger path. Axis-aligned world XY boxes remain the shape
+contract; stairs, slopes, one-way platforms, crouch, buffered/coyote jump, rotated
+shapes, dynamic rigid bodies and 3D are outside this profile.
+
+`AYEntity_CharacterControllerChecks` exercises directed motion/support, invalid
+configuration/restore, independent dyadic expected values, late-input rollback,
+confirmed events and real replay/archive files. `AYEntity_CharacterControllerProcesses`
+uses actual standard Host record/live/restore/replay/seek processes, different
+presentation rates and native floating-point environment settings. The portable
+executable accepts `--output EXISTING_PARENT_DIRECTORY` and creates a fresh run
+subdirectory containing `summary.json`, progress and replay/hash witnesses.
+See [Stage21](../../AYDocs/DETERMINISTIC-CHARACTER-CONTROLLER-STAGE21.md) for current
+acceptance status and the complete public contract. Local Release passed all16
+portable gates; the controller passed Debug and AddressSanitizer, and the standard
+Host passed Release/Debug. Its fixed2048-tick evidence contains2049 checkpoints,
+193 confirmed events,32 corrections,109 replayed ticks and8 archive files. Native
+CI acceptance is recorded separately in Stage21. Test budgets preserve the same
+workload: ordinary Release240s, Debug600s, AddressSanitizer900s.
