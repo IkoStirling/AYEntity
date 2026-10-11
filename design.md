@@ -1955,3 +1955,119 @@ retries passed (legacy ASan208.31s, Debug Host39.95s), retaining original failur
 These elapsed gaps are not sustained campaign evidence. Windows skips one POSIX
 mode000 runner-report fixture; neither that fixture nor native VM execution is
 claimed as passed by these local results.
+
+## Stage23: streamed advanced-character behavioral campaigns
+
+The campaign reuses the production controller2/collision3 and registered Stage22
+descriptors without changing numeric, manifest, input/checkpoint or replay wire
+contracts. Every seed starts fresh owned baseline/corrected/restored Sessions.
+Immutable policies vary held timing, integer windows, platform direction/stable
+IDs, commanded horizontal speed, authored displacement, topology timing and
+contribution arrival order. Reciprocal-mask-separated bodies and wide supports
+keep the random scene legal; arbitrary crush/teleport inputs are not generated.
+The separate prescribed-one-way roof template has an explicit expected fault and
+ignored-ID positive control, followed by explicit full-checkpoint restore.
+
+An independent integer lattice computes selected positions, velocities,
+controller held/latch/window/support/shape state, ignored IDs, registered stats
+and pending trigger bytes. `oracleCheckpoint` copies actual then overwrites these
+defined channels: manifest, history/revision and other unmodified metadata are
+not independently synthesized. Full canonical closure additionally compares
+reverse registration/command order and fenv, real restore/replay continuation,
+every confirmed late-input-corrected boundary, and actual file readers/seeks.
+Effect drains compare exact event identity/payload and assert a second empty drain.
+
+The sole finite-set channel is bodyY at exact hand-derived first-terminal-contact
+rows: A k65 per96-tick flight period, B row64, D rowlanding/landing+65, and
+E row127+coyoteTicks. Incoming values are respectively -2, -4, -landing/16 or -2,
+and -63/16; only those bits or +0 are accepted. Simultaneous fraction1 contacts
+can finish all remaining motion after the first stable pair's response, leaving
+another body velocity incoming while controller post clears grounded ownY.
+This does not allow arbitrary downward values, -0 or a general grounded exception.
+Other bodyY/bodyX, geometry and controller/action expectations remain unique bits.
+Baseline checks accumulate `terminalBodyChecks`; representative recording applies
+the same constraint. Complete actual terminal bytes must match every other lane,
+fenv, restore/rollback and .rpl/.rpi execution; no cross-lane finite-set substitution
+is accepted. `oracleScope` exposes this distinction in progress/summary.
+Original seeds, schedules and inputs remain; production code was not changed.
+
+Held types1..4 predict Hold; type5's integer delta Zero is a no-op; topology type6
+predicts Omit. Each case forces a bootstrap duplicate and late member2 contribution
+so coverage does not depend on random luck. Future frames do not seed earlier
+prediction. History16..48, delay2..5, prediction delay+2, future8 and16MiB buffered
+state bound the corrected owner. The campaign prunes full checkpoints to the
+correction horizon; supplied ticks are192..1024, default seeded256..512.
+
+Optional long-boundary prefixes really advance65535 windows, with seven coyote,
+buffer and drop last/expired/clearance/retired templates. Their specified total is
+196648 advances, kept separate from ordinary cases and representative playback.
+Only a few branch checkpoints survive; no full65535-row array is retained.
+The long-group report explicitly does not mean whole-campaign completion.
+`BoundaryResult.checkpoints` counts only explicit `cp` helper checks (specified
+196647), excluding other reads such as pre-operation witness capture. It is not
+the total checkpoint API calls or a count of independently generated full states.
+
+`--cases` is a minimum and `--seconds` a steady budget; both must be satisfied.
+Each next seed uses modular unsigned64 addition. Progress15s updates distinguish
+active seed/tick/phase from the last completed seed/hash and use decimal strings.
+Counts represent executions/checks, not distinct tick/state/policy coverage.
+Only two fresh representative cases write files, bounded to32 segments per index.
+Original canonical inputs execute into `.rpl`; distinct source/sequence-remapped
+single-member inputs execute into `.rpi` with the same physical state/effects.
+Both actual submitted frame streams and digests are saved. Byte binding is not
+transport authentication, multi-peer integration or proof of an untrusted runner.
+
+Failed operations retain the current input and available before/expected/actual
+checkpoints; a faulted Session without a legal checkpoint remains null. Lane
+switches reset witnesses, and seek/finish have no invented single input. A complete
+seed command reproduces the fixture schedule with matching code/policy; witness
+files alone are not guaranteed independent one-step replays. Resource/file writes
+are bounded by this harness, not a guarantee for arbitrary application workloads.
+The rollback submit wrapper captures the actual member contribution's original
+tick/canonical bytes and corrected Session checkpoint before late/duplicate/future
+submission. These remain bound even when the corrected head has advanced past
+the contribution tick. `inputMember` records that member, not a derived command
+guess. A partially predicted head has no independent full expected checkpoint,
+so expected may be null; no baseline/stale-lane checkpoint is substituted.
+
+`CharacterCampaign.cmake` is shared by module and portable builds; it registers
+Checks/SeedEndpoints/MaxTicks and optional LongBoundaries. MaxTicks uses seed23,
+2cases,1024ticks and its separate1200s Release /2400s Debug timeout; detected
+address sanitizer flags select2400s for MaxTicks. Ordinary/SeedEndpoints remain
+Release300s,Debug900s,ASan1200s. The old instrumented MaxTicks1200.06s timeout
+occurred during late remapped playback/seek and remains preserved; the enlarged
+budget alone does not establish a pass. The final submission-witness retry actually
+passed MaxTicks in1219.02s under2400s, with the same workload. Release/Debug/ASan
+each passed all three ordinary gates (CTest real60.80s/1146.29s/1949.92s).
+Final short-evidence normalization matches the three summaries per recipe; six
+groups of corresponding physical archives/input/tick-hash files compare equal
+whole bytes. This is actual-path equivalence, not independent full-byte goldens
+or transport/execution authentication.
+Release/Debug/ASan upper-boundary gates actually passed in18.05s/340.81s/620.48s
+total, each recording7 templates/196648 advances/196647 boundary `cp` helper checks.
+The Long reader verified one seed1 sample per configuration,8 physical/input/hash
+files per sample and16 complete file pairs across two configuration pairs.
+Standard root Release fresh configure/build/CTest/source captures exited0;
+three ordinary gates passed in61.90s. Standard versus portable R/D/ASan evidence
+matched9 gate pairs/18 sample pairs/228 whole-file pairs. Actual source captures
+bind selected frozen files plus a dirty overlay, not a clean-HEAD assertion.
+The outer wrapper post-test path error and initial evidence-reader completion-text
+error remain preserved; read-only recovery did not rerun product tests.
+The seed5 sustained lane requested32400s and ended as **UserRequestedStop**, not a
+completed9h campaign. The retained observer records OS start/exit
+2026-10-11T07:12:16.6268516Z/2026-10-11T09:42:40.2509881Z,
+elapsed9023.6241365s and exit-1. Last reported completed prefix is4153cases/
+1585805ticks through seed4157; active4158 is excluded. There are601 observations,
+no gaps and stderr0bytes. Original wrapper failed/-1 and the stop PowerShell
+ExitTime metadata failure remain; the validated stop receipt is not wholeCampaign
+passed or proof of capture-pump completion. No final passed summary exists.
+Recorded startup CMake identity
+`dfb5f5345e2bdebbc40945619aabfcf2a49175d4eedc434be98a10b6d78c57a6`
+remains historical; final ASan-budget registration SHA is
+`7172956d6d24c6d8bca15d869ff648e585ec5f6a3f8e3abcf3bf5b2c4c1ef506`.
+Stage23 applicable short/boundary/standard gates are **LocalPassed**; the sustained
+lane is **UserRequestedStop**. Final SDK doctor actually exited0 (94 capabilities/53 modules/51 search cases/300 entry symbols, baseline28, 0 errors/0 warnings; completion observed2026-10-11T09:53:56Z); it checks catalog structure/references/symbols, not simulation execution. Commits remain pending under root ownership;
+native execution is deferred to final VM by user instruction, with no GitHub CI
+or push. Actual logs, versions, failures, duration and final counts belong in
+[Stage23](../../AYDocs/DETERMINISTIC-CHARACTER-CAMPAIGN-STAGE23.md); source existence,
+doctor structure checks and Stage22 history do not establish remaining runtime passes.

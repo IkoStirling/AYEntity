@@ -136,3 +136,5 @@ set(_det_character_library ReplayArchiveKernel)
 include("${AYENTITY_ROOT}/unittest/CharacterController.cmake")
 
 include("${AYENTITY_ROOT}/unittest/CharacterAdvanced.cmake")
+
+include("${AYENTITY_ROOT}/unittest/CharacterCampaign.cmake")

@@ -124,6 +124,7 @@ if(TARGET AYReplay)
         include(unittest/SimulationCampaign.cmake)
         include(unittest/CharacterController.cmake)
         include(unittest/CharacterAdvanced.cmake)
+        include(unittest/CharacterCampaign.cmake)
     endif()
 endif()
 

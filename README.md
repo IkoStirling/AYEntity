@@ -638,3 +638,83 @@ failures and reproduction scope are recorded separately in Stage22.
 Native GCC/Clang x64/ARM64 acceptance is deferred to the separately provisioned
 final virtual-machine environments by user instruction; no GitHub CI is requested
 for this stage. Stage21 records remain historical evidence of their own revision.
+
+## Stage23: bounded seeded advanced-character campaigns
+
+`AYEntity_CharacterCampaignChecks` adds fresh owned Sessions per seed for held
+edges, one-way/drop/crouch, coyote/buffer windows and captured-shape spawn/despawn.
+Its independent integer oracle checks defined motion/controller/state/statistic
+and pending-event channels; it copies the other checkpoint fields. Complete
+canonical checkpoints separately compare registration/fenv, restore continuation,
+actual late-input rollback and real replay/archive execution paths. It is not an
+independently generated golden for every checkpoint byte.
+
+At the hand-derived first-terminal-contact rows only, bodyY must be exactly the
+incident velocity or +0: A's65th flight step in each96-tick cycle, B row64,
+D rowlanding/landing+65, and E row127+coyoteTicks. This is not a generic grounded
+exception; all other bodyY/bodyX and geometry/controller/action channels keep
+unique expected bits. Baseline checks count `terminalBodyChecks`; representative
+recording applies the same constraint. Actual terminal bodyY still participates
+in exact full-checkpoint comparisons across every lane, fenv, restore and replay.
+The original seeds/timing/inputs remain, and only the test oracle was corrected.
+
+The executable accepts `--seed UINT64`, `--cases 1..1000000`, `--seconds 0..86400`,
+`--ticks 192..1024`, optional `--long-boundaries`, and required `--output
+EXISTING_PARENT`. It creates a fresh child directory and stops after both the
+minimum case count and steady duration are satisfied. Further iterations use new
+seeds; unsigned64 wrap is explicitly covered by `AYEntity_CharacterCampaignSeedEndpoints`.
+Progress updates about every15s. Seed/hash/uint64 counts are JSON decimal strings,
+and execution/check counts are not unique coverage counts.
+`AYEntity_CharacterCampaignMaxTicks` runs seed23,2cases,1024ticks with a separate
+1200s Release /2400s Debug timeout, or2400s when CMake detects address sanitizer
+flags. Ordinary/SeedEndpoints budgets remain Release300s,Debug900s,ASan1200s.
+The initial instrumented MaxTicks timeout at1200.06s is retained; the new2400s
+submission-witness-final retry passed in1219.02s without shortening the workload.
+Release/Debug/ASan each passed all three ordinary gates (CTest real totals
+60.80s/1146.29s/1949.92s). The final short-evidence report verified equal normalized
+summaries and six groups of corresponding representative whole-file bytes; these
+compare actual execution paths, not independently derived full-byte goldens.
+
+Only the first two cases retain real replay representatives: original inputs in
+`.rpl`, and a separately executed single-member source/sequence-remapped `.rpi`.
+Both submitted canonical frame streams and their distinct input digests are
+retained; this is not multi-peer transport/authentication acceptance. Each archive
+has at most32 segments; ongoing seeds do not accumulate complete checkpoint arrays
+or recordings. Failure output preserves a complete seed recipe and available
+checkpoint/input witnesses; missing legal fault-state checkpoints stay null.
+Submit failures bind `inputMember`, the contribution's original tick and exact
+member canonical input to the corrected Session checkpoint captured before submit.
+An independently known expected checkpoint may be absent for a predicted head;
+it remains null rather than borrowing a baseline or stale lane witness.
+
+`AY_ENTITY_CHARACTER_LONG_BOUNDARIES=ON` registers the optional
+`AYEntity_CharacterCampaignLongBoundaries` gate. Its seven streamed65535-window
+templates specify196648 actual advances, rather than synthetic high-tick states.
+Its `checkpoints` count covers only the boundary `cp` helper checks (specified196647),
+not every checkpoint API read or independent full-byte golden.
+Release/Debug/ASan actually passed the upper-boundary gate (CTest real
+18.05s/340.81s/620.48s), each including7 templates,196648 advances and196647
+boundary `cp` helper checks. Final Long evidence compared two configuration pairs
+of the one seed1 sample:8 corresponding files per pair,16 complete file pairs.
+Standard root Release fresh configure/build/CTest/source captures exited0;
+its three campaign gates passed in61.90s total. Standard versus portable R/D/ASan
+matched9 gate pairs/18 sample pairs/228 complete file pairs. The outer wrapper's
+post-test path error and first evidence-reader text error remain preserved; only
+evidence recovery was performed, without rerunning product tests.
+The sustained seed5 lane requested32400s but is now **UserRequestedStop** after
+actual OS elapsed9023.6241365s (2h30m23.624s). Its completed reported prefix is
+4153cases/1585805ticks through seed4157; active4158 was interrupted. The retained
+OS observer records exit-1,601 observations/no gaps and stderr0bytes. The original
+wrapper remains failed/-1; the terminating PowerShell object's null ExitTime
+metadata error is retained. The stop receipt is validated, not a9h/run pass;
+there is no final passed campaign summary or claimed capture-pump completion.
+Its startup
+CMake SHA `dfb5f5345e2bdebbc40945619aabfcf2a49175d4eedc434be98a10b6d78c57a6`
+remains historical; the final ASan-budget registration is
+`7172956d6d24c6d8bca15d869ff648e585ec5f6a3f8e3abcf3bf5b2c4c1ef506`.
+Stage23 applicable short/boundary/standard acceptance is **LocalPassed**; sustained
+acceptance is **UserRequestedStop**, with **NativeDeferred to Final VM**.
+Final SDK doctor actually exited0 (94 capabilities/53 modules/51 search cases/300 entry symbols, baseline28, 0 errors/0 warnings; completion observed2026-10-11T09:53:56Z). It checks catalog structure/references/symbols, not simulation or native execution. Commits remain root-owned pending steps.
+See
+[Stage23](../../AYDocs/DETERMINISTIC-CHARACTER-CAMPAIGN-STAGE23.md) for exact CLI,
+budgets, witness scope, completed evidence and remaining acceptance items.
