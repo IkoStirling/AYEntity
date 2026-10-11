@@ -2126,3 +2126,88 @@ outside scope. See
 [example](examples/detcharacter/README.md) for the explicit CLI.
 
 Actual Stage26 source/outputs and the preserved localized-LastTest evidence-reader failure are recorded in [acceptance.json](../../out/detstep26-20261011/acceptance.json) and Stage26. The reader correction did not rerun products; before/after12 source/example SHA checks and SDK doctor exit0 passed. Full CP compares actual production paths, not an independent full-byte golden. No new default Host, Debug/ASan or native acceptance is inferred.
+
+## Stage27–29: registered path intent and slope motion
+
+The path driver is a separate facade, installed alongside the sole collision
+owner. Immutable relative waypoints (2..24), outgoing durations (1..65535), dwell
+counts (0..65535), mode/period and IDs enter registered policy state. Bound actors
+are ordinary solid MovingObstacle bodies. The pre/post pipeline writes only
+velocity and typed path authority. The tick period must exactly match Session dt;
+the velocity/displacement roundtrip must reach every sampled target exactly or
+fault explicitly. Post compares actual solved XY, advances phase only on arrival
+and exposes blocked otherwise. Arrival velocity describes the completed tick;
+the following pre enters zero-motion dwell/finish. Disabled/unbound defaults are
+canonical and no hidden mutable timeline exists. Loop closes physically, PingPong
+uses the lower-index leg duration backwards, pause/disable retains phase, restart
+requires actual origin rather than writing pose.
+
+Collision5 introduces StopPrescribedOnConflict as an explicit policy. Ordinary
+MO/Static and MO/MO blocking, and directly opposed actual residual AABB face
+constraints with a participating prescribed mover, raise a dedicated classified
+conflict. Generic contact budget exhaustion is never reclassified as crushing.
+The retry starts from the complete original scratch world, zeros only classified
+mover velocities, removes still-active continuous character carry from those
+supports, and solves/validates the entire dt once. A failed retry propagates.
+Discarded geometry/traces never commit events. Severity-ordered typed motion
+results include the actual partner/feature and nextTick stamp; canonical Clear
+zeros metadata. Fresh retired partners are explicit boundary transitions, not
+unknown references. Profile5 adds history field128 and keeps pair capacity59.
+
+Collision6 adds immutable static-slope geometry identity in history129/130, body
+shape160 and pair capacity58. The independent AYMath slope profile uses a filled
+right triangle and exact software X/Y/diagonal configuration-space intervals.
+Only ordinary solid Static bodies may be wedges. Diagonal normals are raw
+(-height,width)/(height,width), never fed into the old axis-only snap/response.
+The diagonal response projects remaining displacement/velocity, reconstructs
+tangent Y in fixed operation order and makes bounded outward Y ULP corrections
+until real wedge nonpenetration is verified; an unrepresentable result faults.
+Legacy branches retain their previous schema/defaults and operation order.
+
+Controller5 adds groundNormal290 and maxSlopeRisePerRun policy. Flat grounded
+normal is (0,1), slope normal is raw, airborne/disabled normal is zero. Supported
+own Y retains its existing canonical zero meaning; pre converts own X to tangent
+intent and collision owns the entire displacement. The highest footprint corner
+supplies the candidate support plane; real nonpenetration remains collision's
+responsibility. Ground support requires walkable slope and nonascending relative
+tangent motion. Steep uphill input is blocked before diagonal projection; gravity
+may slide down. Jump/drop suppress support recognition, snap remains downward
+intent, crouch checks true wedge interior, and static step requests/trials exclude
+slopes. Queries use frozen real geometry and do not predict path/controller intent.
+
+Grounded walkable characters also supply represented slope surface-change events
+to the same whole-world solver. At the high footprint corner, uphill remaining Y
+and actual body Y velocity become zero; a still-overlapping top flat segment is
+handled at fraction0 without restoring the upward tangent on the next pre.
+Descending across that segment restores tangent Y only after the highest corner
+crosses the high endpoint. Real entity collisions win equal times; actor/wedge
+stable order resolves surface ties. Every event advances all bodies together,
+records the actual physical trace and consumes the existing contact-pass budget.
+Jump/airborne/disabled/steep characters and the active step trial actor are excluded.
+There is no second pose writer, additional mutable timeline or implicit step trial
+over a slope; contact with a slope also rejects a static-AABB step trial.
+
+The controller uses the actual footprint's local support tangent for intent,
+support recognition and checkpoint validation. Beyond the high endpoint it is
+zero, even without an adjacent AABB floor. At the exact join, uphill intent is
+zero and downhill intent uses the diagonal; support/restore accept both legal
+terminal velocities through max(0,gradient*X). Before the join the ordinary
+diagonal tangent is used. This keeps slow top-segment reversals grounded and
+allows immediate jumping and restore there. GroundNormal still identifies the
+wedge's raw shape normal; it is not replaced by a unit cap-feature normal.
+
+Necessary new Release gates are LocalPassed: Path0.101359s,
+MotionPolicy0.0528883s and Slopes0.0397255s. The same final source passed the
+three old character gates and retained legacy hash9155686912840316892.
+The final real standard Host Live128 motion scene passed in0.279483s, observing128
+actual actor-ticks/attempts for each of the four scene feature channels.
+Path16/Motion8 actual sealed replay and3 seeks each, late rollback and exactly-once
+confirmed effects compare complete checkpoints across production paths; they do
+not claim an independent full-byte golden. Slopes check hand motion/query/limit,
+both high-end flat transitions, standalone top-segment reversal/jump/restore,
+order/restore and combined path/pinch/carry.
+The initial build declaration error, Loop test oracle error and both high-end
+transition failures and standalone-cap support failure remain preserved in root
+out/detmotion27-29-20261011.
+Final native acceptance remains Deferred to Final VM. See
+[Stage27–29](../../AYDocs/DETERMINISTIC-MOTION-AND-SLOPES-STAGE27-29.md).

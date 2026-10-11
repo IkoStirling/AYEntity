@@ -756,3 +756,58 @@ cross-configuration matrix is requested. See
 [example instructions](examples/detcharacter/README.md).
 
 Actual Stage26 source/outputs and the preserved localized-LastTest evidence-reader failure are recorded in [acceptance.json](../../out/detstep26-20261011/acceptance.json) and Stage26. The reader correction did not rerun products; before/after12 source/example SHA checks and SDK doctor exit0 passed. Full CP compares actual production paths, not an independent full-byte golden. No new default Host, Debug/ASan or native acceptance is inferred.
+
+## Stage27–29: prescribed paths, safe motion policy and static slopes
+
+`DeterministicPathMotion2D.h` supplies a registered velocity driver for solid
+MovingObstacle bodies. It supports Once, Loop (including the closing leg),
+PingPong, integer-tick dwell, pause and disable/resume. Points are relative to
+each bound actor's origin. Path pre precedes character pre, and path post follows
+character post. Only collision writes pose; a path opportunity progresses only
+when the requested represented target was reached. All cursor/control/result
+state and immutable points are checkpoint authority. Restart resets phase only
+at the origin and never teleports. Unrepresentable binary32 targets fault instead
+of accumulating endpoint drift; author dyadic paths for straightforward exact motion.
+
+Opt-in `collision.motionPolicy=StopPrescribedOnConflict` selects collision5 and
+controller4. It stops prescribed movers that encounter a solid static/prescribed
+obstacle or cause a directly proved opposed-face pinch, then recomputes the
+entire world once from the original tick start. Other independent movers continue.
+Characters' continuous carry from stopped supports is removed during the retry;
+jump/leave inheritance is retained. Typed Clear/Blocked/CrushPrevented results,
+stable partner, axis and fresh committed-tick stamp are recorded. Ordinary
+iteration exhaustion, invalid geometry and a failed retry remain execution faults.
+This initial policy proves direct AABB face constraints, not arbitrary chains.
+
+Opt-in `collision.staticSlopes=true` selects collision6/controller5. A body shape
+`SlopeRisesRight` or `SlopeRisesLeft` fills its bounds with a solid triangular
+wedge, allowed only for ordinary solid Static bodies. Real triangle narrowphase
+handles overlap, continuous sweep and ray query, including the base/high side.
+Characters walk uphill/downhill within `maxSlopeRisePerRun`, jump off normally,
+and expose a committed nonunit `groundNormal`. Support height uses the highest
+foot corner. Crouch clearance uses wedge interior; step trials exclude slope shapes.
+The solver splits the shared world path at the slope's high end: uphill motion
+becomes horizontal on its top segment, and reverse motion resumes the descending
+tangent after crossing it. This prevents a grounded character launching across
+an adjacent flat surface while preserving jumps and the single pose owner.
+The wedge's own highest-foot top segment also retains support without an adjacent
+floor. Intent, support and restore use its local horizontal tangent before the
+foot crosses onto the diagonal; both legal terminal velocities are accepted at
+the exact join. The registered normal remains the wedge's raw shape normal.
+No capsule, rotation, dynamic mass/friction or 3D motion is provided.
+
+Old default profiles/state bytes remain unchanged. New manifest identities are
+explicit; numeric/AABB geometry/event/checkpoint/input/replay envelopes retain
+their existing profiles. Collision5 allows at most59 trigger pairs; collision6
+at most58. Necessary Release gates are LocalPassed: Path0.101359s,
+MotionPolicy0.0528883s and CharacterSlopes0.0397255s. Current old controller,
+advanced and step gates also passed, retaining legacy hash9155686912840316892.
+The final real standard Host `motion` integration passed in0.279483s with128ticks;
+actual slope-walk, carry, blocked-path and crush-prevented counters were each128.
+The path16-tick and motion8-tick fixtures include actual late rollback, confirmed
+effects, sealed replay and3 short seeks each; slope checks include both high-end
+flat transitions and mid-slope complete checkpoint restore. Native acceptance
+remains deferred to the user's VM environment. No new campaign/long-stability
+matrix is added. Actual input pins, logs and retained failures are recorded in
+[acceptance.json](../../out/detmotion27-29-20261011/acceptance.json). See
+[Stage27–29](../../AYDocs/DETERMINISTIC-MOTION-AND-SLOPES-STAGE27-29.md).

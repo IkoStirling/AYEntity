@@ -1,9 +1,10 @@
-// design reference: AYEntity/design.md Stage26 static step-up / scratch-before-commit.
+// design reference: AYEntity/design.md Stage26/28/29 scratch-before-commit motion and static slopes.
 #include <AYEntity/DeterministicCollision2D.h>
 #include <AYEntity/DeterministicCollisionQuery2D.h>
 #include "detail/DetSessionWire.h"
 #include "detail/DetCharacterCollision2D.h"
 #include <algorithm>
+#include <array>
 #include <stdexcept>
 #include <set>
 
@@ -12,17 +13,21 @@ namespace {
 using D=math::DetFloat32;
 using V=math::DetVec2;
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic collision 2D: invalid policy, body, history or unrepresentable motion");}
+bool stopping(const DetCollision2DConfig& c){return c.motionPolicy==DetCollisionMotionPolicy2D::StopPrescribedOnConflict;}
+bool motionState(const DetCollision2DConfig& c){return stopping(c) || c.staticSlopes;}
 bool validConfig(const DetCollision2DConfig& c) {
     return c.bodySchema>=2 && c.bodySchema!=UINT32_MAX && c.historySchema>=2 && c.historySchema!=UINT32_MAX
         && c.bodySchema!=c.historySchema && c.systemId && c.eventType && c.maxBodies>=1 && c.maxBodies<=64
-        && c.maxTriggerPairs>=1 && c.maxTriggerPairs<=(c.stepUp?59u:(c.extended?60u:61u))
+        && c.maxTriggerPairs>=1 && c.maxTriggerPairs<=(c.staticSlopes?58u:((c.stepUp || stopping(c))?59u:(c.extended?60u:61u)))
         && c.maxContactIterations>=1 && c.maxContactIterations<=256
         && (!c.oneWayPlatforms || c.extended)
+        && static_cast<std::uint32_t>(c.motionPolicy)<=1 && (!stopping(c) || c.extended)
+        && (!c.staticSlopes || c.extended)
         && (c.stepUp?(c.extended && c.oneWayPlatforms && c.maxStepHeight.isFinite()
             && c.maxStepHeight>D{} && c.maxStepHeight<=D::fromInt(1000)):c.maxStepHeight.bits()==0);
 }
-std::uint32_t profile(const DetCollision2DConfig& c){return c.stepUp?kDetCollision2DStepProfileVersion:(c.oneWayPlatforms?kDetCollision2DOneWayProfileVersion:(c.extended?kDetCollision2DExtendedProfileVersion:kDetCollision2DProfileVersion));}
-void validateBody(const DetCollisionBody2D& b,bool extended=false,bool oneWayPlatforms=false) {
+std::uint32_t profile(const DetCollision2DConfig& c){return c.staticSlopes?kDetCollision2DSlopeProfileVersion:(stopping(c)?kDetCollision2DMotionProfileVersion:(c.stepUp?kDetCollision2DStepProfileVersion:(c.oneWayPlatforms?kDetCollision2DOneWayProfileVersion:(c.extended?kDetCollision2DExtendedProfileVersion:kDetCollision2DProfileVersion))));}
+void validateBody(const DetCollisionBody2D& b,bool extended=false,bool oneWayPlatforms=false,bool staticSlopes=false) {
     if(static_cast<std::uint32_t>(b.mode)>(extended?3u:2u) || !b.half.isFinite() || !b.offset.isFinite() || !b.velocity.isFinite()
         || b.half.x<D{} || b.half.y<D{}) invalid();
     if(b.mode!=DetBodyMode2D::Disabled && (!(b.half.x>D{}) || !(b.half.y>D{}) || !b.layer)) invalid();
@@ -30,6 +35,8 @@ void validateBody(const DetCollisionBody2D& b,bool extended=false,bool oneWayPla
     if(!oneWayPlatforms && (b.oneWay || b.ignoredOneWay.value))invalid();
     if(b.oneWay && (b.trigger || (b.mode!=DetBodyMode2D::Static && b.mode!=DetBodyMode2D::MovingObstacle)))invalid();
     if(b.ignoredOneWay.value && (b.trigger || b.mode!=DetBodyMode2D::Kinematic))invalid();
+    if(static_cast<std::uint32_t>(b.shape)>2 || (!staticSlopes && b.shape!=DetCollisionShape2D::Aabb)
+        || (b.shape!=DetCollisionShape2D::Aabb && (b.mode!=DetBodyMode2D::Static || b.oneWay || b.trigger)))invalid();
 }
 DetTypedStateSchema bodySchema(const DetCollision2DConfig& c) {
     DetTypedStateSchema result{c.bodySchema,profile(c),{{DetBodyMode,std::uint32_t{0}}, {DetBodyHalf,V{}},
@@ -37,6 +44,13 @@ DetTypedStateSchema bodySchema(const DetCollision2DConfig& c) {
         {DetBodyMask,UINT32_MAX},{DetBodyTrigger,false}}};
     if(c.oneWayPlatforms){result.fields.push_back({DetBodyOneWay,false});result.fields.push_back({DetBodyIgnoredOneWay,DetEntityRef{}});}
     if(c.stepUp){result.fields.push_back({DetBodyStepRequested,false});result.fields.push_back({DetBodyStepped,false});}
+    if(motionState(c)){
+        result.fields.push_back({DetBodyMotionResult,std::uint32_t{0}});
+        result.fields.push_back({DetBodyMotionOther,DetEntityRef{}});
+        result.fields.push_back({DetBodyMotionAxis,std::uint32_t{0}});
+        result.fields.push_back({DetBodyMotionResultTick,std::uint64_t{0}});
+    }
+    if(c.staticSlopes)result.fields.push_back({DetBodyShape,std::uint32_t{0}});
     return result;
 }
 DetTypedStateSchema historySchema(const DetCollision2DConfig& c) {
@@ -45,20 +59,48 @@ DetTypedStateSchema historySchema(const DetCollision2DConfig& c) {
     if(c.extended){s.fields.push_back({7,true});s.fields.push_back({8,c.maxContactIterations});}
     if(c.stepUp)s.fields.push_back({9,c.maxStepHeight});
     for(std::uint32_t i=0;i<c.maxTriggerPairs;++i){s.fields.push_back({10+2*i,DetEntityRef{}});s.fields.push_back({11+2*i,DetEntityRef{}});}
+    if(motionState(c))s.fields.push_back({128,static_cast<std::uint32_t>(c.motionPolicy)});
+    if(c.staticSlopes){s.fields.push_back({129,true});s.fields.push_back({130,math::kDetSlopeGeometry2DProfileVersion});}
     return s;
 }
 bool masks(std::uint32_t al,std::uint32_t am,std::uint32_t bl,std::uint32_t bm){return (am&bl)!=0 && (bm&al)!=0;}
-struct Body {SimEntityId id;DetCollisionBody2D data;V position;D z;math::DetAabb2 box;bool stepRequested=false,stepped=false;};
-math::DetAabb2 bounds(const Body& b){auto box=math::DetAabb2::fromCenterHalf(b.position+b.data.offset,b.data.half);if(!box.hasArea())invalid();return box;}
+struct Body {SimEntityId id;DetCollisionBody2D data;V position;D z;math::DetAabb2 box;bool stepRequested=false,stepped=false;
+    DetCollisionMotionResult2D motionResult=DetCollisionMotionResult2D::Clear;
+    SimEntityId motionOther=0;std::uint32_t motionAxis=0;
+    bool slopeLimited=false,slopeGrounded=false;SimEntityId slopeSupport=0;
+    D maxSlopeRisePerRun=D::fromInt(1);};
+math::DetSlope2 slope(const math::DetAabb2& box,DetCollisionShape2D shape){return {box,shape==DetCollisionShape2D::SlopeRisesRight};}
+math::DetAabb2 bounds(const Body& b){auto box=math::DetAabb2::fromCenterHalf(b.position+b.data.offset,b.data.half);
+    if(!box.hasArea() || (b.data.shape!=DetCollisionShape2D::Aabb && !slope(box,b.data.shape).valid()))invalid();return box;}
+bool interior(const math::DetAabb2& a,DetCollisionShape2D shapeA,const math::DetAabb2& b,DetCollisionShape2D shapeB){
+    if(shapeA==DetCollisionShape2D::Aabb)return shapeB==DetCollisionShape2D::Aabb?a.interiorOverlap(b):slope(b,shapeB).interiorOverlapAabb(a);
+    if(shapeB==DetCollisionShape2D::Aabb)return slope(a,shapeA).interiorOverlapAabb(b);
+    if(!a.interiorOverlap(b))return false;
+    // Two static wedges are not solver pairs, but public proxy pairing still
+    // returns actual shape overlap. SAT uses both inclined feature axes.
+    const auto vertices=[](const math::DetAabb2& box,DetCollisionShape2D shape){return std::array<V,3>{box.min,V{box.max.x,box.min.y},
+        shape==DetCollisionShape2D::SlopeRisesRight?box.max:V{box.min.x,box.max.y}};};
+    const auto av=vertices(a,shapeA),bv=vertices(b,shapeB);
+    for(const auto n:{slope(a,shapeA).surfaceNormal(),slope(b,shapeB).surfaceNormal()}){
+        const auto project=[&](V p){const auto relative=p-a.min;if(!relative.isFinite())invalid();
+            const auto x=n.x*relative.x,y=n.y*relative.y,value=x+y;if(!x.isFinite() || !y.isFinite() || !value.isFinite())invalid();return value;};
+        auto amin=project(av[0]),amax=amin,bmin=project(bv[0]),bmax=bmin;
+        for(unsigned i=1;i<3;++i){const auto ap=project(av[i]),bp=project(bv[i]);amin=std::min(amin,ap);amax=std::max(amax,ap);bmin=std::min(bmin,bp);bmax=std::max(bmax,bp);}
+        if(amax<=bmin || bmax<=amin)return false;
+    }
+    return true;
+}
 bool blocks(const Body& a,const Body& b){return b.data.mode==DetBodyMode2D::Static && !a.data.trigger && !b.data.trigger
     && masks(a.data.layer,a.data.mask,b.data.layer,b.data.mask);}
-D& axis(V& v,std::uint32_t i){return i==0?v.x:v.y;}
+D& axis(V& v,std::uint32_t i){if(i>1)invalid();return i==0?v.x:v.y;}
+D axis(const V& v,std::uint32_t i){if(i>1)invalid();return i==0?v.x:v.y;}
 D outward(D v,bool positive) {
     const auto bits=v.bits();
     auto next=v.isZero()?D::fromBits(positive?1u:0x80000001u):D::fromBits(bits+((positive!=v.signBit())?1u:UINT32_MAX));
     if(!next.isFinite())invalid();return next;
 }
 void snap(Body& b,const Body& wall,const math::DetHit2D& hit) {
+    if(hit.axis>1)invalid();
     const auto a=hit.axis;const bool positive=(a==0?hit.normal.x:hit.normal.y)>D{};
     const auto plane=a==0?(positive?wall.box.max.x:wall.box.min.x):(positive?wall.box.max.y:wall.box.min.y);
     auto& p=axis(b.position,a);const auto half=axis(b.data.half,a),offset=axis(b.data.offset,a);
@@ -69,6 +111,27 @@ void snap(Body& b,const Body& wall,const math::DetHit2D& hit) {
         if(positive?edge>=plane:edge<=plane)return;
         if(i==16)invalid();p=outward(p,positive);
     }
+}
+void snapSlope(Body& actor,const Body& wall) {
+    const auto wedge=slope(wall.box,wall.data.shape);
+    const auto height=wedge.surfaceHeightAtFootprint(actor.box);if(!height)invalid();
+    actor.position.y=(*height+actor.data.half.y)-actor.data.offset.y;
+    // The represented triangle predicate is the authority. Height arithmetic
+    // alone is not proof that the rebuilt box lies outside the filled wedge.
+    for(unsigned i=0;i<=16;++i){actor.box=bounds(actor);if(!wedge.interiorOverlapAabb(actor.box))return;
+        if(i==16)invalid();actor.position.y=outward(actor.position.y,true);}
+}
+V slopeTangent(V velocity,V normal) {
+    const auto xx=normal.x*normal.x,yy=normal.y*normal.y,norm=xx+yy;
+    const auto x=normal.x*velocity.x,y=normal.y*velocity.y,dot=x+y;
+    if(!xx.isFinite() || !yy.isFinite() || !norm.isFinite() || !(norm>D{}) || !x.isFinite() || !y.isFinite() || !dot.isFinite())invalid();
+    if(dot>D{})return velocity; // A steep-face X limit may leave outward jump motion.
+    const auto ratio=dot/norm;
+    const auto correction=normal*ratio;
+    if(!ratio.isFinite() || !correction.isFinite())invalid();
+    velocity=velocity-correction;
+    // Preserve the established separately-rounded slope tangent convention.
+    velocity.y=(-normal.x/normal.y)*velocity.x;if(!velocity.isFinite())invalid();return velocity;
 }
 void move(Body& b,const std::vector<Body>& bodies,D dt) {
     V remaining=b.data.velocity*dt;if(!remaining.isFinite())invalid();
@@ -94,6 +157,8 @@ template<class Read> std::vector<DetCollisionPair2D> readHistory(Read read,const
         || u32(4)!=policy.eventType || u32(6)!=math::kDetGeometry2DProfileVersion)invalid();
     if(policy.extended && (!std::get<bool>(read(7)) || u32(8)!=policy.maxContactIterations))invalid();
     if(policy.stepUp && std::get<D>(read(9)).bits()!=policy.maxStepHeight.bits())invalid();
+    if(motionState(policy) && u32(128)!=static_cast<std::uint32_t>(policy.motionPolicy))invalid();
+    if(policy.staticSlopes && (!std::get<bool>(read(129)) || u32(130)!=math::kDetSlopeGeometry2DProfileVersion))invalid();
     const auto count=u32(5);if(count>policy.maxTriggerPairs)invalid();
     std::vector<DetCollisionPair2D> result;
     for(std::uint32_t i=0;i<policy.maxTriggerPairs;++i){DetCollisionPair2D pair{std::get<DetEntityRef>(read(10+2*i)).value,std::get<DetEntityRef>(read(11+2*i)).value};
@@ -103,7 +168,8 @@ template<class Read> std::vector<DetCollisionPair2D> readHistory(Read read,const
 }
 std::vector<DetCollisionPair2D> history(DetTickContext& c,const DetCollision2DConfig& policy) {
     return readHistory([&](std::uint32_t field)->DetStateValue {
-        if(field>=10)return c.readGlobal<DetEntityRef>(policy.historySchema,field);
+        if(policy.staticSlopes && field==129)return c.readGlobal<bool>(policy.historySchema,field);
+        if(field>=10 && !(field==128 && motionState(policy)) && !(policy.staticSlopes && field==130))return c.readGlobal<DetEntityRef>(policy.historySchema,field);
         if(field==7)return c.readGlobal<bool>(policy.historySchema,field);
         if(field==9 && policy.stepUp)return c.readGlobal<D>(policy.historySchema,field);
         return c.readGlobal<std::uint32_t>(policy.historySchema,field);
@@ -117,10 +183,11 @@ std::vector<Body> readBodies(DetTickContext& c,const DetCollision2DConfig& polic
             c.read<V>(id,s,DetBodyHalf),c.read<V>(id,s,DetBodyOffset),c.read<V>(id,s,DetBodyVelocity),
             c.read<std::uint32_t>(id,s,DetBodyLayer),c.read<std::uint32_t>(id,s,DetBodyMask),c.read<bool>(id,s,DetBodyTrigger)};
         if(policy.oneWayPlatforms){data.oneWay=c.read<bool>(id,s,DetBodyOneWay);data.ignoredOneWay=c.read<DetEntityRef>(id,s,DetBodyIgnoredOneWay);}
+        if(policy.staticSlopes)data.shape=static_cast<DetCollisionShape2D>(c.read<std::uint32_t>(id,s,DetBodyShape));
         bool requested=false;
         if(policy.stepUp){requested=c.read<bool>(id,s,DetBodyStepRequested);(void)c.read<bool>(id,s,DetBodyStepped);
             if(requested && (data.mode!=DetBodyMode2D::Kinematic || data.trigger || data.ignoredOneWay.value))invalid();}
-        validateBody(data,policy.extended,policy.oneWayPlatforms);if(data.mode==DetBodyMode2D::Disabled)continue;
+        validateBody(data,policy.extended,policy.oneWayPlatforms,policy.staticSlopes);if(data.mode==DetBodyMode2D::Disabled)continue;
         const auto p=c.pose(id).position;Body b{id,data,{p.x,p.y},p.z,{},requested};b.box=bounds(b);bodies.push_back(b);
     }
     if(bodies.size()>policy.maxBodies)invalid();
@@ -131,7 +198,7 @@ struct TriggerResult {std::vector<DetCollisionPair2D> current;std::vector<std::v
 TriggerResult triggerResult(const std::vector<Body>& solved,const std::vector<TraceStep>& trace,
     const std::vector<DetCollisionPair2D>& previous,const DetCollision2DConfig& policy) {
     TriggerResult result;auto& current=result.current;auto& events=result.events;
-    std::vector<DetCollisionProxy2D> proxies;for(const auto& b:solved)proxies.push_back({b.id,b.box,b.data.layer,b.data.mask,b.data.trigger});
+    std::vector<DetCollisionProxy2D> proxies;for(const auto& b:solved)proxies.push_back({b.id,b.box,b.data.layer,b.data.mask,b.data.trigger,b.data.shape});
     current=detCollisionPairs2D(proxies);
     std::erase_if(current,[&](const auto& p){auto trigger=[&](SimEntityId id){const auto it=std::lower_bound(solved.begin(),solved.end(),id,[](const Body& b,auto key){return b.id<key;});return it->data.trigger;};return !trigger(p.first)&&!trigger(p.second);});
     if(current.size()>policy.maxTriggerPairs)invalid();
@@ -153,20 +220,59 @@ TriggerResult triggerResult(const std::vector<Body>& solved,const std::vector<Tr
     }
     return result;
 }
-void tick(DetTickContext& c,const DetCollision2DConfig& policy) {
-    const auto previous=history(c,policy);const auto bodies=readBodies(c,policy);
-    auto solved=bodies;std::vector<TraceStep> trace;std::vector<SolidContact> contacts;
-    if(policy.extended)moveTogether(solved,c.dt(),policy.maxContactIterations,trace,policy.stepUp?&contacts:nullptr);
+void tick(DetTickContext& c,const DetCollision2DConfig& policy,std::uint32_t controllerStateSchema,D maxSlopeRisePerRun) {
+    const auto previous=history(c,policy);auto bodies=readBodies(c,policy);
+    if(policy.staticSlopes && controllerStateSchema)for(auto& b:bodies){
+        b.slopeLimited=c.read<bool>(b.id,controllerStateSchema,10);b.maxSlopeRisePerRun=maxSlopeRisePerRun;
+        b.slopeGrounded=c.read<bool>(b.id,controllerStateSchema,20);
+        b.slopeSupport=c.read<DetEntityRef>(b.id,controllerStateSchema,30).value;
+    }
+    auto start=bodies,solved=bodies;std::vector<TraceStep> trace;std::vector<SolidContact> contacts;
+    std::vector<SimEntityId> cancelledCarry;
+    if(policy.extended){
+        try {moveTogether(solved,c.dt(),policy.maxContactIterations,trace,policy.stepUp?&contacts:nullptr,0,stopping(policy),policy.staticSlopes);}
+        catch(const PrescribedMotionConflict& conflict){
+            // Only this dedicated, classified conflict receives a retry. Start
+            // from the entire original world, never the partially solved path.
+            if(!stopping(policy))throw;
+            for(const auto& stop:conflict.movers){
+                const auto found=std::lower_bound(start.begin(),start.end(),stop.id,[](const Body& b,auto id){return b.id<id;});
+                if(found==start.end() || found->id!=stop.id || found->data.mode!=DetBodyMode2D::MovingObstacle)invalid();
+                found->data.velocity={};markMotion(*found,stop.result,stop.other,stop.axis);
+            }
+            for(const auto& result:conflict.actors){
+                const auto found=std::lower_bound(start.begin(),start.end(),result.id,[](const Body& b,auto id){return b.id<id;});
+                if(found==start.end() || found->id!=result.id)invalid();
+                markMotion(*found,result.result,result.other,result.axis);
+            }
+            if(controllerStateSchema)for(auto& actor:start){
+                if(!c.read<bool>(actor.id,controllerStateSchema,10))continue;
+                const auto support=c.read<DetEntityRef>(actor.id,controllerStateSchema,30).value;
+                const auto carry=c.read<V>(actor.id,controllerStateSchema,80);
+                const auto stopped=std::find_if(conflict.movers.begin(),conflict.movers.end(),[&](const auto& result){return result.id==support;});
+                // A jump or released support has no applied carry. Inherited
+                // own velocity remains physical intent and is never cancelled.
+                if(stopped!=conflict.movers.end() && (!carry.x.isZero() || !carry.y.isZero())){
+                    actor.data.velocity=actor.data.velocity-carry;
+                    if(!actor.data.velocity.isFinite())invalid();cancelledCarry.push_back(actor.id);
+                }
+            }
+            solved=start;trace.clear();contacts.clear();
+            // No nested recovery: another conflict, pass limit or invalid motion
+            // in this retry propagates as the normal executing Session fault.
+            moveTogether(solved,c.dt(),policy.maxContactIterations,trace,policy.stepUp?&contacts:nullptr,0,true,policy.staticSlopes);
+        }
+    }
     else for(auto& b:solved)if(b.data.mode==DetBodyMode2D::Kinematic)move(b,bodies,c.dt());
     // design reference: AYEntity/design.md Stage26 static step-up. Validate the
     // ordinary result first: a trial must not conceal invalid baseline motion.
     auto triggers=triggerResult(solved,trace,previous,policy);
     if(policy.stepUp){
-        const auto candidates=stepCandidates(bodies,contacts,policy.maxStepHeight);
+        const auto candidates=stepCandidates(start,contacts,policy.maxStepHeight);
         if(!candidates.empty()){
             const auto& candidate=candidates[static_cast<std::size_t>(c.tick()%candidates.size())];
-            auto trial=bodies;std::vector<TraceStep> trialTrace;
-            if(tryStep(trial,trialTrace,solved,candidate,c.dt(),policy.maxContactIterations)){
+            auto trial=start;std::vector<TraceStep> trialTrace;
+            if(tryStep(trial,trialTrace,solved,candidate,c.dt(),policy.maxContactIterations,stopping(policy),policy.staticSlopes)){
                 // A valid geometric trial can still exceed the trigger budget.
                 // Those pure candidate checks leave the validated baseline intact.
                 try {auto trialTriggers=triggerResult(trial,trialTrace,previous,policy);
@@ -183,39 +289,59 @@ void tick(DetTickContext& c,const DetCollision2DConfig& policy) {
         c.write(b.id,policy.bodySchema,DetBodyVelocity,b.data.velocity);
     }
     if(policy.stepUp)for(const auto& b:solved)c.write(b.id,policy.bodySchema,DetBodyStepped,b.stepped);
+    if(motionState(policy)){
+        // Disabled actors also lose their previous result at this boundary.
+        for(auto id:c.entities()){
+            const auto found=std::lower_bound(solved.begin(),solved.end(),id,[](const Body& b,auto key){return b.id<key;});
+            const Body* b=found!=solved.end() && found->id==id?&*found:nullptr;
+            const auto result=b?b->motionResult:DetCollisionMotionResult2D::Clear;
+            c.write(id,policy.bodySchema,DetBodyMotionResult,static_cast<std::uint32_t>(result));
+            c.write(id,policy.bodySchema,DetBodyMotionOther,DetEntityRef{b?b->motionOther:0});
+            c.write(id,policy.bodySchema,DetBodyMotionAxis,b?b->motionAxis:0u);
+            c.write(id,policy.bodySchema,DetBodyMotionResultTick,result==DetCollisionMotionResult2D::Clear?std::uint64_t{0}:c.tick()+1);
+        }
+        for(auto id:cancelledCarry)c.write(id,controllerStateSchema,80,V{});
+    }
     c.writeGlobal(policy.historySchema,5,static_cast<std::uint32_t>(current.size()));
     for(std::uint32_t slot=0;slot<policy.maxTriggerPairs;++slot){const auto p=slot<current.size()?current[slot]:DetCollisionPair2D{};
         c.writeGlobal(policy.historySchema,10+2*slot,DetEntityRef{p.first});c.writeGlobal(policy.historySchema,11+2*slot,DetEntityRef{p.second});}
     for(const auto& event:events)c.emit(policy.eventType,event);
 }
 }
+DetTypedStateSchema detCollisionBodySchema2D(const DetCollision2DConfig& c) {
+    if(!validConfig(c))invalid();return bodySchema(c);
+}
 std::vector<DetCollisionPair2D> detCollisionPairs2D(std::span<const DetCollisionProxy2D> proxies) {
     if(proxies.size()>64)invalid();auto sorted=std::vector(proxies.begin(),proxies.end());
-    std::vector<SimEntityId> ids;for(const auto& p:sorted){if(!p.id || !p.box.hasArea() || !p.layer)invalid();ids.push_back(p.id);}
+    std::vector<SimEntityId> ids;for(const auto& p:sorted){if(!p.id || !p.box.hasArea() || !p.layer || static_cast<std::uint32_t>(p.shape)>2
+        || (p.shape!=DetCollisionShape2D::Aabb && !slope(p.box,p.shape).valid()))invalid();ids.push_back(p.id);}
     std::sort(ids.begin(),ids.end());if(std::adjacent_find(ids.begin(),ids.end())!=ids.end())invalid();
     std::sort(sorted.begin(),sorted.end(),[](const auto& a,const auto& b){return a.box.min.x<b.box.min.x || (a.box.min.x==b.box.min.x && a.id<b.id);});
     std::vector<DetCollisionPair2D> result;
     for(std::size_t i=0;i<sorted.size();++i)for(std::size_t j=i+1;j<sorted.size();++j){const auto& a=sorted[i];const auto& b=sorted[j];
         if(b.box.min.x>=a.box.max.x)break;
-        if(masks(a.layer,a.mask,b.layer,b.mask) && a.box.interiorOverlap(b.box))result.push_back({std::min(a.id,b.id),std::max(a.id,b.id)});
+        if(masks(a.layer,a.mask,b.layer,b.mask) && interior(a.box,a.shape,b.box,b.shape))result.push_back({std::min(a.id,b.id),std::max(a.id,b.id)});
     }
     std::sort(result.begin(),result.end());return result;
 }
 std::vector<std::uint64_t> detCollisionBodyState2D(const DetCollision2DConfig& c,const DetCollisionBody2D& b) {
-    if(!validConfig(c))invalid();validateBody(b,c.extended,c.oneWayPlatforms);const auto s=bodySchema(c);auto words=detStateDefaults(s);
+    if(!validConfig(c))invalid();validateBody(b,c.extended,c.oneWayPlatforms,c.staticSlopes);const auto s=bodySchema(c);auto words=detStateDefaults(s);
     writeDetState(s,words,DetBodyMode,static_cast<std::uint32_t>(b.mode));writeDetState(s,words,DetBodyHalf,b.half);
     writeDetState(s,words,DetBodyOffset,b.offset);writeDetState(s,words,DetBodyVelocity,b.velocity);
     writeDetState(s,words,DetBodyLayer,b.layer);writeDetState(s,words,DetBodyMask,b.mask);writeDetState(s,words,DetBodyTrigger,b.trigger);
     if(c.oneWayPlatforms){writeDetState(s,words,DetBodyOneWay,b.oneWay);writeDetState(s,words,DetBodyIgnoredOneWay,b.ignoredOneWay);}
+    if(c.staticSlopes)writeDetState(s,words,DetBodyShape,static_cast<std::uint32_t>(b.shape));
     return words;
 }
-bool detail::installDetCharacterCollision2D(DeterministicSession& s,DetCollision2DConfig c) {
-    if(!validConfig(c))return false;
+bool detail::installDetCharacterCollision2D(DeterministicSession& s,DetCollision2DConfig c,std::uint32_t controllerStateSchema,D maxSlopeRisePerRun) {
+    if(!validConfig(c) || (controllerStateSchema && (controllerStateSchema<2 || controllerStateSchema==UINT32_MAX
+        || controllerStateSchema==c.bodySchema || controllerStateSchema==c.historySchema)) || !maxSlopeRisePerRun.isFinite()
+        || !(maxSlopeRisePerRun>D{}) || maxSlopeRisePerRun>D::fromInt(16))return false;
     if(!(s.registerTypedSchema(bodySchema(c)) && s.registerTypedSchema(historySchema(c)) && s.registerGlobalState(c.historySchema)))return false;
     if(c.extended && !s.registerValidator(c.systemId,profile(c),
         [c,body=DetStateLayout(bodySchema(c)),history=DetStateLayout(historySchema(c))](const auto& state,std::string& e){
             try {validateExtendedState(state,c,body,history);return true;}catch(const std::exception& error){e=error.what();return false;}}))return false;
-    return s.registerSystem(c.systemId,c.priority,[c](DetTickContext& context){tick(context,c);return true;});
+    return s.registerSystem(c.systemId,c.priority,[c,controllerStateSchema,maxSlopeRisePerRun](DetTickContext& context){tick(context,c,controllerStateSchema,maxSlopeRisePerRun);return true;});
 }
 bool installDetCollision2D(DeterministicSession& s,DetCollision2DConfig c) {
     if(c.stepUp)return false;
@@ -237,7 +363,7 @@ DetCollisionQuery2D::DetCollisionQuery2D(DetTickContext& context,DetCollision2DC
     if(!validConfig(config))invalid();
     (void)history(context,config);
     for(const auto& b:readBodies(context,config))
-        _proxies.push_back({b.id,b.box,b.data.layer,b.data.mask,b.data.trigger});
+        _proxies.push_back({b.id,b.box,b.data.layer,b.data.mask,b.data.trigger,b.data.shape});
 }
 DetCollisionQuery2D::DetCollisionQuery2D(const DetSessionCheckpoint& state,DetCollision2DConfig config) {
     if(!validConfig(config) || state.actors.size()>detwire::maxActors)invalid();
@@ -267,11 +393,14 @@ DetCollisionQuery2D::DetCollisionQuery2D(const DetSessionCheckpoint& state,DetCo
         DetSimTransformComponent restored;
         if(!restored.restore(actor.pose))invalid();
         if(config.oneWayPlatforms){data.oneWay=read.operator()<bool>(DetBodyOneWay);data.ignoredOneWay=read.operator()<DetEntityRef>(DetBodyIgnoredOneWay);}
+        if(config.staticSlopes)data.shape=static_cast<DetCollisionShape2D>(read.operator()<std::uint32_t>(DetBodyShape));
         if(config.stepUp && (read.operator()<bool>(DetBodyStepRequested) || read.operator()<bool>(DetBodyStepped)))invalid();
-        validateBody(data,config.extended,config.oneWayPlatforms);if(data.mode==DetBodyMode2D::Disabled)continue;
+        validateBody(data,config.extended,config.oneWayPlatforms,config.staticSlopes);
+        if(motionState(config))validateMotionOutput(state,id,data,bodies,config.bodySchema,[&](std::uint32_t field){return bodies.read(block->second,field);},config.staticSlopes,stopping(config));
+        if(data.mode==DetBodyMode2D::Disabled)continue;
         const V position{D::fromBits(actor.pose.position[0]),D::fromBits(actor.pose.position[1])};
         const Body b{id,data,position,D::fromBits(actor.pose.position[2]),{}};
-        _proxies.push_back({id,bounds(b),data.layer,data.mask,data.trigger});
+        _proxies.push_back({id,bounds(b),data.layer,data.mask,data.trigger,data.shape});
         if(_proxies.size()>config.maxBodies)invalid();
     }
 }
@@ -294,21 +423,31 @@ std::vector<SimEntityId> DetCollisionQuery2D::overlap(const math::DetAabb2& box,
     validateFilter(filter);
     if(!box.valid())throw std::invalid_argument("deterministic query 2D: invalid overlap bounds");
     std::vector<SimEntityId> ids;
-    for(const auto& p:_proxies)if(matches(p,filter) && (interior?p.box.interiorOverlap(box):p.box.overlap(box)))ids.push_back(p.id);
+    for(const auto& p:_proxies)if(matches(p,filter)){
+        const bool overlap=p.shape==DetCollisionShape2D::Aabb?(interior?p.box.interiorOverlap(box):p.box.overlap(box))
+            :(interior?slope(p.box,p.shape).interiorOverlapAabb(box):slope(p.box,p.shape).overlapAabb(box));
+        if(overlap)ids.push_back(p.id);
+    }
     return ids;
 }
 std::vector<DetCollisionQueryHit2D> DetCollisionQuery2D::raycast(V origin,V displacement,DetCollisionQueryFilter2D filter) const {
     validateFilter(filter);
     if(!origin.isFinite() || !displacement.isFinite())throw std::invalid_argument("deterministic query 2D: invalid ray segment");
     std::vector<DetCollisionQueryHit2D> hits;
-    for(const auto& p:_proxies)if(matches(p,filter))if(const auto hit=math::detRaycast2D(p.box,origin,displacement))hits.push_back({p.id,*hit});
+    for(const auto& p:_proxies)if(matches(p,filter)){
+        if(p.shape==DetCollisionShape2D::Aabb){if(const auto hit=math::detRaycast2D(p.box,origin,displacement))hits.push_back({p.id,*hit});}
+        else if(const auto hit=math::detRaycastSlope2D(slope(p.box,p.shape),origin,displacement))hits.push_back({p.id,{hit->fraction,hit->normal,hit->axis,hit->initialOverlap}});
+    }
     sortHits(hits);return hits;
 }
 std::vector<DetCollisionQueryHit2D> DetCollisionQuery2D::sweep(const math::DetAabb2& box,V displacement,DetCollisionQueryFilter2D filter) const {
     validateFilter(filter);
     if(!box.hasArea() || !displacement.isFinite())throw std::invalid_argument("deterministic query 2D: invalid sweep shape/displacement");
     std::vector<DetCollisionQueryHit2D> hits;
-    for(const auto& p:_proxies)if(matches(p,filter))if(const auto hit=math::detSweepAabb2D(box,displacement,p.box))hits.push_back({p.id,*hit});
+    for(const auto& p:_proxies)if(matches(p,filter)){
+        if(p.shape==DetCollisionShape2D::Aabb){if(const auto hit=math::detSweepAabb2D(box,displacement,p.box))hits.push_back({p.id,*hit});}
+        else if(const auto hit=math::detSweepAabbSlope2D(box,displacement,slope(p.box,p.shape)))hits.push_back({p.id,{hit->fraction,hit->normal,hit->axis,hit->initialOverlap}});
+    }
     sortHits(hits);return hits;
 }
 } // namespace ayt::entity

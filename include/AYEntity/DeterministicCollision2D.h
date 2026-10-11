@@ -1,20 +1,29 @@
 #pragma once
-// design reference: AYEntity/design.md Stage26 static step-up / collision profile4.
+// design reference: AYEntity/design.md Stage26/28/29 step, motion policy and static slopes.
 #include <AYEntity/DeterministicSession.h>
 #include <AYMath/DetGeometry2D.h>
+#include <AYMath/DetSlopeGeometry2D.h>
 
 namespace ayt::entity {
 inline constexpr std::uint32_t kDetCollision2DProfileVersion=1;
 inline constexpr std::uint32_t kDetCollision2DExtendedProfileVersion=2;
 inline constexpr std::uint32_t kDetCollision2DOneWayProfileVersion=3;
 inline constexpr std::uint32_t kDetCollision2DStepProfileVersion=4;
+inline constexpr std::uint32_t kDetCollision2DMotionProfileVersion=5;
+inline constexpr std::uint32_t kDetCollision2DSlopeProfileVersion=6;
 enum class DetBodyMode2D : std::uint32_t {Disabled=0,Static=1,Kinematic=2,MovingObstacle=3};
+enum class DetCollisionShape2D : std::uint32_t {Aabb=0,SlopeRisesRight=1,SlopeRisesLeft=2};
+enum class DetCollisionMotionPolicy2D : std::uint32_t {Fault=0,StopPrescribedOnConflict=1};
+enum class DetCollisionMotionResult2D : std::uint32_t {Clear=0,Blocked=1,CrushPrevented=2};
 /// Stable field IDs in the adapter's typed body schema; callers write velocity in earlier systems.
 enum DetBodyField2D : std::uint32_t {DetBodyMode=10,DetBodyHalf=20,DetBodyOffset=30,
     DetBodyVelocity=40,DetBodyLayer=50,DetBodyMask=60,DetBodyTrigger=70,
     DetBodyOneWay=80,DetBodyIgnoredOneWay=90,
     /// Profile4 facade-owned protocol; both fields are false at every committed boundary.
-    DetBodyStepRequested=100,DetBodyStepped=110};
+    DetBodyStepRequested=100,DetBodyStepped=110,
+    /// Profile5 last accepted tick results; Clear has zero reference/axis/stamp.
+    DetBodyMotionResult=120,DetBodyMotionOther=130,DetBodyMotionAxis=140,DetBodyMotionResultTick=150,
+    DetBodyShape=160};
 struct DetCollisionBody2D {
     DetBodyMode2D mode=DetBodyMode2D::Disabled;
     math::DetVec2 half{},offset{},velocity{};
@@ -25,6 +34,8 @@ struct DetCollisionBody2D {
     /// Profile3: one stable one-way ID ignored by this solid Kinematic body.
     /// A retired identity is harmless; unknown/self/non-platform references are rejected.
     DetEntityRef ignoredOneWay{};
+    /// Profile6 only: filled static right-triangle wedge; never one-way/trigger.
+    DetCollisionShape2D shape=DetCollisionShape2D::Aabb;
 };
 /** @brief Immutable registered collision policy, captured by value by the installed system.
  * @note Actor/history schema IDs share the session namespace. At most 64 active
@@ -54,16 +65,30 @@ struct DetCollision2DConfig {
     /// One eligible candidate per tick, stable-ID sorted and selected by tick%count.
     /// Whole-world up/across/down trials use dt/4,dt/2,dt/4; each phase retains
     /// the ordinary contact-pass budget (baseline plus trial <=4*maxContactIterations).
-    /// Other bodies move during each phase. Non-static/one-way solid responses
+    /// Other bodies move during each phase. Non-static/one-way/slope solid responses
     /// involving the stepping actor reject the trial; triggers use the chosen path.
     bool stepUp=false;
     math::DetFloat32 maxStepHeight{};
+    /// Explicit profile5, requires extended and at most59 trigger pairs. Stops
+    /// prescribed movers on ordinary MO/Static or MO/MO contact, or a proved
+    /// direct opposed-face kinematic pinch. One whole-world retry from tick start
+    /// freezes participating movers, retaining independent motion and the accepted
+    /// continuous trigger path. Unclassified iteration/numeric/geometry failures
+    /// still fault. A failed retry does not freeze more movers or partially commit.
+    DetCollisionMotionPolicy2D motionPolicy=DetCollisionMotionPolicy2D::Fault;
+    /// Explicit profile6. Ordinary solid Static wedges only, at most58 pairs;
+    /// motionPolicy and static step-up remain independent opt-ins. Axis2 is the
+    /// non-unit upward slope plane, not an AABB Y axis. Grounded facade characters
+    /// split the whole-world path at the wedge's high-end surface transition;
+    /// these events share the ordinary contact-pass budget. Old profiles are unchanged.
+    bool staticSlopes=false;
 };
 struct DetCollisionProxy2D {
     SimEntityId id=0;
     math::DetAabb2 box;
     std::uint32_t layer=1,mask=UINT32_MAX;
     bool trigger=false;
+    DetCollisionShape2D shape=DetCollisionShape2D::Aabb;
 };
 struct DetCollisionPair2D {
     SimEntityId first=0,second=0;
@@ -72,6 +97,9 @@ struct DetCollisionPair2D {
 /// Rebuilt sweep-and-prune, strict interior overlap and reciprocal masks;
 /// results sorted by canonical stable-ID pair, independent of insertion order.
 std::vector<DetCollisionPair2D> detCollisionPairs2D(std::span<const DetCollisionProxy2D> proxies);
+/// Canonical public descriptor shared by facade helpers and checkpoint readers.
+/// Invalid configurations throw; old profiles retain their exact descriptors.
+DetTypedStateSchema detCollisionBodySchema2D(const DetCollision2DConfig& config);
 /// Produce validated typed actor defaults/overrides; offset uses world XY only.
 /// Active shapes require positive represented area; static velocity must be zero.
 /// MovingObstacle needs extended=true and follows prescribed velocity without mass.
@@ -100,6 +128,12 @@ std::vector<std::uint64_t> detCollisionBodyState2D(const DetCollision2DConfig& c
  * The deterministic character facade owns profile4's transient request/result
  * protocol and clears both fields before the committed boundary. Profile4
  * queries still inspect full geometry and do not predict the step trajectory.
+ * Profile5 commits typed last-tick motion results; initializer outputs are zero.
+ * Only classified prescribed conflicts receive one safe retry. Original invalid
+ * geometry, nonfinite/unrepresentable motion and resource errors are not recovery.
+ * Ordinary one-way passages are unchanged and are not opposed-face pinch evidence.
+ * @note Profile6 uses filled wedge narrowphase and separately rounded tangent projection;
+ * no capsule, curved/moving slope, mass, restitution or surface-friction solver.
  */
 bool installDetCollision2D(DeterministicSession& session,DetCollision2DConfig config={});
 enum class DetTriggerPhase2D : std::uint32_t {Enter=1,Stay=2,Exit=3};

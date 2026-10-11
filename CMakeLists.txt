@@ -97,6 +97,7 @@ if(TARGET AYReplay)
         src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp src/AYDeterministicState.cpp
         src/AYDeterministicCollision2D.cpp
         src/AYDeterministicCharacterController2D.cpp
+        src/AYDeterministicPathMotion2D.cpp
         src/AYDeterministicLockstepProtocol.cpp src/AYDeterministicLockstep.cpp
         src/AYDeterministicRollback.cpp src/AYDeterministicRollbackNetwork.cpp src/AYDeterministicTransport.cpp)
     add_library(AYEntity::DeterminismKernel ALIAS AYEntityDeterminismKernel)
@@ -126,6 +127,10 @@ if(TARGET AYReplay)
         include(unittest/CharacterAdvanced.cmake)
         include(unittest/CharacterCampaign.cmake)
         include(unittest/CharacterSteps.cmake)
+        include(unittest/PathMotion.cmake)
+        include(unittest/MotionPolicy.cmake)
+        include(unittest/CharacterSlopes.cmake)
+        include(unittest/MotionHost.cmake)
     endif()
 endif()
 
@@ -152,6 +157,7 @@ function(ay_entity_add_determinism_host_integration)
     endif()
       if(BUILD_TESTING)
         ay_entity_add_character_steps_host_check()
+        ay_entity_add_motion_host_check()
         add_test(NAME AYEntity_CharacterAdvancedHostExample
             COMMAND ${CMAKE_COMMAND} -DEXAMPLE=$<TARGET_FILE:AYEntity_DetCharacterExample>
                 -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/character-advanced-host-example

@@ -1,0 +1,15 @@
+# design reference: AYEntity/design.md Stage27; bounded registered path motion checks.
+if(NOT DEFINED _det_character_library)
+    set(_det_character_library AYEntityDeterminism)
+endif()
+add_executable(AYEntity_PathMotionChecks "${AYENTITY_ROOT}/unittest/portable/pathmotion.cpp")
+target_link_libraries(AYEntity_PathMotionChecks PRIVATE ${_det_character_library})
+target_compile_features(AYEntity_PathMotionChecks PRIVATE cxx_std_23)
+if(MSVC)
+    target_compile_options(AYEntity_PathMotionChecks PRIVATE /utf-8)
+endif()
+set(_path_motion_artifacts "${CMAKE_CURRENT_BINARY_DIR}/path-motion-artifacts")
+file(MAKE_DIRECTORY "${_path_motion_artifacts}")
+add_test(NAME AYEntity_PathMotionChecks COMMAND AYEntity_PathMotionChecks --output "${_path_motion_artifacts}")
+set_tests_properties(AYEntity_PathMotionChecks PROPERTIES TIMEOUT 120
+    LABELS "ayentity;determinism;path;platform;2d;rollback;replay")

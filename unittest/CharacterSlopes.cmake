@@ -1,0 +1,12 @@
+# design reference: AYEntity/design.md Stage29; necessary content checks only.
+if(NOT DEFINED _det_character_library)
+    set(_det_character_library AYEntityDeterminism)
+endif()
+add_executable(AYEntity_CharacterSlopesChecks "${AYENTITY_ROOT}/unittest/portable/characterslopes.cpp")
+target_link_libraries(AYEntity_CharacterSlopesChecks PRIVATE ${_det_character_library})
+target_compile_features(AYEntity_CharacterSlopesChecks PRIVATE cxx_std_23)
+if(MSVC)
+    target_compile_options(AYEntity_CharacterSlopesChecks PRIVATE /utf-8)
+endif()
+add_test(NAME AYEntity_CharacterSlopesChecks COMMAND AYEntity_CharacterSlopesChecks)
+set_tests_properties(AYEntity_CharacterSlopesChecks PROPERTIES TIMEOUT 120 LABELS "ayentity;determinism;character;slope;2d")

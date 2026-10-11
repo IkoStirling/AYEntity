@@ -1,9 +1,9 @@
 # Deterministic character: standard Host example
 
-**Version:** 0.2.0
+**Version:** 0.3.0
 **Date:** 2026-10-11
 **Status:** Active
-**Acceptance:** Default Stage22 historical local pass; Stage26 Release steps LocalPassed; native deferred to final VM
+**Acceptance:** Default Stage22 historical local pass; Stage26 Release steps LocalPassed; Stage27–29 motion pending local acceptance; native deferred to final VM
 **Owner:** AYEntity
 
 This executable builds a real `EngineModuleRuntime` graph with
@@ -196,3 +196,76 @@ The directed Steps gate separately passed0.15571s with8ticks/9CProws/2events/
 2rollbacks/4replayedTicks/1sealed rpl/3seeks; full CP bytes compare actual paths,
 not an independent full-byte golden. See
 [Stage26 actual evidence](../../../../AYDocs/DETERMINISTIC-CHARACTER-STEP-UP-STAGE26.md).
+
+## Explicit path, conflict and slope scene (Stage27–29)
+
+`--scenario motion` selects a separate application identity29 and the opt-in
+controller5/collision6 plus registered path profile1. Default `advanced` and
+`steps` keep their existing recipes, identities and output layouts. This new
+scene has passed one necessary Windows Release Live128 Host integration;
+final native VM acceptance remains deferred.
+
+```powershell
+AYEntity_DetCharacterExample --scenario motion --ticks 128 --frame-divisor 128 --output fresh/motion
+AYEntity_DetCharacterExample --scenario motion --record fresh/motion.rpl --ticks 128 --output fresh/motion-record
+AYEntity_DetCharacterExample --scenario motion --replay fresh/motion_000.rpl --seek 64 --ticks 128 --output fresh/motion-seek
+```
+
+The Record/Replay commands are reproduction recipes, not newly executed gates.
+The final necessary live scene was run through `AYEntity_MotionHostExample`.
+The standard Host
+still advances fixed step1/64, samples the five canonical character commands,
+and uses collision as the only XY pose writer. Path pre15 sets registered
+MovingObstacle velocity before character pre20; collision30 advances the whole
+world; support post40, path progress45 and application observations50 follow.
+Path schemas10/11 are distinct from application statistics8 and observation9.
+
+| Actor | Physical scene and built-in input | Actual observation |
+|---|---|---|
+| 10 | Filled Static right-rising triangle bounds(0,0)..(4,2); half(.25,.25), starts(1,.875); speed+1 for64ticks | Positive-X slope walking, nonunit support normal and final center(2,1.375) |
+| 11 | Mirrored left-rising triangle bounds(10,0)..(14,2); starts(13,.875); speed−1 for64ticks | Negative-X slope walking and final center(12,1.375) |
+| 12 | Neutral input on a bound diagonal path platform at(20,0) | Actual same-tick carrier displacement up/right and return; own motion is not scripted |
+| 13 | Neutral input on the same relative path at(30,0), with its head touching a solid roof | A proved opposed-face pinch stops that carrier, reports CrushPrevented, and holds its path cursor |
+| 14 | Neutral input on an ordinary flat Static floor | Flat support reference |
+
+Both paths are PingPong with offsets(0,0)→(1,1) and64tick travel. The free
+carrier returns at tick128; the conflicted carrier retries from its actual
+position and remains blocked. Conflict recovery freezes only involved movers,
+so the free carrier remains observable in the same world. There is no platform
+teleport, a mutable callback time cursor or separate pose writer. Filled Static
+triangles and footprint-highest-corner support come from the public body shape
+and character facade; no test fixture or custom slope solver is included.
+
+`motion` keeps the existing seven `features` keys (unused/zero for this scene)
+and adds `scenario:"motion"`, `controllerProfile:5`, `collisionProfile:6`,
+`pathProfile:1`, `builtInMotionChecks` and `motionFeatures`:
+
+- `slopeWalkTicks`: grounded slope actor-ticks with nonzero normalX and an
+  actual committed X change; two characters may contribute in one tick.
+- `carryMoveTicks`: actual displacement of actor12 while supported by carrier120
+  with nonzero registered carrier velocity.
+- `blockedPathTicks`: committed blocked attempts of carrier130, observed after
+  path post, rather than the number of requested moves.
+- `crushPreventedTicks`: actual carrier130 result code CrushPrevented.
+
+These counters are application witnesses, not unique obstacle counts or a full
+checkpoint golden. Motion trace appends copied ground-normal X/Y bits, motion
+result code, path-blocked flag, waypoint and elapsed ticks after each actor's
+existing columns. For actors12/13 these path/result columns describe their
+carrier; other actors retain their own body result and zero path columns.
+Complete final `.state` still contains the full canonical checkpoint.
+
+For Live/Record built-in input ending at128 or later, the program checks all four
+observations are nonzero, both slope walkers reached their authored endpoints,
+the free carrier's actual rider position matches its current PingPong phase,
+and the blocked carrier/rider retained the safe roof boundary. Replay and custom
+scripts do not infer that built-in input history; `builtInMotionChecks` is false
+for them. The existing ASCII-path, fresh-output and finite-input constraints
+apply. Final VM execution remains deferred.
+
+Final configure/build/CTest all exited0. JUnit reports0.279483s (CTest total0.40s),
+128ticks/128traceRows/128inputCallbacks, `builtInMotionChecks=true` and each of
+the four `motionFeatures` counters128. Final state hash is14428100678012915376.
+The counters and built-in pose checks refer to actual committed motion; they are
+not an independent full-checkpoint golden. Source before/after pins and output
+SHA256 are in [Stage27–29 acceptance](../../../../out/detmotion27-29-20261011/acceptance.json).

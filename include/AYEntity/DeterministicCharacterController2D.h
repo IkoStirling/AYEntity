@@ -5,6 +5,8 @@ namespace ayt::entity {
 inline constexpr std::uint32_t kDetCharacterController2DProfileVersion=1;
 inline constexpr std::uint32_t kDetCharacterController2DAdvancedProfileVersion=2;
 inline constexpr std::uint32_t kDetCharacterController2DStepProfileVersion=3;
+inline constexpr std::uint32_t kDetCharacterController2DMotionProfileVersion=4;
+inline constexpr std::uint32_t kDetCharacterController2DSlopeProfileVersion=5;
 /// Applied once on release/jump with policy caps; direct support changes do not inherit the old carrier.
 enum class DetCharacterLeaveVelocity2D : std::uint32_t {Discard=0,Inherit=1};
 /// Stable fields; internal intent/carry fields are zero at every committed boundary.
@@ -23,7 +25,9 @@ enum DetCharacterField2D : std::uint32_t {
     DetCharacterDropTick=270,
     /// Step profile3 only: result of the last committed tick, cleared by next pre.
     /// True requires enabled/grounded with zero carrier and body Y velocity.
-    DetCharacterStepped=280
+    DetCharacterStepped=280,
+    /// Slope profile5: committed nonunit support normal; zero when airborne/disabled.
+    DetCharacterGroundNormal=290
 };
 /** @brief Immutable software-binary32 policy for registered axis-aligned XY character motion.
  * @note The facade installs profile2 (legacy), profile3 (advanced), or explicit
@@ -69,6 +73,9 @@ struct DetCharacterController2DConfig {
     /// Scale is finite and strictly between zero and one, even when disabled.
     bool crouchEnabled=false;
     math::DetFloat32 crouchHeightScale=math::DetFloat32::fromInt(1)/math::DetFloat32::fromInt(2);
+    /// Static-slope profile only: maximum rise/run in (0,16]. Steeper surfaces slide and cannot be walked uphill.
+    /// Default1 is also required when staticSlopes is off, keeping old policy bytes unchanged.
+    math::DetFloat32 maxSlopeRisePerRun=math::DetFloat32::fromInt(1);
 };
 /// Target horizontal own speed in world units/second. Legacy jump is a one-tick request.
 /// Advanced jumpPressed/dropPressed sample held buttons: only a registered rising
@@ -115,6 +122,8 @@ struct DetCharacterState2D {
     /// Profile3 output only: this tick accepted a static step and settled support.
     /// Actor initialization/spawn must leave this false. Read committed copies for presentation.
     bool stepped=false;
+    /// Slope profile only. For grounded initialization supply the actual flat/slope normal.
+    math::DetVec2 groundNormal{};
 };
 /** @brief Install the registered controller, immutable policy/validator and relative collision as one motion pipeline.
  * @note Link AYEntity::DeterminismKernel, Determinism or DeterminismHost. No second pose
@@ -134,8 +143,26 @@ struct DetCharacterState2D {
  * All persistent authority lives in typed state. Invalid restore is rejected atomically;
  * executing errors fault the Session and require explicit restore. An allocation failure
  * during registration can leave partial configuration: abandon a failed installation.
- * Bounds remain collision maxBodies<=64; no slopes, dynamic mass/friction,
+ * Bounds remain collision maxBodies<=64; no dynamic mass/friction,
  * rotated/capsule shapes or 3D. Legacy/advanced profiles do not step up.
+ * Explicit collision.motionPolicy selects controller4/collision5 for recoverable
+ * prescribed-obstacle blocking and directly proved crushing conflicts. Only the
+ * participating prescribed movers stop, with one whole-world retry; continuous
+ * carrier intent is removed in that retry. Typed collision results describe the
+ * accepted tick. Invalid geometry, iteration exhaustion without a classified
+ * conflict and failed retries still fault the Session.
+ * Explicit collision.staticSlopes selects controller5/collision6 and filled solid
+ * Static triangular wedges. The highest foot corner defines support height;
+ * maxSlopeRisePerRun limits walkable rise/run. Grounded walking follows the
+ * tangent through collision's sole motion owner, including downhill adhesion;
+ * jumping releases that support. Steeper surfaces cannot be walked uphill and
+ * respond with sliding. Committed groundNormal is the wedge's raw upward normal
+ * (also on its highest-foot top segment), (0,1) for an AABB flat support, and
+ * zero while airborne/disabled. State own Y remains
+ * zero while grounded; the body velocity carries the actual tangent motion.
+ * Crouch clearance uses real wedge interior, and step trials exclude slope shapes.
+ * Profile6 allows at most58 trigger pairs. New profiles/policies have explicit
+ * manifest identities; existing default profiles and state bytes remain unchanged.
  * Explicit collision.stepUp selects controller3/collision4 and allows supported
  * walking to try ordinary solid Static AABB steps up to collision.maxStepHeight.
  * No jump/drop/rising or MovingObstacle/one-way support requests a step. The sole

@@ -1,4 +1,5 @@
 #include <AYEntity/DeterministicCharacterController2D.h>
+#include <AYMath/DetSlopeGeometry2D.h>
 #include "detail/DetCharacterCollision2D.h"
 #include <algorithm>
 #include <array>
@@ -10,9 +11,10 @@ namespace {
 using D=math::DetFloat32;
 using V=math::DetVec2;
 constexpr std::uint64_t logicHash=0x4443433244503031ull,advancedLogicHash=0x4443433244503032ull,
-    stepLogicHash=0x4443433244503033ull;
-std::uint32_t profile(const DetCharacterController2DConfig& c){return c.collision.stepUp?kDetCharacterController2DStepProfileVersion:
-    (c.advanced?kDetCharacterController2DAdvancedProfileVersion:kDetCharacterController2DProfileVersion);}
+    stepLogicHash=0x4443433244503033ull,motionLogicHash=0x4443433244503034ull,slopeLogicHash=0x4443433244503035ull;
+std::uint32_t profile(const DetCharacterController2DConfig& c){return c.collision.staticSlopes?kDetCharacterController2DSlopeProfileVersion:
+    (c.collision.motionPolicy!=DetCollisionMotionPolicy2D::Fault?kDetCharacterController2DMotionProfileVersion:(c.collision.stepUp?kDetCharacterController2DStepProfileVersion:
+    (c.advanced?kDetCharacterController2DAdvancedProfileVersion:kDetCharacterController2DProfileVersion)));}
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic character 2D: invalid policy, character or support state");}
 D abs(D value){return value<D{}?-value:value;}
 bool zero(V value){return value.x.bits()==0 && value.y.bits()==0;}
@@ -27,6 +29,11 @@ V boundOwn(V velocity,const DetCharacterController2DConfig& c) {
 bool validConfig(const DetCharacterController2DConfig& c) {
     const auto& p=c.collision;
     const auto half=D::fromInt(1)/D::fromInt(2);
+    if(!c.maxSlopeRisePerRun.isFinite() || !(c.maxSlopeRisePerRun>D{}) || c.maxSlopeRisePerRun>D::fromInt(16)
+        || (!p.staticSlopes && c.maxSlopeRisePerRun.bits()!=D::fromInt(1).bits())
+        || static_cast<std::uint32_t>(p.motionPolicy)>1
+        || (p.motionPolicy!=DetCollisionMotionPolicy2D::Fault && p.maxTriggerPairs>59)
+        || (p.staticSlopes && p.maxTriggerPairs>58))return false;
     if(c.advanced!=p.oneWayPlatforms || c.coyoteTicks>65535 || c.jumpBufferTicks>65535
         || c.dropThroughTicks>65535 || !c.crouchHeightScale.isFinite()
         || !(c.crouchHeightScale>D{} && c.crouchHeightScale<D::fromInt(1))
@@ -70,6 +77,7 @@ DetTypedStateSchema stateSchema(const DetCharacterController2DConfig& c) {
         result.fields.insert(result.fields.end(),fields.begin(),fields.end());
     }
     if(c.collision.stepUp)result.fields.push_back({DetCharacterStepped,false});
+    if(c.collision.staticSlopes)result.fields.push_back({DetCharacterGroundNormal,V{}});
     return result;
 }
 DetTypedStateSchema policySchema(const DetCharacterController2DConfig& c) {
@@ -88,21 +96,16 @@ DetTypedStateSchema policySchema(const DetCharacterController2DConfig& c) {
         result.fields.insert(result.fields.end(),fields.begin(),fields.end());
     }
     if(p.stepUp){result.fields.push_back({32,true});result.fields.push_back({33,p.maxStepHeight});}
+    if(p.motionPolicy!=DetCollisionMotionPolicy2D::Fault || p.staticSlopes)result.fields.push_back({34,static_cast<std::uint32_t>(p.motionPolicy)});
+    if(p.staticSlopes){result.fields.push_back({35,true});result.fields.push_back({36,c.maxSlopeRisePerRun});}
     return result;
 }
 DetTypedStateSchema bodySchema(const DetCharacterController2DConfig& c) {
-    DetTypedStateSchema result{c.collision.bodySchema,c.collision.stepUp?kDetCollision2DStepProfileVersion:
-        (c.collision.oneWayPlatforms?kDetCollision2DOneWayProfileVersion:kDetCollision2DExtendedProfileVersion),{
-        {DetBodyMode,std::uint32_t{0}},{DetBodyHalf,V{}},{DetBodyOffset,V{}},{DetBodyVelocity,V{}},
-        {DetBodyLayer,std::uint32_t{1}},{DetBodyMask,UINT32_MAX},{DetBodyTrigger,false}}};
-    if(c.collision.oneWayPlatforms) {
-        result.fields.push_back({DetBodyOneWay,false});
-        result.fields.push_back({DetBodyIgnoredOneWay,DetEntityRef{}});
-    }
-    if(c.collision.stepUp){result.fields.push_back({DetBodyStepRequested,false});result.fields.push_back({DetBodyStepped,false});}
-    return result;
+    return detCollisionBodySchema2D(c.collision);
 }
 void validateState(const DetCharacterState2D& s,const DetCharacterController2DConfig& c) {
+    if(!s.groundNormal.isFinite() || (!c.collision.staticSlopes && !zero(s.groundNormal))
+        || (c.collision.staticSlopes && (s.grounded?!(s.groundNormal.y>D{}):!zero(s.groundNormal))))invalid();
     // A static step never carries momentum, including the fresh retired-support
     // boundary. Preserve the existing allowance for represented signed zero.
     if(s.stepped && (!c.collision.stepUp || !s.enabled || !s.grounded
@@ -136,13 +139,40 @@ void policyMatches(DetTickContext& context,const DetCharacterController2DConfig&
     },field.initial);
 }
 struct SceneBody {SimEntityId id;DetCollisionBody2D body;math::DetAabb2 box;};
+bool slope(const SceneBody& body){return body.body.shape!=DetCollisionShape2D::Aabb;}
+math::DetSlope2 slopeGeometry(const SceneBody& body){return {body.box,body.body.shape==DetCollisionShape2D::SlopeRisesRight};}
+V groundNormal(const SceneBody& body){return slope(body)?slopeGeometry(body).surfaceNormal():V{D{},D::fromInt(1)};}
+D tangentY(const SceneBody& body,D x){const auto n=groundNormal(body);const auto y=(-n.x/n.y)*x;if(!y.isFinite())invalid();return y;}
+// The highest footprint corner caps the wedge's configuration-space support at
+// its high endpoint. That local horizontal segment remains grounded even when
+// a descending character has not yet crossed back onto the diagonal.
+int slopeRegion(const SceneBody& actor,const SceneBody& floor){
+    const bool right=floor.body.shape==DetCollisionShape2D::SlopeRisesRight;
+    const auto corner=right?actor.box.max.x:actor.box.min.x;
+    const auto high=right?floor.box.max.x:floor.box.min.x;
+    if(corner==high)return 0;
+    return (right?corner>high:corner<high)?1:-1;
+}
+D supportTangentY(const SceneBody& actor,const SceneBody& floor,D x){
+    const auto region=slopeRegion(actor,floor);if(region>0)return {};
+    const auto y=tangentY(floor,x);return region==0?std::max(D{},y):y;
+}
+D intentTangentY(const SceneBody& actor,const SceneBody& floor,D x){
+    const auto region=slopeRegion(actor,floor);if(region>0)return {};
+    const auto y=tangentY(floor,x);return region==0 && !(y<D{})?D{}:y;
+}
+bool walkable(const SceneBody& body,const DetCharacterController2DConfig& c){
+    const auto n=groundNormal(body);return abs(n.x)/n.y<=c.maxSlopeRisePerRun;
+}
+bool overlaps(math::DetAabb2 box,const SceneBody& other){return slope(other)?slopeGeometry(other).interiorOverlapAabb(box):box.interiorOverlap(other.box);}
 bool masks(const SceneBody& a,const SceneBody& b){return (a.body.layer&b.body.mask)!=0 && (b.body.layer&a.body.mask)!=0;}
 bool supporting(const SceneBody& a,const SceneBody& b) {
     return a.id!=b.id && a.body.ignoredOneWay.value!=b.id && !a.body.trigger && !b.body.trigger && masks(a,b)
         && (b.body.mode==DetBodyMode2D::Static || b.body.mode==DetBodyMode2D::MovingObstacle);
 }
 D gap(const SceneBody& actor,const SceneBody& support) {
-    const auto result=actor.box.min.y-support.box.max.y;if(!result.isFinite())invalid();return result;
+    const auto height=slope(support)?slopeGeometry(support).surfaceHeightAtFootprint(actor.box):std::optional<D>{support.box.max.y};
+    if(!height)invalid();const auto result=actor.box.min.y-*height;if(!result.isFinite())invalid();return result;
 }
 bool overTop(const SceneBody& actor,const SceneBody& support,D distance) {
     if(!supporting(actor,support) || !(actor.box.min.x<support.box.max.x && support.box.min.x<actor.box.max.x))return false;
@@ -164,6 +194,7 @@ std::vector<SceneBody> bodies(DetTickContext& context,const DetCharacterControll
             body.oneWay=context.read<bool>(id,schema,DetBodyOneWay);
             body.ignoredOneWay=context.read<DetEntityRef>(id,schema,DetBodyIgnoredOneWay);
         }
+        if(c.collision.staticSlopes)body.shape=static_cast<DetCollisionShape2D>(context.read<std::uint32_t>(id,schema,DetBodyShape));
         if(body.mode==DetBodyMode2D::Disabled)continue;
         const auto p=context.pose(id).position;
         auto box=math::DetAabb2::fromCenterHalf(V{p.x,p.y}+body.offset,body.half);
@@ -181,10 +212,11 @@ const SceneBody* support(const SceneBody& actor,const std::vector<SceneBody>& sc
     const DetCharacterController2DConfig& c,V velocity,bool worldVelocity) {
     const SceneBody* result=nullptr;
     for(const auto& other:scene) {
-        if(!overTop(actor,other,c.groundProbeDistance))continue;
+        if(!overTop(actor,other,c.groundProbeDistance) || !walkable(other,c))continue;
         validatePlatform(other,c);
+        const auto relative=worldVelocity?velocity-other.body.velocity:velocity;
         if(gap(actor,other)>c.groundContactTolerance
-            || (worldVelocity?velocity.y-other.body.velocity.y:velocity.y)>D{})continue;
+            || (worldVelocity && slope(other)?relative.y>supportTangentY(actor,other,relative.x):relative.y>D{}))continue;
         if(!result || gap(actor,other)<gap(actor,*result)
             || (gap(actor,other)==gap(actor,*result) && other.id<result->id))result=&other;
     }
@@ -258,7 +290,7 @@ void shape(DetTickContext& context,SceneBody& actor,const std::vector<SceneBody>
             bool blocked=!desired.hasArea() || desired.min.y.bits()!=actor.box.min.y.bits();
             if(!requested && !blocked)for(const auto& other:scene)
                 if(other.id!=actor.id && !other.body.trigger && masks(actor,other)
-                    && interior(desired,other.box)){blocked=true;break;}
+                    && overlaps(desired,other)){blocked=true;break;}
             if(!blocked){crouched=requested;half=desiredHalf;offset=desiredOffset;box=desired;}
         }catch(const std::invalid_argument&) {
             // Only pure candidate geometry above can throw this argument error.
@@ -316,7 +348,7 @@ void preAdvanced(DetTickContext& context,const DetCharacterController2DConfig& c
         const SceneBody* carrier=contact;bool snapping=false;
         if(!carrier && state.grounded && !dropped && own.y<=D{} && c.snapDistance>D{}) {
             const auto* previous=locate(scene,state.support.value);
-            if(previous && overTop(*actor,*previous,c.snapDistance)) {
+            if(previous && walkable(*previous,c) && overTop(*actor,*previous,c.snapDistance)) {
                 validatePlatform(*previous,c);carrier=previous;snapping=true;
             }
         }
@@ -341,6 +373,7 @@ void preAdvanced(DetTickContext& context,const DetCharacterController2DConfig& c
         }
         own=boundOwn(own,c);const V carry=carrier?carrier->body.velocity:V{};
         V intended=own;
+        if(carrier && slope(*carrier) && !jumped){intended.y=intentTangentY(*actor,*carrier,intended.x);}
         if(snapping){const auto down=-gap(*actor,*carrier)/dt;if(!down.isFinite())invalid();intended.y=std::min(intended.y,down);}
         const auto world=intended+carry;if(!world.isFinite())invalid();
         context.write(id,c.stateSchema,DetCharacterVelocity,own);
@@ -359,7 +392,7 @@ void preAdvanced(DetTickContext& context,const DetCharacterController2DConfig& c
         context.write(id,c.stateSchema,DetCharacterDropRemaining,dropRemaining);
         context.write(id,c.collision.bodySchema,DetBodyVelocity,world);
         if(c.collision.stepUp) {
-            const bool eligible=contact && contact->body.mode==DetBodyMode2D::Static && !contact->body.oneWay
+            const bool eligible=contact && contact->body.mode==DetBodyMode2D::Static && !contact->body.oneWay && !slope(*contact)
                 && !jumped && !dropped && !ignored.value && own.y<=D{} && !own.x.isZero();
             context.write(id,c.collision.bodySchema,DetBodyStepRequested,eligible);
         }
@@ -398,6 +431,7 @@ void postAdvanced(DetTickContext& context,const DetCharacterController2DConfig& 
         context.write(id,c.stateSchema,DetCharacterSupport,DetEntityRef{grounded?grounded->id:0});
         context.write(id,c.stateSchema,DetCharacterSupportVelocity,grounded?grounded->body.velocity:V{});
         context.write(id,c.stateSchema,DetCharacterSupportTick,grounded?context.tick()+1:std::uint64_t{0});
+        if(c.collision.staticSlopes)context.write(id,c.stateSchema,DetCharacterGroundNormal,grounded?groundNormal(*grounded):V{});
         if(grounded) {
             context.write(id,c.stateSchema,DetCharacterCoyoteRemaining,c.coyoteTicks);
             context.write(id,c.stateSchema,DetCharacterCoyoteSupportY,c.coyoteTicks?grounded->body.velocity.y:D{});
@@ -425,7 +459,7 @@ void pre(DetTickContext& context,const DetCharacterController2DConfig& c) {
         bool snapping=false;
         if(!carrier && state.grounded && own.y<=D{} && c.snapDistance>D{}) {
             const auto* previous=locate(scene,state.support.value);
-            if(previous && overTop(*actor,*previous,c.snapDistance)) {
+            if(previous && walkable(*previous,c) && overTop(*actor,*previous,c.snapDistance)) {
                 validatePlatform(*previous,c);carrier=previous;snapping=true;
             }
         }
@@ -446,6 +480,7 @@ void pre(DetTickContext& context,const DetCharacterController2DConfig& c) {
         own=boundOwn(own,c);
         const V carry=carrier?carrier->body.velocity:V{};
         V intended=own;
+        if(carrier && slope(*carrier) && !jumped){intended.y=intentTangentY(*actor,*carrier,intended.x);}
         if(snapping){const auto downward=-gap(*actor,*carrier)/dt;if(!downward.isFinite())invalid();intended.y=std::min(intended.y,downward);}
         const auto world=intended+carry;if(!world.isFinite())invalid();
         context.write(id,c.stateSchema,DetCharacterVelocity,own);
@@ -489,6 +524,7 @@ void post(DetTickContext& context,const DetCharacterController2DConfig& c) {
         context.write(id,c.stateSchema,DetCharacterSupport,DetEntityRef{grounded?grounded->id:0});
         context.write(id,c.stateSchema,DetCharacterSupportVelocity,grounded?grounded->body.velocity:V{});
         context.write(id,c.stateSchema,DetCharacterSupportTick,grounded?context.tick()+1:std::uint64_t{0});
+        if(c.collision.staticSlopes)context.write(id,c.stateSchema,DetCharacterGroundNormal,grounded?groundNormal(*grounded):V{});
         clearInternal(context,id,c);
     }
 }
@@ -507,6 +543,7 @@ void validateCheckpoint(const DetSessionCheckpoint& checkpoint,const DetCharacte
             body.oneWay=read.operator()<bool>(DetBodyOneWay);
             body.ignoredOneWay=read.operator()<DetEntityRef>(DetBodyIgnoredOneWay);
         }
+        if(c.collision.staticSlopes)body.shape=static_cast<DetCollisionShape2D>(read.operator()<std::uint32_t>(DetBodyShape));
         if(c.collision.stepUp && (read.operator()<bool>(DetBodyStepRequested) || read.operator()<bool>(DetBodyStepped)))invalid();
         if(body.mode==DetBodyMode2D::Disabled)continue;
         const V position{D::fromBits(actor.pose.position[0]),D::fromBits(actor.pose.position[1])};
@@ -535,6 +572,7 @@ void validateCheckpoint(const DetSessionCheckpoint& checkpoint,const DetCharacte
             value.dropTick=read.operator()<std::uint64_t>(DetCharacterDropTick);
         }
         if(c.collision.stepUp)value.stepped=read.operator()<bool>(DetCharacterStepped);
+        if(c.collision.staticSlopes)value.groundNormal=read.operator()<V>(DetCharacterGroundNormal);
         validateState(value,c);
         if(value.stepped && checkpoint.nextTick==0)invalid();
         if(!value.enabled){
@@ -586,9 +624,10 @@ void validateCheckpoint(const DetSessionCheckpoint& checkpoint,const DetCharacte
             continue;
         }
         validatePlatform(*floor,c);
-        if(value.stepped && (floor->body.mode!=DetBodyMode2D::Static || floor->body.oneWay))invalid();
+        if(value.stepped && (floor->body.mode!=DetBodyMode2D::Static || floor->body.oneWay || slope(*floor)))invalid();
+        if(c.collision.staticSlopes && (!walkable(*floor,c) || !equal(value.groundNormal,groundNormal(*floor))))invalid();
         if(!overTop(*self,*floor,c.groundContactTolerance) || !equal(value.supportVelocity,floor->body.velocity)
-            || (checkpoint.nextTick && self->body.velocity.y-floor->body.velocity.y>D{}))invalid();
+            || (checkpoint.nextTick && (slope(*floor)?self->body.velocity.y-floor->body.velocity.y>supportTangentY(*self,*floor,self->body.velocity.x-floor->body.velocity.x):self->body.velocity.y-floor->body.velocity.y>D{})))invalid();
     }
 }
 }
@@ -600,6 +639,7 @@ std::vector<std::uint64_t> detCharacterState2D(const DetCharacterController2DCon
     writeDetState(schema,words,DetCharacterSupport,state.support);
     writeDetState(schema,words,DetCharacterVelocity,state.velocity);
     writeDetState(schema,words,DetCharacterSupportVelocity,state.supportVelocity);
+    if(config.collision.staticSlopes)writeDetState(schema,words,DetCharacterGroundNormal,state.groundNormal);
     if(config.advanced) {
         writeDetState(schema,words,DetCharacterCrouched,state.crouched);
         writeDetState(schema,words,DetCharacterStandingCaptured,state.standingCaptured);
@@ -640,6 +680,7 @@ DetCharacterState2D detCharacterState2D(DetTickContext& context,SimEntityId acto
         result.dropTick=context.read<std::uint64_t>(actor,s,DetCharacterDropTick);
     }
     if(config.collision.stepUp)result.stepped=context.read<bool>(actor,s,DetCharacterStepped);
+    if(config.collision.staticSlopes)result.groundNormal=context.read<V>(actor,s,DetCharacterGroundNormal);
     return result;
 }
 void detCharacterInput2D(DetTickContext& context,SimEntityId actor,const DetCharacterController2DConfig& config,DetCharacterInput2D input) {
@@ -665,8 +706,9 @@ bool installDetCharacterController2D(DeterministicSession& session,DetCharacterC
     const DetStateLayout stateLayout(state),policyLayout(policy),bodyLayout(bodySchema(config));
     if(!(session.registerTypedSchema(state) && session.registerTypedSchema(policy)
         && session.registerGlobalState(config.policySchema)
-        && detail::installDetCharacterCollision2D(session,config.collision)
-        && session.registerLogicProfile(config.logicProfileId,profile(config),config.collision.stepUp?stepLogicHash:(config.advanced?advancedLogicHash:logicHash))
+        && detail::installDetCharacterCollision2D(session,config.collision,config.stateSchema,config.maxSlopeRisePerRun)
+        && session.registerLogicProfile(config.logicProfileId,profile(config),config.collision.staticSlopes?slopeLogicHash:
+            (config.collision.motionPolicy!=DetCollisionMotionPolicy2D::Fault?motionLogicHash:(config.collision.stepUp?stepLogicHash:(config.advanced?advancedLogicHash:logicHash))))
         && session.registerValidator(config.validatorId,profile(config),
             [config,stateLayout,policyLayout,bodyLayout](const auto& checkpoint,std::string& error){
                 try {validateCheckpoint(checkpoint,config,stateLayout,policyLayout,bodyLayout);return true;}

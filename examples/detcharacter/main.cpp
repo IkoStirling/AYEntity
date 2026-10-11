@@ -3,6 +3,7 @@
 #include <AYApplication/EngineRuntimeScope.h>
 #include <AYApplication/IEngineHost.h>
 #include <AYEntity/DeterministicCharacterController2D.h>
+#include <AYEntity/DeterministicPathMotion2D.h>
 #include <AYEntity/DeterministicHost.h>
 #include <AYEntity/EntityComponentModule.h>
 #include <AYEntity/EntityRuntimeModule.h>
@@ -52,7 +53,7 @@ std::string quoted(std::string_view value) {
 }
 struct Options {
     DetHostMode mode=DetHostMode::Live;
-    bool steps=false;
+    bool steps=false,motion=false;
     std::string replayPath,output,commands;
     std::uint64_t ticks=512,seek=0;
     unsigned frameDivisor=64;
@@ -70,8 +71,8 @@ Options options(int argc,char** argv) {
             result.mode=key=="--record"?DetHostMode::Record:DetHostMode::Replay;
             asciiPath(value);result.replayPath=value;
         }else if(key=="--scenario") {
-            require(value=="advanced" || value=="steps","Scenario must be advanced or steps");
-            result.steps=value=="steps";
+            require(value=="advanced" || value=="steps" || value=="motion","Scenario must be advanced, steps or motion");
+            result.steps=value=="steps";result.motion=value=="motion";
         }else if(key=="--ticks")result.ticks=integer(value);
         else if(key=="--seek"){result.seek=integer(value);result.seekSet=true;}
         else if(key=="--frame-divisor") {
@@ -91,7 +92,7 @@ struct Sample {int speed=0;bool jump=false,crouch=false,drop=false;};
 using Samples=std::array<Sample,characters.size()>;
 class InputScript {
 public:
-    explicit InputScript(const Options& opts):custom_(!opts.commands.empty()),steps_(opts.steps) {
+    explicit InputScript(const Options& opts):custom_(!opts.commands.empty()),steps_(opts.steps),motion_(opts.motion) {
         if(!custom_)return;
         require(std::filesystem::file_size(opts.commands)<=1048576,"Command script exceeds1MiB");
         std::ifstream file(opts.commands);
@@ -124,6 +125,10 @@ public:
                 if(const auto found=rows_.find({tick,characters[index]});found!=rows_.end())result[index]=found->second;
             return result; // Every absent row explicitly samples neutral, including released buttons.
         }
+        if(motion_) {
+            result[0].speed=tick<64?1:0;result[1].speed=tick<64?-1:0;
+            return result; // Platforms have registered autonomous paths, not scripted pose edits.
+        }
         if(steps_) {
             result[0].speed=tick<96?2:0;
             result[1].speed=result[2].speed=tick<128?2:0;
@@ -137,7 +142,7 @@ public:
         return result;
     }
 private:
-    bool custom_,steps_;
+    bool custom_,steps_,motion_;
     std::map<std::pair<std::uint64_t,SimEntityId>,Sample> rows_;
 };
 struct InputBoundary {std::uint64_t tick=0,calls=0;Samples samples{};};
@@ -156,11 +161,26 @@ DetCharacterController2DConfig stepPolicy() {
     config.collision.maxTriggerPairs=59;
     return config;
 }
-DetTypedStateSchema observations(bool steps=false) {
+DetCharacterController2DConfig motionPolicy() {
+    auto config=policy();
+    config.collision.staticSlopes=true;config.collision.maxTriggerPairs=58;
+    config.collision.motionPolicy=DetCollisionMotionPolicy2D::StopPrescribedOnConflict;
+    return config;
+}
+DetPathMotion2DConfig platformPolicy(const DetCharacterController2DConfig& character) {
+    DetPathMotion2DConfig config;config.collision=character.collision;
+    config.stateSchema=10;config.policySchema=11;config.tickPeriod=ratio(1,64);
+    config.waypoints={{{},64,0},{V::fromInts(1,1),64,0}};
+    return config;
+}
+DetTypedStateSchema observations(bool steps=false,bool motion=false) {
     DetTypedStateSchema schema{viewSchema,1,{{10,false},{20,D{}},{30,std::uint32_t{0}},{40,std::uint32_t{0}},
         {50,false},{60,false},{70,DetEntityRef{}},{80,DetEntityRef{}},
         {90,std::uint32_t{0}},{100,std::uint32_t{0}},{110,std::uint32_t{0}}}};
     if(steps){schema.version=2;schema.fields.push_back({120,false});schema.fields.push_back({130,std::uint64_t{0}});}
+    if(motion){schema.version=3;schema.fields.push_back({140,V{}});schema.fields.push_back({150,V{}});
+        schema.fields.push_back({160,std::uint32_t{0}});schema.fields.push_back({170,false});
+        schema.fields.push_back({180,std::uint32_t{0}});schema.fields.push_back({190,std::uint32_t{0}});}
     return schema;
 }
 DetActorState actor(const DetCharacterController2DConfig& config,DetBodyMode2D mode,V position,V half,
@@ -288,6 +308,79 @@ bool configureSteps(DeterministicSession& session) {
         && session.addEntity(122,actor(config,DetBodyMode2D::Static,{D::fromInt(21),ratio(3,2)},
             {D::fromInt(2),ratio(1,8)}));
 }
+bool configureMotion(DeterministicSession& session) {
+    const auto config=motionPolicy();
+    const auto path=platformPolicy(config);
+    DetTypedStateSchema stats{statsSchema,3,{}};
+    for(std::uint32_t field=10;field<=110;field+=10)stats.fields.push_back({field,std::uint64_t{0}});
+    if(!session.registerTypedSchema(stats) || !session.registerGlobalState(statsSchema)
+        || !session.registerTypedSchema(observations(false,true))
+        || !session.registerLogicProfile(60,3,0x444d4f54494f3031ULL))return false;
+    if(!session.registerSystem(10,0,[config](DetTickContext& context) {
+        if(context.input().commands.size()!=characters.size())return false;
+        for(std::size_t index=0;index<characters.size();++index) {
+            const auto id=characters[index];const auto& command=context.input().commands[index];
+            if(command.source!=id || command.sequence!=0 || command.type!=inputType || command.payload.size()!=4
+                || command.payload[0]>4 || command.payload[1]>1 || command.payload[2]>1 || command.payload[3]>1)return false;
+            const auto before=context.pose(id).position;
+            context.write(id,viewSchema,140,V{before.x,before.y});
+            detCharacterInput2D(context,id,config,{D::fromInt(static_cast<int>(command.payload[0])-2),
+                command.payload[1]!=0,command.payload[2]!=0,command.payload[3]!=0});
+        }
+        return true;
+    }) || !installDetCharacterController2D(session,config) || !installDetPathMotion2D(session,path)
+        || !session.registerSystem(50,0,[config,path](DetTickContext& context) {
+            const auto count=[&](std::uint32_t field){context.writeGlobal(statsSchema,field,context.readGlobal<std::uint64_t>(statsSchema,field)+1);};
+            for(const auto id:characters) {
+                const auto movement=detCharacterState2D(context,id,config);const auto position=context.pose(id).position;
+                const auto previous=context.read<V>(id,viewSchema,140);
+                const bool moved=position.x.bits()!=previous.x.bits() || position.y.bits()!=previous.y.bits();
+                if((id==10 || id==11) && movement.grounded && !movement.groundNormal.x.isZero() && position.x.bits()!=previous.x.bits())count(80);
+                if(id==12 && movement.grounded && movement.support.value==120 && moved
+                    && (!movement.supportVelocity.x.isZero() || !movement.supportVelocity.y.isZero()))count(90);
+                auto result=context.read<std::uint32_t>(id,config.collision.bodySchema,DetBodyMotionResult);
+                bool blocked=false;std::uint32_t waypoint=0,elapsed=0;
+                if(id==12 || id==13) {
+                    const auto carrier=id==12?120u:130u;const auto phase=detPathMotionState2D(context,carrier,path);
+                    blocked=phase.blocked;waypoint=phase.waypoint;elapsed=phase.elapsedTicks;
+                    result=context.read<std::uint32_t>(carrier,config.collision.bodySchema,DetBodyMotionResult);
+                    if(id==13 && blocked)count(100);
+                    if(id==13 && result==static_cast<std::uint32_t>(DetCollisionMotionResult2D::CrushPrevented))count(110);
+                }
+                context.write(id,viewSchema,50,movement.grounded);context.write(id,viewSchema,60,movement.crouched);
+                context.write(id,viewSchema,70,movement.support);context.write(id,viewSchema,80,context.read<DetEntityRef>(id,config.collision.bodySchema,DetBodyIgnoredOneWay));
+                context.write(id,viewSchema,150,movement.groundNormal);context.write(id,viewSchema,160,result);
+                context.write(id,viewSchema,170,blocked);context.write(id,viewSchema,180,waypoint);context.write(id,viewSchema,190,elapsed);
+            }
+            return true;
+        }))return false;
+    const auto quarter=ratio(1,4),half=ratio(1,2);
+    // Two filled Static triangles, [0,0]..[4,2] and [10,0]..[14,2].
+    // A .25-half character at x1/x13 has highest-footprint support y.625.
+    for(auto [id,x]:{std::pair{10u,1},std::pair{11u,13}})
+        if(!session.addEntity(id,actor(config,DetBodyMode2D::Kinematic,{D::fromInt(x),ratio(7,8)},{quarter,quarter},{},true)))return false;
+    for(auto [id,x]:{std::pair{12u,20},std::pair{13u,30},std::pair{14u,40}})
+        if(!session.addEntity(id,actor(config,DetBodyMode2D::Kinematic,{D::fromInt(x),ratio(3,4)},{quarter,half},{},true)))return false;
+    const auto slope=[&](SimEntityId id,int x,DetCollisionShape2D shape) {
+        auto state=actor(config,DetBodyMode2D::Static,V::fromInts(x,1),{D::fromInt(2),D::fromInt(1)});
+        DetCollisionBody2D body;body.mode=DetBodyMode2D::Static;body.half={D::fromInt(2),D::fromInt(1)};
+        body.layer=2;body.mask=1;body.shape=shape;state.blocks[config.collision.bodySchema]=detCollisionBodyState2D(config.collision,body);
+        return session.addEntity(id,std::move(state));
+    };
+    const auto moving=[&](SimEntityId id,int x) {
+        auto state=actor(config,DetBodyMode2D::MovingObstacle,V::fromInts(x,0),{D::fromInt(2),quarter});
+        DetPathMotionState2D phase;phase.bound=true;phase.origin=V::fromInts(x,0);state.blocks[path.stateSchema]=detPathMotionState2D(path,phase);
+        return session.addEntity(id,std::move(state));
+    };
+    // The free carrier travels diagonally. The second has a top rider already
+    // touching a roof: the first upward intent proves an opposed-face pinch.
+    // The same immutable relative path is safe for the free carrier; conflict
+    // recovery freezes only the involved one, preserving independent motion.
+    return slope(100,2,DetCollisionShape2D::SlopeRisesRight) && slope(110,12,DetCollisionShape2D::SlopeRisesLeft)
+        && moving(120,20) && moving(130,30)
+        && session.addEntity(131,actor(config,DetBodyMode2D::Static,{D::fromInt(30),ratio(3,2)},{D::fromInt(2),quarter}))
+        && session.addEntity(140,actor(config,DetBodyMode2D::Static,V::fromInts(40,0),{D::fromInt(4),quarter}));
+}
 class StandardHost {
 public:
     StandardHost(const Options& opts,InputBoundary& boundary):host(ayt::app::defaultEngineHost()),
@@ -298,11 +391,11 @@ public:
             auto& modules=runtime.modules();
             require(modules.emplace<EntityComponentModule>().succeeded(),"Add component module");
             require(modules.emplace<EntityRuntimeModule>().succeeded(),"Add Entity runtime module");
-            DetHostedSceneRecipe recipe;recipe.config.applicationVersion=opts.steps?26:22;
+            DetHostedSceneRecipe recipe;recipe.config.applicationVersion=opts.motion?29:(opts.steps?26:22);
             recipe.config.stepNumerator=1;recipe.config.stepDenominator=64;
-            recipe.config.contentHash=opts.steps?0x4443535445503031ULL:0x444343324c564c31ULL;
+            recipe.config.contentHash=opts.motion?0x444d4f54494f3031ULL:(opts.steps?0x4443535445503031ULL:0x444343324c564c31ULL);
             recipe.mode=opts.mode;recipe.replayPath=opts.replayPath;recipe.checkpointInterval=64;
-            recipe.configure=opts.steps?configureSteps:configure;
+            recipe.configure=opts.motion?configureMotion:(opts.steps?configureSteps:configure);
             recipe.input=[&boundary](const auto& request,auto& packet) {
                 if(request.tick!=boundary.tick)return false;++boundary.calls;
                 packet={request.tick,request.version,{}};
@@ -342,15 +435,15 @@ private:
     ayt::app::EngineRuntimeScope scope;
     std::unique_ptr<ayt::scene::Scene> scene;
 };
-std::array<std::uint64_t,7> features(const DetSessionCheckpoint& checkpoint,bool steps=false) {
+std::array<std::uint64_t,7> features(const DetSessionCheckpoint& checkpoint,bool steps=false,bool motion=false) {
     std::array<std::uint64_t,7> result{};
     const auto& words=checkpoint.globals.at(statsSchema);
-    require(words.size()==result.size()+(steps?1:0),"Unexpected application stats shape");
+    require(words.size()==result.size()+(motion?4:(steps?1:0)),"Unexpected application stats shape");
     std::copy_n(words.begin(),result.size(),result.begin());return result;
 }
-void trace(std::ostream& stream,const DetSessionCheckpoint& checkpoint,bool steps=false) {
+void trace(std::ostream& stream,const DetSessionCheckpoint& checkpoint,bool steps=false,bool motion=false) {
     stream<<checkpoint.nextTick<<' '<<detCheckpointHash(checkpoint);
-    const auto schema=observations(steps);
+    const auto schema=observations(steps,motion);
     for(const auto id:characters) {
         const auto& actor=checkpoint.actors.at(id);const auto& view=actor.blocks.at(viewSchema);
         stream<<' '<<id<<' '<<std::hex<<actor.pose.position[0]<<' '<<actor.pose.position[1]<<std::dec
@@ -358,10 +451,14 @@ void trace(std::ostream& stream,const DetSessionCheckpoint& checkpoint,bool step
             <<' '<<readDetState<DetEntityRef>(schema,view,70).value
             <<' '<<readDetState<DetEntityRef>(schema,view,80).value;
         if(steps)stream<<' '<<readDetState<bool>(schema,view,120);
+        if(motion){const auto normal=readDetState<V>(schema,view,150);
+            stream<<' '<<std::hex<<normal.x.bits()<<' '<<normal.y.bits()<<std::dec
+                <<' '<<readDetState<std::uint32_t>(schema,view,160)<<' '<<readDetState<bool>(schema,view,170)
+                <<' '<<readDetState<std::uint32_t>(schema,view,180)<<' '<<readDetState<std::uint32_t>(schema,view,190);}
     }
     stream<<'\n';
 }
-void presentation(const DetSessionCheckpoint& checkpoint,bool steps=false) {
+void presentation(const DetSessionCheckpoint& checkpoint,bool steps=false,bool motion=false) {
     // Copies from a const committed checkpoint. Native floats and stdout are presentation only.
     std::cout<<"present tick="<<checkpoint.nextTick;
     for(const auto id:characters) {
@@ -369,6 +466,11 @@ void presentation(const DetSessionCheckpoint& checkpoint,bool steps=false) {
         std::cout<<" actor="<<id<<" xy="<<D::fromBits(position[0]).toFloat()<<','<<D::fromBits(position[1]).toFloat();
         if(steps)std::cout<<" stepped="<<readDetState<bool>(observations(true),checkpoint.actors.at(id).blocks.at(viewSchema),120)
             <<" stepCount="<<readDetState<std::uint64_t>(observations(true),checkpoint.actors.at(id).blocks.at(viewSchema),130);
+        if(motion){const auto& view=checkpoint.actors.at(id).blocks.at(viewSchema);const auto schema=observations(false,true);
+            const auto normal=readDetState<V>(schema,view,150);
+            std::cout<<" groundNormal="<<normal.x.toFloat()<<','<<normal.y.toFloat()
+                <<" motionResult="<<readDetState<std::uint32_t>(schema,view,160)
+                <<" pathBlocked="<<readDetState<bool>(schema,view,170);}
     }
     std::cout<<'\n';
 }
@@ -402,14 +504,14 @@ int run(const Options& opts) {
         if(after==before){require(controller.state()!=DetHostState::Completed,"Replay ended before requested ticks");continue;}
         require(after==before+1,"Host advanced more than one tick per frame");
         const auto checkpoint=controller.checkpoint();require(checkpoint.has_value(),controller.error());
-        if(traceFile.is_open())trace(traceFile,*checkpoint,opts.steps);++traceRows;
-        if(after%64==0)presentation(*checkpoint,opts.steps);
+        if(traceFile.is_open())trace(traceFile,*checkpoint,opts.steps,opts.motion);++traceRows;
+        if(after%64==0)presentation(*checkpoint,opts.steps,opts.motion);
     }
     const auto checkpoint=controller.checkpoint();require(checkpoint && checkpoint->nextTick==opts.ticks,"Final tick mismatch");
     if(opts.mode==DetHostMode::Replay)require(controller.state()==DetHostState::Completed,"Requested ticks do not reach replay completion");
-    const auto counts=features(*checkpoint,opts.steps);
+    const auto counts=features(*checkpoint,opts.steps,opts.motion);
     // Replay may have been recorded with a custom script; it must not assume built-in inputs.
-    const bool featureCheck=!opts.steps && opts.mode!=DetHostMode::Replay && opts.commands.empty() && opts.ticks>=512;
+    const bool featureCheck=!opts.steps && !opts.motion && opts.mode!=DetHostMode::Replay && opts.commands.empty() && opts.ticks>=512;
     if(featureCheck)for(std::size_t index=0;index<counts.size();++index)
         require(counts[index]>0,std::string("Built-in feature was not observed: ")+featureNames[index]);
     const auto stepCount=opts.steps?checkpoint->globals.at(statsSchema).at(7):0;
@@ -419,6 +521,17 @@ int run(const Options& opts) {
             "Built-in stairs did not observe three committed character10 steps");
         require(checkpoint->actors.at(characters[0]).pose.position[1]==ratio(3,2).bits(),
             "Built-in stairs did not settle on the third static top");
+    }
+    const bool motionCheck=opts.motion && opts.mode!=DetHostMode::Replay && opts.commands.empty() && opts.ticks>=128;
+    if(motionCheck) {
+        const auto& stats=checkpoint->globals.at(statsSchema);for(std::size_t i=7;i<11;++i)require(stats[i]>0,"Built-in motion feature not observed");
+        require(checkpoint->actors.at(10).pose.position[0]==D::fromInt(2).bits() && checkpoint->actors.at(11).pose.position[0]==D::fromInt(12).bits()
+            && checkpoint->actors.at(10).pose.position[1]==ratio(11,8).bits() && checkpoint->actors.at(11).pose.position[1]==ratio(11,8).bits(),"Built-in slope walkers did not reach the actual authored support height");
+        const auto phase=opts.ticks%128;const auto travel=phase<=64?phase:128-phase;
+        require(checkpoint->actors.at(12).pose.position[0]==(D::fromInt(20)+ratio(static_cast<int>(travel),64)).bits()
+            && checkpoint->actors.at(12).pose.position[1]==(ratio(3,4)+ratio(static_cast<int>(travel),64)).bits(),"Free path carrier lost actual diagonal carry during independent conflict recovery");
+        require(checkpoint->actors.at(130).pose.position[0]==D::fromInt(30).bits() && checkpoint->actors.at(130).pose.position[1]==D{}.bits()
+            && checkpoint->actors.at(13).pose.position[1]==ratio(3,4).bits(),"Blocked path/carried rider moved into the solid roof");
     }
     if(opts.mode==DetHostMode::Replay)require(boundary.calls==0,"Replay invoked live input acquisition");
     if(opts.mode==DetHostMode::Record)require(controller.stop(),controller.error());
@@ -441,6 +554,11 @@ int run(const Options& opts) {
         }
         summary<<'}';
     }
+    if(opts.motion) {
+        const auto& stats=checkpoint->globals.at(statsSchema);
+        summary<<",\"scenario\":\"motion\",\"controllerProfile\":5,\"collisionProfile\":6,\"pathProfile\":1,\"builtInMotionChecks\":"<<(motionCheck?"true":"false")
+            <<",\"motionFeatures\":{\"slopeWalkTicks\":"<<stats[7]<<",\"carryMoveTicks\":"<<stats[8]<<",\"blockedPathTicks\":"<<stats[9]<<",\"crushPreventedTicks\":"<<stats[10]<<'}';
+    }
     summary<<"}\n";
     if(!opts.output.empty()) {
         const auto bytes=encodeDetCheckpoint(*checkpoint);
@@ -454,7 +572,7 @@ int run(const Options& opts) {
 int main(int argc,char** argv) {
     if(argc==2 && std::string_view(argv[1])=="--help") {
         std::cout<<"AYEntity_DetCharacterExample [--record fresh.rpl | --replay recorded_000.rpl] [--seek tick]"
-            " [--scenario advanced|steps] [--ticks 512] [--frame-divisor 64|128] [--commands file] [--output freshPrefix]\n";return 0;
+            " [--scenario advanced|steps|motion] [--ticks 512] [--frame-divisor 64|128] [--commands file] [--output freshPrefix]\n";return 0;
     }
     Options opts;
     try{opts=options(argc,argv);}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 2;}
