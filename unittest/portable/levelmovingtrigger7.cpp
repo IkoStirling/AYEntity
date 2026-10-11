@@ -95,7 +95,7 @@ void authoring(const fs::path& dir){const auto l=scene();const auto text=encodeD
     const auto refuse=[&](const std::string& bad){const bool accepted=decodeDetLevel2D(bad,decoded,error);
         require(!accepted && !error.empty() && encodeDetLevel2D(decoded)==text,"atomic parser refusal");++rejects;};
     refuse(replaced(text,"path 1 0 1 2","path 1 0 2 2"));refuse(replaced(text,"path 1 0 1 2","path 1 0 2"));
-    refuse(replaced(text,"AYDLEVEL 7","AYDLEVEL 11"));refuse(text+"unknown");
+    refuse(replaced(text,"AYDLEVEL 7","AYDLEVEL 12"));refuse(text+"unknown");
     const auto invalid=[&](const DetLevel2D& bad){require(!validateDetLevel2D(bad,error) && !error.empty(),"semantic role refusal");++rejects;};
     auto bad=l;bad.formatVersion=6;invalid(bad);bad=l;bad.paths[0].movingTrigger=false;invalid(bad);
     bad=l;bad.actors[1].body.trigger=false;invalid(bad);bad=l;bad.actors[1].body.mode=DetBodyMode2D::Static;invalid(bad);

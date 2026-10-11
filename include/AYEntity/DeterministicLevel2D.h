@@ -36,6 +36,8 @@ inline constexpr std::uint32_t kDetLevel2DAttackProfileVersion=8;
 inline constexpr std::uint32_t kDetLevel2DBrainProfileVersion=9;
 /// @brief Finite registered Character Control authoring; formats1..9 retain their bytes.
 inline constexpr std::uint32_t kDetLevel2DCharacterControlProfileVersion=10;
+/// @brief Explicit scene-query Brain2 authoring; formats1..10 retain their literal bytes.
+inline constexpr std::uint32_t kDetLevel2DBrainSightProfileVersion=11;
 /// @brief Bound on original ASCII source bytes, before decoding.
 inline constexpr std::size_t kDetLevel2DMaxTextBytes=65536;
 /// @brief Bound on complete field-wise semantic bytes entering the manifest.
@@ -125,6 +127,9 @@ struct DetLevel2D {
     /// Format10: sorted enabled character owners; disjoint from all brainOwners.
     /// Empty installs no Control. Dash is a finite target-speed override, not a pose/distance writer.
     std::vector<DetCharacterControlOwner2D> characterControlOwners;
+    /// Format11: explicit Brain2 scene-query line of sight for every authored brain owner.
+    /// False selects unchanged Brain1. Empty brains require false; old formats reject true.
+    bool brainLineOfSight=false;
 };
 /// @brief Application-owned registration ranges; adjust these before combining other schemas/systems.
 /// @note Defaults reserve schemas 8..23 for paths,32..47 for content; path pre 11..18/post 41..48.
@@ -158,7 +163,7 @@ struct DetLevel2DOptions {
     std::uint32_t characterControlInputSchema=304,characterControlStateSchema=305,characterControlPolicySchemaBase=306,
         characterControlSystemId=15,characterControlValidatorId=79,characterControlLogicProfileId=79;
 };
-/// @brief Strict ASCII AYDLEVEL1..10 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
+/// @brief Strict ASCII AYDLEVEL1..11 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
 /// @note Rejects unknown/trailing tokens, nonfinite values, invalid roles/policies and initial geometry.
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,
     const DetLevel2DOptions& options={});
@@ -206,8 +211,8 @@ DetVitality2DConfig detLevelVitalityConfig2D(const DetLevel2D& level,const DetLe
 /// @note Empty owners or invalid geometry, permissions, namespaces or scratch seal throw.
 /// Input is runtime-owned and precedes Attack; authored content never imports a held latch or hit ledger.
 DetAttack2DConfig detLevelAttackConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
-/// @brief Resolve Brain1 over the exact prepared Character/Attack/HP authority.
-/// @note Empty Brain content throws. Namespaces use actual facade factories and fresh preflight.
+/// @brief Resolve selected Brain1/2 over the exact prepared Character/Attack/HP authority.
+/// @note Empty Brain content throws. Format11 alone may select scene-query Brain2; actual factories and fresh seal validate full identity and capacity.
 DetBrain2DConfig detLevelBrainConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
 /// @brief Resolve Control1 over the exact prepared Character and optional complete Respawn policy.
 /// @note Empty controls throw; actual factories and fresh seal enforce roles, full policy and joint capacity.
@@ -299,6 +304,22 @@ DetCharacterControl2DConfig detLevelCharacterControlConfig2D(const DetLevel2D& l
  * Empty controls install none; formats1..9 reject nonempty owners and preserve
  * literal old semantic/default branches. Separate Control8KiB/9-chunk and real
  * joint64-schema budgets apply; Options reserve only actual selected descriptors.
+ * Format11 explicitly appends lineOfSight to the brains header after its count,
+ * before all brain rows and the unchanged controls table. True selects Brain2
+ * and its actual complete Character/Attack/query policy; false selects Brain1.
+ * No brains requires false. Formats1..10 reject true and preserve every old
+ * writer/semantic/default branch. This level identity uses AYDLV011/version11.
+ * Idle alive sensed owners sample one matching immutable scene snapshot before
+ * any brain input writes. The closed center segment excludes the owner, skips
+ * the designated target and ignores triggers; all other mutually masked solid
+ * proxies, including actual filled wedges, may block. SightBlocked patrols
+ * and releases attack held input. Busy/dead/retired precedence is unchanged.
+ * Visibility only gates a new idle decision; it does not cancel an active
+ * Attack, add wall clipping to its whitelist, or certify visibility history
+ * from a later moved checkpoint. Reacquire each tick; no query cache persists.
+ * No FOV, navigation, pit avoidance or automatic editor/cook promotion is added.
+ * Real selected factories enforce Brain18KiB/19-chunk and joint64-schema limits
+ * alongside this level's8KiB semantic/64KiB text limits. No wire profile changes.
  * Entire tables and nested policies enter identity, not only a content hash.
  * Flow precedes Interaction and every path/character pre at collision.priority;
  * application Progress writes must precede Flow. Empty counters forbids objective,

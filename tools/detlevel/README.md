@@ -308,3 +308,37 @@ canonical byte roundtrips, existing-output and unknown-kind protection. Source
 and executable pins match stage57-actual-freeze.json and before/after snapshots
 are equal; no production retry/fix. Physical I/O fault injection was not run.
 Historical gameplay receipts are separate; native final VM Deferred.
+
+## Stage59: authored sight flag in Level11
+
+Format11 extends the existing Brain header only:
+
+```text
+brains <owner-count> <lineOfSight-0-or-1>
+brain <existing complete owner fields>
+controls <existing control table>
+```
+
+True selects actual Brain2, false Brain1; empty owners require false. Earlier
+formats1..10 retain false and reject nondefault policy. `inspect` returns
+`brainLineOfSight` as a JSON boolean and the full existing Brain owner rows.
+The flag is authored policy, never an executed visible/blocked result. Public
+decode/prepare/factories/fresh seal validate complete identity; canonical output
+preserves version11 and all fields without migration or hidden state.
+
+```text
+aydetlevel validate AYRuntime/AYEntity/examples/detsight/content.dlt
+aydetlevel inspect AYRuntime/AYEntity/examples/detsight/content.dlt
+aydetlevel canonicalize AYRuntime/AYEntity/examples/detsight/content.dlt fresh-sight.dlt
+```
+
+The [standard sight Host](../../examples/detsight/README.md) supplies a separate
+door-input recipe. Offline authoring does not run rays, actions or gameplay.
+Necessary local MSVC Release LevelToolChecks passed1.85419s with true Level11
+inspect/canonical output and old branches, while new authoring1.10249s and actual
+sight Host10.4039s passed. Seven unique cases include old10/7/Cooked and existing
+Resource1.06179s; latter is old-sample compatibility, not new11 Pak runtime.
+Complete old Control canonical bytes also match the accepted Stage56 output.
+First target-name/fixture-keyword failures remain; only `action 101` -> `target 101`
+source grammar was repaired, not production behavior or hand checks. host1
+stays overall Failed, its genuine Resource pass was not repeated. Native final VM Deferred.

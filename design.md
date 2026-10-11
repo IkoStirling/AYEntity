@@ -2936,3 +2936,48 @@ are fixed by stage58-actual-freeze.json. Initial core1 cl.exe CreateProcess
 Access is denied failed before tests; j4->2 same-source orchestration retry
 passed. The failure remains and no production/oracle change was made.
 No new Debug/ASan/matrix/long/native/VM proof; final native VM Deferred.
+
+## Stage59: selected Brain identity and callback observation closure
+
+Format11 binds `brainLineOfSight` in AYDLV011 semantic bytes and the brains header;
+no row order/control grammar is changed. The selected real Brain factory supplies
+state/policy/defaults/version/validator/logic over full prepared Character/Attack/
+query identity. False retains Brain1; old formats reject true before scratch
+installation, empty Brain requires false. Existing text/semantic/aggregate schema
+limits still apply; this is not a new gameplay facade or a budget expansion.
+
+The standard sight sample reads immutable content and registers application
+logic83 and input4 before normal Level configuration. Its full canonical command
+is app59/inputVersion8/type8/source10/sequence0/one bool byte at step1/64.
+Brain3 samples the closed door first; input4 executes real authorized Collision
+Enable/Disable on actor101. It does not write pose, HP or Character/Attack intent.
+CP9 legitimately carries the prior blocked decision with mask0; pure closure
+does not substitute a current ray for the old observation. Already-launched
+Attack still uses full HP permission, not an added damage-stage occlusion test.
+
+The actual finite six-path Host checked Live/save9, fresh load9, Record, Replay,
+seek9 and actual stdin save/load. Full checkpoints/save files and per-tick hash
+traces are compared with continuation suffixes; selected hand fields are a
+separate oracle scope, not independent complete CP goldens or authentication.
+Live file I/O stays outside Sim, restore/resume reacquires observations, Record
+cannot rewind and Replay acquires no live input.
+Necessary local MSVC Release seven unique cases passed: new Level11 1.10249s,
+old CharacterControl10 .204423s/MovingTrigger7 .69038s/Cooked .115796s,
+standard SightHost10.4039s, CLI1.85419s and existing Resource1.06179s. New authored
+scope is8ticks/9CP,16selected hand rows/23advances/9full actual CP comparisons/
+16rejects with real file/text/cooked and restore continuation. Six64tick Host
+paths agree in complete final CP/twoSave9/full hash trace or55-row continuation;
+stdin68rows has suffix13 of55, Replay0input calls. Selected hand fields and full
+actual execution equality are separate scopes, not independent whole-CP goldens
+or historical ray authentication. Existing Resource uses old samples, not a
+separately packaged Level11 sight scene. Final native VM Deferred; no new matrix/long proof.
+
+Receipts stage59-levels2/host1/host2 and stage59-actual-freeze.json bind sources,
+executable/artifacts and genuine individual JUnit passes. host1 remains overall
+Failed: Resource passed and was not repeated; only failed Host/CLI retried after
+changing the source fixture's `action 101` literal to existing `target 101`
+grammar. Production/hand checks were unchanged and original OUT/failed raw files
+remain. First levels1 harness named unknown AYEntity_LevelControl10Checks before
+product tests; corrected existing CharacterControl10 target then passed.
+Snapshots match before/after each batch; fixture source changed across batches,
+so cross-batch full snapshot equality is not claimed.

@@ -94,6 +94,7 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         <<",\"attackOwnerCount\":"<<level.attackOwners.size()
         <<",\"attackCancelOnRecovery\":"<<(level.attackCancelOnRecovery?"true":"false")
         <<",\"brainOwnerCount\":"<<level.brainOwners.size()
+        <<",\"brainLineOfSight\":"<<(level.brainLineOfSight?"true":"false")
         <<",\"controlOwnerCount\":"<<level.characterControlOwners.size()
         <<",\"actors\":[";
     bool first=true;

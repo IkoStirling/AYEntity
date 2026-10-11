@@ -1382,3 +1382,42 @@ First core1 cl.exe CreateProcess Access is denied remains; orchestration j4->2
 same-source retry passed with no production behavior/oracle edit.
 Actual source/exe/receipts match stage58-actual-freeze.json and before/after
 snapshots are equal. No matrix/long/native/VM gate; final native VM Deferred.
+
+## Stage59: authored line of sight and a standard door Host
+
+Level11 authors the existing opt-in Brain2 with `brains <count> <lineOfSight>`.
+Use ordinary Level load/configure and the existing `detLevelBrainConfig2D` getter;
+it resolves complete prepared Character/Attack/query authority. Old1..10 false
+retain their byte/default branches, empty owners require false, and older formats
+reject true. The tool exposes the authored bool/full Brain rows and canonicalizes
+the explicit version through the real fresh Session recipe.
+
+Optional default-OFF `AY_ENTITY_BUILD_DET_SIGHT_EXAMPLE` builds
+`AYEntity_DetSightExample`: real EngineModuleRuntime, standard Entity Host/Scene,
+[immutable Level11 content](examples/detsight/content.dlt). External input controls
+only the registered door action; Enemy movement/Attack remains Brain-owned.
+See [example recipe](examples/detsight/README.md) for save/replay and input boundaries.
+Brain3 captures before door input4, so restoring a checkpoint with an earlier
+blocked observation/current open mask does not require historical reraycasting.
+Necessary local MSVC Release seven unique cases passed: new Level11 1.10249s,
+old CharacterControl10 .204423s/MovingTrigger7 .69038s/Cooked .115796s,
+standard SightHost10.4039s, CLI1.85419s and existing Resource1.06179s. New authored
+scope is8ticks/9CP,16selected hand rows/23advances/9full actual CP comparisons/
+16rejects with real file/text/cooked and restore continuation. Six64tick Host
+paths agree in complete final CP/twoSave9/full hash trace or55-row continuation;
+stdin68rows has suffix13 of55, Replay0input calls. Selected hand fields and full
+actual execution equality are separate scopes, not independent whole-CP goldens
+or historical ray authentication. Existing Resource uses old samples, not a
+separately packaged Level11 sight scene. Final native VM Deferred; no new matrix/long proof.
+
+Receipts stage59-levels2/host1/host2 and stage59-actual-freeze.json bind sources,
+executable/artifacts and genuine individual JUnit passes. host1 remains overall
+Failed: Resource passed and was not repeated; only failed Host/CLI retried after
+changing the source fixture's `action 101` literal to existing `target 101`
+grammar. Production/hand checks were unchanged and original OUT/failed raw files
+remain. First levels1 harness named unknown AYEntity_LevelControl10Checks before
+product tests; corrected existing CharacterControl10 target then passed.
+Snapshots match before/after each batch; fixture source changed across batches,
+so cross-batch full snapshot equality is not claimed.
+No numeric/collision/Attack/save/replay wire, navigation or launched-attack
+occlusion is introduced; prior accepted samples remain their historical scope.

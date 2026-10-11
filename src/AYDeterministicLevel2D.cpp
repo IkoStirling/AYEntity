@@ -42,6 +42,8 @@ struct BinaryCodec {Writer w;
     template<class E>void enumeration(E value){w.u(static_cast<std::uint32_t>(value));}
 };
 Bytes canonical(const DetLevel2D& level){
+    if(level.formatVersion<11 && level.brainLineOfSight)invalid("Older level formats cannot author brain line of sight");
+    if(level.brainOwners.empty() && level.brainLineOfSight)invalid("Level line of sight requires brain owners");
     if(level.formatVersion<10 && !level.characterControlOwners.empty())invalid("Older level formats cannot author character controls");
     if(level.characterControlOwners.size()>kDetCharacterControl2DMaxOwners)invalid("Level character control count limit");
     if(level.formatVersion<9 && !level.brainOwners.empty())invalid("Older level formats cannot author brains");
@@ -71,7 +73,7 @@ Bytes canonical(const DetLevel2D& level){
         || level.respawnRegions.size()>kDetCharacterRespawnFlow2DMaxRegions
         || (level.character.collision.characterRespawn?level.respawnSpawns.empty() || level.respawnBindings.empty():respawnContent))invalid("Level respawn table budget or opt-in mismatch");
     if(level.paths.size()>8 || level.actors.empty() || level.actors.size()>64)invalid("Level body/path count limit");
-    if(level.formatVersion<1 || level.formatVersion>10)invalid("Unknown level format version");
+    if(level.formatVersion<1 || level.formatVersion>11)invalid("Unknown level format version");
     if(level.formatVersion==1 && (!level.actionTargets.empty() || !level.rules.empty() || level.maxActionsPerTick!=64))invalid("Format1 cannot author actions/rules");
     if(level.actionTargets.size()>8 || level.rules.size()>kDetInteraction2DMaxRules
         || !level.maxActionsPerTick || level.maxActionsPerTick>1024 || (level.actionTargets.empty() && !level.rules.empty()))invalid("Level action/rule budget");
@@ -86,7 +88,7 @@ Bytes canonical(const DetLevel2D& level){
         level.formatVersion==2?std::string_view("AYDLV002"):level.formatVersion==3?std::string_view("AYDLV003"):
         level.formatVersion==4?std::string_view("AYDLV004"):level.formatVersion==5?std::string_view("AYDLV005"):level.formatVersion==6?std::string_view("AYDLV006"):
         level.formatVersion==7?std::string_view("AYDLV007"):level.formatVersion==8?std::string_view("AYDLV008"):
-        level.formatVersion==9?std::string_view("AYDLV009"):std::string_view("AYDLV010");
+        level.formatVersion==9?std::string_view("AYDLV009"):level.formatVersion==10?std::string_view("AYDLV010"):std::string_view("AYDLV011");
     for(auto ch:magic)io.w.u(static_cast<unsigned char>(ch),1);
     io.word(level.formatVersion);io.word(level.applicationVersion);io.word(level.inputVersion);
     io.word(level.stepNumerator);io.word(level.stepDenominator);
@@ -130,6 +132,7 @@ Bytes canonical(const DetLevel2D& level){
             io.word(owner.warmupTicks);io.word(owner.activeTicks);io.word(owner.recoveryTicks);io.word(static_cast<std::uint32_t>(owner.targets.size()));
             for(const auto& target:owner.targets){io.w.u(target.actor,8);io.word(target.permission);io.w.u(target.amount,8);}}}
     if(level.formatVersion>=9){io.word(static_cast<std::uint32_t>(level.brainOwners.size()));
+        if(level.formatVersion>=11)io.boolean(level.brainLineOfSight);
         for(const auto& owner:level.brainOwners){io.w.u(owner.actor,8);io.w.u(owner.target,8);
             io.scalar(owner.patrolLeft);io.scalar(owner.patrolRight);io.scalar(owner.patrolSpeed);io.scalar(owner.chaseSpeed);
             io.w.vector(owner.senseHalfExtent);io.scalar(owner.attackDistance);io.boolean(owner.initialRight);}}
@@ -341,6 +344,7 @@ Prepared prepare(const DetLevel2D& level,const DetLevel2DOptions& options){
     if(!level.brainOwners.empty()){
         if(!result.attack)invalid("Level brains require complete Attack/HP authority");
         DetBrain2DConfig brain;brain.character=cc;brain.attack=*result.attack;brain.owners=level.brainOwners;
+        brain.lineOfSight=level.brainLineOfSight;
         brain.stateSchema=options.brainStateSchema;brain.policySchemaBase=options.brainPolicySchemaBase;
         brain.systemId=options.brainSystemId;brain.validatorId=options.brainValidatorId;brain.logicProfileId=options.brainLogicProfileId;
         if(brain.systemId>=brain.attack.systemId || brain.systemId>=cc.preSystemId || brain.systemId>=bc.systemId)invalid("Level brain ordering conflict");
@@ -434,7 +438,7 @@ bool install(DeterministicSession& session,const DetLevel2D& level,const DetLeve
     const auto identityHash=level.formatVersion==1?0x41444c5630303031ull:level.formatVersion==2?0x41444c5630303032ull:level.formatVersion==3?0x41444c5630303033ull:
         level.formatVersion==4?0x41444c5630303034ull:level.formatVersion==5?0x41444c5630303035ull:
         level.formatVersion==8?0x41444c5630303038ull:level.formatVersion==9?0x41444c5630303039ull:
-        level.formatVersion==10?0x41444c5630303130ull:0x41444c5630303036ull;
+        level.formatVersion==10?0x41444c5630303130ull:level.formatVersion==11?0x41444c5630303131ull:0x41444c5630303036ull;
     if(!session.registerLogicProfile(options.identityLogicId,level.formatVersion,identityHash))return false;
     if(!session.registerValidator(options.identityValidatorId,level.formatVersion,[chunks=prepared.chunks](const DetSessionCheckpoint& cp,std::string& error){
         for(const auto& chunk:chunks){auto g=cp.globals.find(chunk.schema.id);if(g==cp.globals.end() || g->second!=chunk.words){error="Immutable level content global changed";return false;}
@@ -499,7 +503,7 @@ DetCharacterControl2DConfig detLevelCharacterControlConfig2D(const DetLevel2D& l
 bool validateDetLevel2D(const DetLevel2D& level,std::string& error,const DetLevel2DOptions& options){try{(void)checked(level,options);error.clear();return true;}catch(const std::exception& e){error=e.what();return false;}}
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,const DetLevel2DOptions& options){std::size_t location=0;bool semantic=false;try{
     TokenReader r(text,location);DetLevel2D value;r.expect("AYDLEVEL");value.formatVersion=r.integer<std::uint32_t>();
-    if(value.formatVersion<1 || value.formatVersion>10)invalid("Unknown level format version");
+    if(value.formatVersion<1 || value.formatVersion>11)invalid("Unknown level format version");
     r.expect("session");r.word(value.applicationVersion);r.word(value.inputVersion);r.word(value.stepNumerator);r.word(value.stepDenominator);
     r.expect("collision");collision(r,value.character.collision);if(value.formatVersion>=4)r.boolean(value.character.collision.characterRespawn);r.expect("character");character(r,value.character);
     r.expect("paths");const auto paths=r.integer<std::uint32_t>();if(paths>8)invalid("Level path count limit");
@@ -554,6 +558,7 @@ bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& erro
             for(std::uint32_t k=0;k<targets;++k){r.expect("attacktarget");DetAttackTarget2D target;target.actor=r.integer<std::uint64_t>();
                 r.word(target.permission);target.amount=r.integer<std::uint64_t>();owner.targets.push_back(target);}value.attackOwners.push_back(std::move(owner));}}
     if(value.formatVersion>=9){r.expect("brains");const auto owners=r.integer<std::uint32_t>();
+        if(value.formatVersion>=11)r.boolean(value.brainLineOfSight);
         if(owners>kDetBrain2DMaxOwners)invalid("Level brain owner count limit");
         for(std::uint32_t n=0;n<owners;++n){r.expect("brain");DetBrainOwner2D owner;owner.actor=r.integer<std::uint64_t>();owner.target=r.integer<std::uint64_t>();
             r.scalar(owner.patrolLeft);r.scalar(owner.patrolRight);r.scalar(owner.patrolSpeed);r.scalar(owner.chaseSpeed);
@@ -612,6 +617,7 @@ std::string encodeDetLevel2D(const DetLevel2D& level,const DetLevel2DOptions& op
             w.word(owner.warmupTicks);w.word(owner.activeTicks);w.word(owner.recoveryTicks);w.word(static_cast<std::uint32_t>(owner.targets.size()));
             for(const auto& target:owner.targets)w.stream<<"\nattacktarget "<<target.actor<<' '<<target.permission<<' '<<target.amount;}}
     if(level.formatVersion>=9){w.stream<<"\nbrains";w.word(static_cast<std::uint32_t>(level.brainOwners.size()));
+        if(level.formatVersion>=11)w.boolean(level.brainLineOfSight);
         for(const auto& owner:level.brainOwners){w.stream<<"\nbrain "<<owner.actor<<' '<<owner.target;
             w.scalar(owner.patrolLeft);w.scalar(owner.patrolRight);w.scalar(owner.patrolSpeed);w.scalar(owner.chaseSpeed);
             w.scalar(owner.senseHalfExtent.x);w.scalar(owner.senseHalfExtent.y);w.scalar(owner.attackDistance);w.boolean(owner.initialRight);}}
