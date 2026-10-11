@@ -1884,3 +1884,74 @@ Release remains240s and every configuration keeps the full workload. These check
 cover fixed3-tick corrections and a single-member logical archive owner; they do not
 claim new real network transport or native Linux/ARM64 Host integration. Native
 shared-kernel acceptance and any remaining checks are recorded separately in Stage21.
+
+## Stage22: registered practical movement and one-way top planes
+
+The advanced controller is an explicit opt-in. Controller profile2/state+policy
+version2/new implementation fingerprint requires collision profile3 with
+`extended=true` and `oneWayPlatforms=true`. Legacy default identities and semantics
+are kept; new options cannot be silently applied to a profile1 controller. The
+existing numeric, geometry, input/checkpoint/event and replay wire versions do
+not change. Manifest identity rejects mismatching policy/state/code semantics.
+
+Collision profile3 appends registered `DetBodyOneWay` and `DetBodyIgnoredOneWay`
+fields. One-way flags are legal only on solid Static/MovingObstacle bodies; an
+ignored stable platform reference belongs to a solid Kinematic body. Unknown,
+self and alive non-platform references fail semantic validation. Retired IDs are
+never recycled. The body/history schema versions and history profile field bind
+new semantics without adding redundant history fields, preserving the128-field
+history budget and60-pair extended limit.
+
+The relative solver uses an exact software top-plane sweep for one-way pairs.
+A candidate requires actor bottom at/above the top, negative relative Y and
+strictly positive X overlap at the crossing fraction. Stable pair/time/axis order
+and prescribed moving-obstacle normal response are retained. Side/bottom/inside
+passages are intentional; ordinary solid penetration remains invalid. Trigger
+traces still use the actual solved path, and geometric scene queries continue
+returning shapes independently of directional blocking rules.
+
+Advanced windows use registered bounded tick counters, never elapsed host time.
+A buffer of N retains the press pre and N future pre opportunities; coyote N gives
+N pre opportunities after loss of ground. Consumption clears the window. Held
+jump/drop samples and rising-edge latches are persistent registered fields, with
+explicit false release; one held press cannot replay as repeated actions. Drop
+requires a current one-way support, clears jump/grace/snap and records the ignored
+identity. Its timer and actual clearance both govern release. A fresh drop boundary
+stamp admits only the explicit deferred-despawn transition before the next pre
+clears it. The collision body reference is the single stored ignore identity.
+
+Standing half/offset are registered, captured on initial pre or explicitly authored
+for later enabling/spawn. Crouch scales halfY and translates offsetY to preserve
+the bottom face without writing pose. A candidate must have positive represented
+area and exactly equal current/candidate foot minY bits. Pure nonrepresentable
+geometry keeps the complete old stance/shape; it does not fault otherwise valid
+input or search adjacent ULPs. Normal collision begin/set-position history still
+advances; unchanged current pose does not mean an unchanged complete ActorSnapshot.
+Stand-up expansion inspects current solid
+reciprocal-mask geometry, including one-way geometry, and changes neither stance
+nor shape if obstructed. Earlier stable-ID shape changes are visible to later
+actors in the same deterministic pre scratch scene. Validators bind stance to the
+represented body shape and reject invalid counter/latch/policy combinations.
+
+Portable directed fixtures and full-checkpoint continuations cover window edges,
+one-way traversal/drop, low roofs, restore and late-input correction. Real file
+recording, indexed segments and cross-file seek share this registered closure.
+The executable example uses actual standard Host/module startup, input encoding
+and read-only presentation. Tests and actual local results are linked in
+[Stage22](../../AYDocs/DETERMINISTIC-CHARACTER-CONTROLLER-STAGE22.md); final native
+VM execution remains explicitly deferred and is not substituted by local passes.
+
+Windows local acceptance on2026-10-11 passed Release17/17 portable gates, focused
+Debug/AddressSanitizer legacy+advanced checks and standard Host Release/Debug.
+Advanced256-tick final hash14226949613902538608 and all257 complete checkpoint
+rows/30 events/manifest bytes match across five builds. Standard Host512-tick
+final hash16517448268532947218, all four state files, full live/record/replay traces
+and seek256 suffix agree; its actual seven feature counters are nonzero.
+First stance test incorrectly expected normal previous-pose/revision metadata
+not to advance; the assertion was corrected without changing engine behavior.
+Low-concurrency retry resolved the initial compiler heap exhaustion. Two trials
+had an approximately11-hour progress gap and timeout; unchanged actual runtime
+retries passed (legacy ASan208.31s, Debug Host39.95s), retaining original failures.
+These elapsed gaps are not sustained campaign evidence. Windows skips one POSIX
+mode000 runner-report fixture; neither that fixture nor native VM execution is
+claimed as passed by these local results.

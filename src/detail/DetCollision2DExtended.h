@@ -6,7 +6,28 @@ bool solidPair(const Body& a,const Body& b) {
 }
 void validateSolids(const std::vector<Body>& bodies) {
     for(std::size_t i=0;i<bodies.size();++i)for(std::size_t j=i+1;j<bodies.size();++j)
-        if(solidPair(bodies[i],bodies[j]) && bodies[i].box.interiorOverlap(bodies[j].box))invalid();
+        if(solidPair(bodies[i],bodies[j]) && !bodies[i].data.oneWay && !bodies[j].data.oneWay
+            && bodies[i].box.interiorOverlap(bodies[j].box))invalid();
+}
+// Profile3 top-plane sweep. Work in the platform frame; the ordinary full-box
+// sweep cannot represent a transparent side/bottom or an intentional interior passage.
+std::optional<math::DetHit2D> solidHit(const Body& a,const Body& b,V relative) {
+    if(!a.data.oneWay && !b.data.oneWay)return math::detSweepAabb2D(a.box,relative,b.box);
+    const bool platformFirst=a.data.oneWay;
+    const auto& platform=platformFirst?a:b;
+    const auto& actor=platformFirst?b:a;
+    if(actor.data.mode!=DetBodyMode2D::Kinematic || actor.data.ignoredOneWay.value==platform.id)return {};
+    const auto motion=platformFirst?-relative:relative;
+    if(!(motion.y<D{}) || actor.box.min.y<platform.box.max.y)return {};
+    const auto gap=actor.box.min.y-platform.box.max.y;
+    if(!gap.isFinite())invalid();
+    if(gap>-motion.y)return {};
+    const auto fraction=gap/(-motion.y);
+    const auto dx=motion.x*fraction;
+    const auto minX=actor.box.min.x+dx,maxX=actor.box.max.x+dx;
+    if(!fraction.isFinite() || !dx.isFinite() || !minX.isFinite() || !maxX.isFinite())invalid();
+    if(!(minX<platform.box.max.x && platform.box.min.x<maxX))return {};
+    return math::DetHit2D{fraction,V{D{},D::fromInt(platformFirst?-1:1)},1,false};
 }
 void moveTogether(std::vector<Body>& bodies,D dt,std::uint32_t iterations,std::vector<TraceStep>& trace) {
     validateSolids(bodies);std::vector<V> remaining;
@@ -16,7 +37,7 @@ void moveTogether(std::vector<Body>& bodies,D dt,std::uint32_t iterations,std::v
         std::optional<math::DetHit2D> best;std::size_t first=0,second=0;
         for(std::size_t i=0;i<bodies.size();++i)for(std::size_t j=i+1;j<bodies.size();++j)if(solidPair(bodies[i],bodies[j])){
             const auto relative=remaining[i]-remaining[j];if(!relative.isFinite())invalid();
-            const auto hit=math::detSweepAabb2D(bodies[i].box,relative,bodies[j].box);
+            const auto hit=solidHit(bodies[i],bodies[j],relative);
             if(hit && hit->initialOverlap)invalid();
             if(hit && (!best || hit->fraction<best->fraction || (hit->fraction==best->fraction && hit->axis<best->axis))){best=hit;first=i;second=j;}
             // Equal time/axis keeps the first lexicographic stable-ID pair.
@@ -71,7 +92,16 @@ void validateExtendedState(const DetSessionCheckpoint& state,const DetCollision2
         DetCollisionBody2D data{static_cast<DetBodyMode2D>(std::get<std::uint32_t>(body.read(w,DetBodyMode))),
             std::get<V>(body.read(w,DetBodyHalf)),std::get<V>(body.read(w,DetBodyOffset)),std::get<V>(body.read(w,DetBodyVelocity)),
             std::get<std::uint32_t>(body.read(w,DetBodyLayer)),std::get<std::uint32_t>(body.read(w,DetBodyMask)),std::get<bool>(body.read(w,DetBodyTrigger))};
-        validateBody(data,true);if(data.mode==DetBodyMode2D::Disabled)continue;
+        if(c.oneWayPlatforms){
+            data.oneWay=std::get<bool>(body.read(w,DetBodyOneWay));
+            data.ignoredOneWay=std::get<DetEntityRef>(body.read(w,DetBodyIgnoredOneWay));
+            if(data.ignoredOneWay.value){
+                if(data.ignoredOneWay.value==id || !known(data.ignoredOneWay.value))invalid();
+                const auto target=state.actors.find(data.ignoredOneWay.value);
+                if(target!=state.actors.end() && !std::get<bool>(body.read(target->second.blocks.at(c.bodySchema),DetBodyOneWay)))invalid();
+            }
+        }
+        validateBody(data,true,c.oneWayPlatforms);if(data.mode==DetBodyMode2D::Disabled)continue;
         Body b{id,data,V::fromBits({a.pose.position[0],a.pose.position[1]}),D::fromBits(a.pose.position[2]),{}};b.box=bounds(b);active.push_back(b);
     }
     if(active.size()>c.maxBodies)invalid();validateSolids(active);

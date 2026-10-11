@@ -593,3 +593,48 @@ Host passed Release/Debug. Its fixed2048-tick evidence contains2049 checkpoints,
 193 confirmed events,32 corrections,109 replayed ticks and8 archive files. Native
 CI acceptance is recorded separately in Stage21. Test budgets preserve the same
 workload: ordinary Release240s, Debug600s, AddressSanitizer900s.
+
+## Stage22: opt-in practical character motion
+
+Set both `config.advanced=true` and `config.collision.oneWayPlatforms=true`
+before installation, actor defaults and scene queries. The explicit controller
+profile2 and collision profile3 use new typed state/policy/body/history identities.
+Default controller profile1 and collision profiles1/2 retain their earlier schemas,
+policy defaults and runtime behavior; incompatible manifests are rejected rather
+than migrated.
+
+Advanced policy adds bounded tick-based `coyoteTicks`, `jumpBufferTicks` and
+`dropThroughTicks`, plus opt-in `crouchEnabled` and software `crouchHeightScale`.
+Advanced jump/drop samples are held button values with registered rising-edge
+latches; submit false to release them. Legacy jump remains a consumed request.
+A one-way solid Static/MovingObstacle body sets `body.oneWay=true`; it blocks
+relative downward top-plane crossings with positive horizontal impact overlap.
+Its side/bottom and intentional interior passages are traversable. Directional
+response does not change the geometric meaning of scene queries.
+
+Crouch changes the registered half height and offset only when the represented
+shape has positive area and exactly preserves the current foot minY bits. An
+unrepresentable candidate keeps the complete old stance/shape; pose is not adjusted
+and no ULP search repairs it. Standing expansion checks reciprocal-mask solid boxes,
+including ignored one-way geometry, and remains crouched if blocked. Collision remains the only XY pose writer. The standing shape, stance,
+held samples/latches, jump windows, ignored support and release deadline all enter
+the checkpoint. Drop releases only after its timer and actual geometric separation,
+with a fresh stamped retired-support transition for deferred despawn.
+
+Build `AYEntity_DetCharacterExample` in the engine superproject with
+`AY_ENTITY_BUILD_DET_CHARACTER_EXAMPLE=ON` (also available under `BUILD_TESTING`).
+See [the runnable example](examples/detcharacter/README.md) and
+[Stage22](../../AYDocs/DETERMINISTIC-CHARACTER-CONTROLLER-STAGE22.md).
+The example uses standard Host/module assembly, canonical tick input and read-only
+presentation, with actual record/replay/seek output. Module gates are
+`AYEntity_CharacterAdvancedChecks` and `AYEntity_CharacterAdvancedHostExample`.
+Windows MSVC Release passed all17 portable gates; the advanced/legacy focused
+Debug and AddressSanitizer checks and standard Host Release/Debug gates passed.
+Advanced complete checkpoint/event/manifest bytes match across five builds.
+The256-tick advanced scenario produced257 checkpoint rows,30 confirmed events,
+10 corrections,43 replayed ticks and8 archive files; final hash14226949613902538608.
+The legacy2048-tick hash remains9155686912840316892. Actual logs, preserved first
+failures and reproduction scope are recorded separately in Stage22.
+Native GCC/Clang x64/ARM64 acceptance is deferred to the separately provisioned
+final virtual-machine environments by user instruction; no GitHub CI is requested
+for this stage. Stage21 records remain historical evidence of their own revision.

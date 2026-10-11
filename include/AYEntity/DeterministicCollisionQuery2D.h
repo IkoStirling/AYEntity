@@ -39,6 +39,9 @@ struct DetCollisionQueryHit2D {
  * a previous snapshot keeps its original values. Z, rotation and scale do not affect
  * shapes; offsets are in world XY. Sweep uses frozen target boxes, including moving
  * obstacles, and does not predict their subsequent movement or solve response.
+ * Matching collision profiles1/2/3 are supported. Profile3 one-way and ignored
+ * platform flags do not remove geometric proxies or apply top-only response:
+ * queries report full represented boxes from every direction.
  *
  * overlap returns all matching stable IDs in ascending order. Ray/sweep hits are
  * ordered by (software fraction, axis, stable ID); X wins exact entry-time ties.

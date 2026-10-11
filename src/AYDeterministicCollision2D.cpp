@@ -14,19 +14,25 @@ bool validConfig(const DetCollision2DConfig& c) {
     return c.bodySchema>=2 && c.bodySchema!=UINT32_MAX && c.historySchema>=2 && c.historySchema!=UINT32_MAX
         && c.bodySchema!=c.historySchema && c.systemId && c.eventType && c.maxBodies>=1 && c.maxBodies<=64
         && c.maxTriggerPairs>=1 && c.maxTriggerPairs<=(c.extended?60u:61u)
-        && c.maxContactIterations>=1 && c.maxContactIterations<=256;
+        && c.maxContactIterations>=1 && c.maxContactIterations<=256
+        && (!c.oneWayPlatforms || c.extended);
 }
-std::uint32_t profile(const DetCollision2DConfig& c){return c.extended?kDetCollision2DExtendedProfileVersion:kDetCollision2DProfileVersion;}
-void validateBody(const DetCollisionBody2D& b,bool extended=false) {
+std::uint32_t profile(const DetCollision2DConfig& c){return c.oneWayPlatforms?kDetCollision2DOneWayProfileVersion:(c.extended?kDetCollision2DExtendedProfileVersion:kDetCollision2DProfileVersion);}
+void validateBody(const DetCollisionBody2D& b,bool extended=false,bool oneWayPlatforms=false) {
     if(static_cast<std::uint32_t>(b.mode)>(extended?3u:2u) || !b.half.isFinite() || !b.offset.isFinite() || !b.velocity.isFinite()
         || b.half.x<D{} || b.half.y<D{}) invalid();
     if(b.mode!=DetBodyMode2D::Disabled && (!(b.half.x>D{}) || !(b.half.y>D{}) || !b.layer)) invalid();
     if(b.mode==DetBodyMode2D::Static && (!b.velocity.x.isZero() || !b.velocity.y.isZero())) invalid();
+    if(!oneWayPlatforms && (b.oneWay || b.ignoredOneWay.value))invalid();
+    if(b.oneWay && (b.trigger || (b.mode!=DetBodyMode2D::Static && b.mode!=DetBodyMode2D::MovingObstacle)))invalid();
+    if(b.ignoredOneWay.value && (b.trigger || b.mode!=DetBodyMode2D::Kinematic))invalid();
 }
 DetTypedStateSchema bodySchema(const DetCollision2DConfig& c) {
-    return {c.bodySchema,profile(c),{{DetBodyMode,std::uint32_t{0}}, {DetBodyHalf,V{}},
+    DetTypedStateSchema result{c.bodySchema,profile(c),{{DetBodyMode,std::uint32_t{0}}, {DetBodyHalf,V{}},
         {DetBodyOffset,V{}},{DetBodyVelocity,V{}},{DetBodyLayer,std::uint32_t{1}},
         {DetBodyMask,UINT32_MAX},{DetBodyTrigger,false}}};
+    if(c.oneWayPlatforms){result.fields.push_back({DetBodyOneWay,false});result.fields.push_back({DetBodyIgnoredOneWay,DetEntityRef{}});}
+    return result;
 }
 DetTypedStateSchema historySchema(const DetCollision2DConfig& c) {
     DetTypedStateSchema s{c.historySchema,profile(c),{{1,profile(c)},
@@ -102,7 +108,8 @@ std::vector<Body> readBodies(DetTickContext& c,const DetCollision2DConfig& polic
         DetCollisionBody2D data{static_cast<DetBodyMode2D>(c.read<std::uint32_t>(id,s,DetBodyMode)),
             c.read<V>(id,s,DetBodyHalf),c.read<V>(id,s,DetBodyOffset),c.read<V>(id,s,DetBodyVelocity),
             c.read<std::uint32_t>(id,s,DetBodyLayer),c.read<std::uint32_t>(id,s,DetBodyMask),c.read<bool>(id,s,DetBodyTrigger)};
-        validateBody(data,policy.extended);if(data.mode==DetBodyMode2D::Disabled)continue;
+        if(policy.oneWayPlatforms){data.oneWay=c.read<bool>(id,s,DetBodyOneWay);data.ignoredOneWay=c.read<DetEntityRef>(id,s,DetBodyIgnoredOneWay);}
+        validateBody(data,policy.extended,policy.oneWayPlatforms);if(data.mode==DetBodyMode2D::Disabled)continue;
         const auto p=c.pose(id).position;Body b{id,data,{p.x,p.y},p.z,{}};b.box=bounds(b);bodies.push_back(b);
     }
     if(bodies.size()>policy.maxBodies)invalid();
@@ -161,15 +168,17 @@ std::vector<DetCollisionPair2D> detCollisionPairs2D(std::span<const DetCollision
     std::sort(result.begin(),result.end());return result;
 }
 std::vector<std::uint64_t> detCollisionBodyState2D(const DetCollision2DConfig& c,const DetCollisionBody2D& b) {
-    if(!validConfig(c))invalid();validateBody(b,c.extended);const auto s=bodySchema(c);auto words=detStateDefaults(s);
+    if(!validConfig(c))invalid();validateBody(b,c.extended,c.oneWayPlatforms);const auto s=bodySchema(c);auto words=detStateDefaults(s);
     writeDetState(s,words,DetBodyMode,static_cast<std::uint32_t>(b.mode));writeDetState(s,words,DetBodyHalf,b.half);
     writeDetState(s,words,DetBodyOffset,b.offset);writeDetState(s,words,DetBodyVelocity,b.velocity);
-    writeDetState(s,words,DetBodyLayer,b.layer);writeDetState(s,words,DetBodyMask,b.mask);writeDetState(s,words,DetBodyTrigger,b.trigger);return words;
+    writeDetState(s,words,DetBodyLayer,b.layer);writeDetState(s,words,DetBodyMask,b.mask);writeDetState(s,words,DetBodyTrigger,b.trigger);
+    if(c.oneWayPlatforms){writeDetState(s,words,DetBodyOneWay,b.oneWay);writeDetState(s,words,DetBodyIgnoredOneWay,b.ignoredOneWay);}
+    return words;
 }
 bool installDetCollision2D(DeterministicSession& s,DetCollision2DConfig c) {
     if(!validConfig(c))return false;
     if(!(s.registerTypedSchema(bodySchema(c)) && s.registerTypedSchema(historySchema(c)) && s.registerGlobalState(c.historySchema)))return false;
-    if(c.extended && !s.registerValidator(c.systemId,kDetCollision2DExtendedProfileVersion,
+    if(c.extended && !s.registerValidator(c.systemId,profile(c),
         [c,body=DetStateLayout(bodySchema(c)),history=DetStateLayout(historySchema(c))](const auto& state,std::string& e){
             try {validateExtendedState(state,c,body,history);return true;}catch(const std::exception& error){e=error.what();return false;}}))return false;
     return s.registerSystem(c.systemId,c.priority,[c](DetTickContext& context){tick(context,c);return true;});
@@ -219,7 +228,8 @@ DetCollisionQuery2D::DetCollisionQuery2D(const DetSessionCheckpoint& state,DetCo
             read.operator()<bool>(DetBodyTrigger)};
         DetSimTransformComponent restored;
         if(!restored.restore(actor.pose))invalid();
-        validateBody(data,config.extended);if(data.mode==DetBodyMode2D::Disabled)continue;
+        if(config.oneWayPlatforms){data.oneWay=read.operator()<bool>(DetBodyOneWay);data.ignoredOneWay=read.operator()<DetEntityRef>(DetBodyIgnoredOneWay);}
+        validateBody(data,config.extended,config.oneWayPlatforms);if(data.mode==DetBodyMode2D::Disabled)continue;
         const V position{D::fromBits(actor.pose.position[0]),D::fromBits(actor.pose.position[1])};
         const Body b{id,data,position,D::fromBits(actor.pose.position[2]),{}};
         _proxies.push_back({id,bounds(b),data.layer,data.mask,data.trigger});

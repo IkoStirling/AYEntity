@@ -5,15 +5,22 @@
 namespace ayt::entity {
 inline constexpr std::uint32_t kDetCollision2DProfileVersion=1;
 inline constexpr std::uint32_t kDetCollision2DExtendedProfileVersion=2;
+inline constexpr std::uint32_t kDetCollision2DOneWayProfileVersion=3;
 enum class DetBodyMode2D : std::uint32_t {Disabled=0,Static=1,Kinematic=2,MovingObstacle=3};
 /// Stable field IDs in the adapter's typed body schema; callers write velocity in earlier systems.
 enum DetBodyField2D : std::uint32_t {DetBodyMode=10,DetBodyHalf=20,DetBodyOffset=30,
-    DetBodyVelocity=40,DetBodyLayer=50,DetBodyMask=60,DetBodyTrigger=70};
+    DetBodyVelocity=40,DetBodyLayer=50,DetBodyMask=60,DetBodyTrigger=70,
+    DetBodyOneWay=80,DetBodyIgnoredOneWay=90};
 struct DetCollisionBody2D {
     DetBodyMode2D mode=DetBodyMode2D::Disabled;
     math::DetVec2 half{},offset{},velocity{};
     std::uint32_t layer=1,mask=UINT32_MAX;
     bool trigger=false;
+    /// Profile3: solid Static/MovingObstacle top face; other faces are traversable.
+    bool oneWay=false;
+    /// Profile3: one stable one-way ID ignored by this solid Kinematic body.
+    /// A retired identity is harmless; unknown/self/non-platform references are rejected.
+    DetEntityRef ignoredOneWay{};
 };
 /** @brief Immutable registered collision policy, captured by value by the installed system.
  * @note Actor/history schema IDs share the session namespace. At most 64 active
@@ -31,6 +38,12 @@ struct DetCollision2DConfig {
     /// Profile 1 remains byte-compatible. Profile 2 allows at most 60 history pairs.
     bool extended=false;
     std::uint32_t maxContactIterations=128;
+    /// Explicit profile3 opt-in, requires extended=true. Adds two registered body
+    /// fields and new body/history versions; default profiles1/2 keep their bytes.
+    /// Only relative downward top-plane crossings with strict X overlap block.
+    /// From-below, side and already-inside motion is allowed; no penetration repair.
+    /// Queries remain geometric AABB queries, independent of directional response.
+    bool oneWayPlatforms=false;
 };
 struct DetCollisionProxy2D {
     SimEntityId id=0;
@@ -48,6 +61,7 @@ std::vector<DetCollisionPair2D> detCollisionPairs2D(std::span<const DetCollision
 /// Produce validated typed actor defaults/overrides; offset uses world XY only.
 /// Active shapes require positive represented area; static velocity must be zero.
 /// MovingObstacle needs extended=true and follows prescribed velocity without mass.
+/// oneWay/ignoredOneWay require oneWayPlatforms=true; only supported body modes may set them.
 std::vector<std::uint64_t> detCollisionBodyState2D(const DetCollision2DConfig& config,const DetCollisionBody2D& body);
 /** @brief Install one stateless collision tick callback and its typed schemas/globals.
  * @note Configure before actors/seal; check false and abandon failed configuration.
@@ -55,7 +69,12 @@ std::vector<std::uint64_t> detCollisionBodyState2D(const DetCollision2DConfig& c
  * Opt-in profile 2: relative motion, equal kinematic normal sharing, prescribed
  * obstacle normal velocity, boundary semantic validation and transient Enter+Exit.
  * Events are pair/phase ordered and delivered next tick; disabled/despawned pairs Exit.
- * Initial penetration, unrepresentable motion, crushing/contact-pass exhaustion fault.
+ * Opt-in profile3 adds one-way Static/MovingObstacle top planes and a registered
+ * per-kinematic ignored platform. It permits passage through platform interiors;
+ * ordinary solid penetration still faults. Relative downward crossings require
+ * a start bottom at/above the top and strict X overlap at impact. Side/bottom
+ * faces never block. No implicit epsilon or native-float arithmetic is used.
+ * Initial ordinary penetration, unrepresentable motion, crushing/contact-pass exhaustion fault.
  * Time/axis/stable pair order is fixed; no tangent friction/carry. Scratch/capacity
  * checks precede collision pose/history writes. Session emit budget and prior writes
  * still require explicit restore on fault; no automatic rollback.

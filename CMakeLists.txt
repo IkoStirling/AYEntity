@@ -6,6 +6,7 @@ project(AYEntity
 )
 
 option(AY_ENTITY_PRECOMPILE_COMPONENTS "Precompile common components" ON)
+option(AY_ENTITY_BUILD_DET_CHARACTER_EXAMPLE "Build the standard Host deterministic character example" OFF)
 
 # These defaults also allow AYEntity to be configured as a standalone
 # subproject. The engine root exposes the same cache options to product builds.
@@ -122,6 +123,7 @@ if(TARGET AYReplay)
         include(unittest/ReplayRegression.cmake)
         include(unittest/SimulationCampaign.cmake)
         include(unittest/CharacterController.cmake)
+        include(unittest/CharacterAdvanced.cmake)
     endif()
 endif()
 
@@ -138,7 +140,21 @@ function(ay_entity_add_determinism_host_integration)
     target_compile_options(AYEntityDeterminismHost PRIVATE
         $<$<CXX_COMPILER_ID:MSVC>:/W4>
         $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
+    if(BUILD_TESTING OR AY_ENTITY_BUILD_DET_CHARACTER_EXAMPLE)
+        add_executable(AYEntity_DetCharacterExample "${_root}/examples/detcharacter/main.cpp")
+        target_link_libraries(AYEntity_DetCharacterExample PRIVATE AYEntityDeterminismHost)
+        target_compile_features(AYEntity_DetCharacterExample PRIVATE cxx_std_23)
+        if(MSVC)
+            target_compile_options(AYEntity_DetCharacterExample PRIVATE /utf-8)
+        endif()
+    endif()
       if(BUILD_TESTING)
+        add_test(NAME AYEntity_CharacterAdvancedHostExample
+            COMMAND ${CMAKE_COMMAND} -DEXAMPLE=$<TARGET_FILE:AYEntity_DetCharacterExample>
+                -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/character-advanced-host-example
+                -P "${_root}/unittest/RunDetCharacterExample.cmake")
+        set_tests_properties(AYEntity_CharacterAdvancedHostExample PROPERTIES
+            LABELS "ayentity;determinism;character;advanced;2d;host;replay;example" TIMEOUT 600 RUN_SERIAL TRUE)
         add_executable(AYEntity_DeterministicRollbackReplayWorker "${_root}/unittest/DeterministicRollbackReplayWorker.cpp")
         target_link_libraries(AYEntity_DeterministicRollbackReplayWorker PRIVATE AYEntityDeterminism)
         add_executable(AYEntity_DeterministicHostSessionTests
