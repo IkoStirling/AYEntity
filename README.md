@@ -843,3 +843,27 @@ Examples and actual necessary acceptance are tracked in
 Necessary Windows Release acceptance passed:8 directed/affected regression targets
 and one standard Host Live128 target. SDK doctor passed with no errors/warnings.
 Native platform acceptance remains deferred to the user's final VM environment.
+
+## Registered level actions and trigger rules (Stage33–35)
+
+Include `DeterministicActions2D.h`; install its fixed target table before actors.
+Execute collision participation and platform controls before path/character pre.
+Mask zero preserves body mode and path bindings. Occupied solid enabling and
+restart away from origin return registered denial results without target writes.
+Callers explicitly retry; no hidden action queue or automatic retry is present.
+The immutable table/full path policy and mutable global results bind the Session.
+
+After Actions installation, `installDetInteraction2D` registers up to16 Enter/Exit
+rules with once, cooldown and delay. Each has at most one pending action.
+Complete authored rules enter manifest defaults; counts, timestamps, pending
+jobs and results enter typed globals and pure restore validation. Due jobs run
+by rule ID, followed by canonical events and matching rule ID. Once is consumed
+when scheduled, including later denials. Timing uses logical ticks only.
+
+`AYEntity_DetInteractionExample` uses actual console input outside Sim, standard
+Host Scene lifecycle, a `.dlt` door/platform/collectible scene, Live save/load and
+existing Record/Replay/Seek. Build with testing or
+`AY_ENTITY_BUILD_DET_INTERACTION_EXAMPLE=ON`. Command usage and the short Host
+gate are in [the example](examples/detinteraction/README.md); necessary local
+acceptance and final native deferral are recorded in
+[Stage33–35](../../AYDocs/DETERMINISTIC-INTERACTION-STAGE33-35.md).

@@ -2264,3 +2264,37 @@ File whitespace has no authority, while any policy/bit/role/path change does.
 Resource loading remains outside ticks; no automatic editor/cook/Scene/Tilemap
 integration is implied. See the root
 [Stage30–32](../../AYDocs/DETERMINISTIC-TERRAIN-STAGE30-32.md) for actual evidence.
+
+### Stage33–35: registered actions and finite trigger interactions
+
+Actions profile1 installs immutable full-config bytes in1000-byte typed-policy
+chunks and one mutable global result/budget schema. Actor copies are canonical
+defaults; pure validators check copies, counters, last-result stamps, controlled
+mask and configured path bindings. It installs no system: direct callers precede
+all path/character pre callbacks at matching collision.priority. Its mask gate
+uses current captured real geometry before a solid enable, with reciprocal
+mask filtering and strict interior overlap; one-way neighbours are conservative
+full solids. A denied operation records a result while retaining the target.
+Ordinary AABB Static/MO and AABB triggers can be controlled. Restart prechecks
+the actual origin then uses the existing path setter. Pose remains collision-owned.
+
+Interaction profile1 separately binds an already-installed Actions facade, both
+by complete encoded policy and by pure matching-state validation. Up to16 sorted
+rules use eight fixed typed global fields each: fired/pending, schedule/attempt
+counts, last schedule/due/last execution ticks and result. Derived cooldown has
+no external mutable clock. Existing due jobs execute by rule ID first; matching
+producer/type Enter/Exit events then use canonical order followed by rule ID.
+Delay0 executes immediately; delayN is processingTick+N. Pending suppresses new
+events. Once is consumed on schedule; normal action denial consumes the attempt,
+without retry. Counters/timing arithmetic is checked before replacing rule state.
+Policy chunks, actor immutable/default copies and semantic relationships are
+validated at seal, prospective tick, checkpoint and restore.
+
+The new standard Host example acquires actual stdin outside authority, encodes
+movement/mechanism requests, and performs recovery only at Host boundaries.
+Observers read committed masks/path controls to count actual features. A bounded
+gate compares final complete checkpoint bytes for Live recovery, recording,
+playback, seek and real interactive input, plus per-tick replay/seek traces.
+No existing numeric/geometry/collision/controller/path/level/wire profile changes;
+no new persistent resource format. Full contract and actual acceptance are in
+[Stage33–35](../../AYDocs/DETERMINISTIC-INTERACTION-STAGE33-35.md).

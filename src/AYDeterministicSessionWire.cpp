@@ -50,7 +50,8 @@ ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
     n=r.count(maxSchemas);std::set<std::uint32_t> systems;std::optional<std::pair<std::int32_t,std::uint32_t>> lastSystem;
     for(unsigned i=0;i<n;++i){const auto id=r.u32();const auto priority=std::bit_cast<std::int32_t>(r.u32());
         const auto key=std::pair{priority,id};
-        if(!id || !systems.insert(id).second || (lastSystem && key<=*lastSystem))throw std::runtime_error("Invalid manifest system order");lastSystem=key;}
+        if(!id || !systems.insert(id).second || (lastSystem && key<=*lastSystem))throw std::runtime_error("Invalid manifest system order");lastSystem=key;
+        layout.systems.emplace(id,priority);}
     n=r.count(maxSchemas);previous=0;
     for(unsigned i=0;i<n;++i){const auto id=r.u32();r.u64();if(id<=previous)throw std::runtime_error("Invalid manifest RNG ID");previous=id;}
     n=r.count(maxSchemas);previous=0;
@@ -58,11 +59,13 @@ ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
     if(r.version>=3){n=r.count(maxSchemas);previous=0;
         if(!n && r.version==3)throw std::runtime_error("Empty manifest validator table");
         for(unsigned i=0;i<n;++i){const auto id=r.u32(),version=r.u32();
-            if(id<=previous || !version)throw std::runtime_error("Invalid manifest validator ID/version");previous=id;}}
+            if(id<=previous || !version)throw std::runtime_error("Invalid manifest validator ID/version");previous=id;
+            layout.validatorVersions.emplace(id,version);}}
     if(r.version>=4){n=r.count(maxSchemas);previous=0;
         if(!n)throw std::runtime_error("Empty manifest logic table");
-        for(unsigned i=0;i<n;++i){const auto id=r.u32(),version=r.u32();r.u64();
-            if(id<=previous || !version)throw std::runtime_error("Invalid manifest logic ID/version");previous=id;}}
+        for(unsigned i=0;i<n;++i){const auto id=r.u32(),version=r.u32();const auto hash=r.u64();
+            if(id<=previous || !version)throw std::runtime_error("Invalid manifest logic ID/version");previous=id;
+            layout.logicProfiles.emplace(id,std::pair{version,hash});}}
     r.end();return layout;
 }
 bool validLayoutBlocks(const DetStateBlocks& blocks,const ManifestLayout& layout,bool all) {

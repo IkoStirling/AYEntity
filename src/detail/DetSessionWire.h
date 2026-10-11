@@ -2,6 +2,7 @@
 #include <AYEntity/DeterministicSession.h>
 #include <AYReplay/ReplayHash.h>
 #include <limits>
+#include <map>
 #include <stdexcept>
 #include <tuple>
 #include <set>
@@ -70,6 +71,11 @@ struct ManifestLayout {
     std::map<std::uint32_t,std::vector<LayoutField>> schemas;
     std::map<std::uint32_t,std::uint32_t> schemaVersions;
     std::set<std::uint32_t> globals;
+    // Retained validated configuration for internal facade compatibility checks.
+    // These maps are parser metadata; they introduce no serialized fields.
+    std::map<std::uint32_t,std::int32_t> systems;
+    std::map<std::uint32_t,std::uint32_t> validatorVersions;
+    std::map<std::uint32_t,std::pair<std::uint32_t,std::uint64_t>> logicProfiles;
 };
 ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes);
 bool validLayoutBlocks(const DetStateBlocks& blocks,const ManifestLayout& layout,bool all);

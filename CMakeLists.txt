@@ -8,6 +8,7 @@ project(AYEntity
 option(AY_ENTITY_PRECOMPILE_COMPONENTS "Precompile common components" ON)
 option(AY_ENTITY_BUILD_DET_CHARACTER_EXAMPLE "Build the standard Host deterministic character example" OFF)
 option(AY_ENTITY_BUILD_DET_TERRAIN_EXAMPLE "Build the standard Host deterministic level example" OFF)
+option(AY_ENTITY_BUILD_DET_INTERACTION_EXAMPLE "Build the interactive deterministic level example" OFF)
 
 # These defaults also allow AYEntity to be configured as a standalone
 # subproject. The engine root exposes the same cache options to product builds.
@@ -100,6 +101,7 @@ if(TARGET AYReplay)
         src/AYDeterministicCharacterController2D.cpp
         src/AYDeterministicPathMotion2D.cpp
         src/AYDeterministicLevel2D.cpp
+        src/AYDeterministicActions2D.cpp src/AYDeterministicInteraction2D.cpp
         src/AYDeterministicLockstepProtocol.cpp src/AYDeterministicLockstep.cpp
         src/AYDeterministicRollback.cpp src/AYDeterministicRollbackNetwork.cpp src/AYDeterministicTransport.cpp)
     add_library(AYEntity::DeterminismKernel ALIAS AYEntityDeterminismKernel)
@@ -134,6 +136,9 @@ if(TARGET AYReplay)
         include(unittest/CharacterSlopes.cmake)
         include(unittest/MovingSlopes.cmake)
         include(unittest/Level2D.cmake)
+        include(unittest/Actions2D.cmake)
+        include(unittest/Interaction2D.cmake)
+        include(unittest/InteractionHost.cmake)
         include(unittest/TerrainHost.cmake)
         include(unittest/MotionHost.cmake)
     endif()
@@ -168,7 +173,16 @@ function(ay_entity_add_determinism_host_integration)
             target_compile_options(AYEntity_DetTerrainExample PRIVATE /utf-8)
         endif()
     endif()
+    if(BUILD_TESTING OR AY_ENTITY_BUILD_DET_INTERACTION_EXAMPLE)
+        add_executable(AYEntity_DetInteractionExample "${_root}/examples/detinteraction/host.cpp")
+        target_link_libraries(AYEntity_DetInteractionExample PRIVATE AYEntityDeterminismHost)
+        target_compile_features(AYEntity_DetInteractionExample PRIVATE cxx_std_23)
+        if(MSVC)
+            target_compile_options(AYEntity_DetInteractionExample PRIVATE /utf-8)
+        endif()
+    endif()
       if(BUILD_TESTING)
+        ay_entity_add_interaction_host_check()
         ay_entity_add_terrain_host_check()
         ay_entity_add_character_steps_host_check()
         ay_entity_add_motion_host_check()
