@@ -1421,3 +1421,28 @@ Snapshots match before/after each batch; fixture source changed across batches,
 so cross-batch full snapshot equality is not claimed.
 No numeric/collision/Attack/save/replay wire, navigation or launched-attack
 occlusion is introduced; prior accepted samples remain their historical scope.
+
+## Stage60: offline initial-content preview (local checks passed; native Deferred)
+
+The existing [level tool](tools/detlevel/README.md) provides the
+`aydetlevel preview level.dlt fresh.svg` command for checking authored placement.
+It shows real software AABB endpoints/filled triangles and initial body roles,
+plus per-actor relative waypoint routes. The output is a bounded static SVG,
+not a running World, checkpoint or future motion prediction.
+
+Use a fresh output path. The real full Level preflight and complete finite SVG
+construction precede file creation; browser pixels are not authority. See the
+[tool design](tools/detlevel/design.md) for limits, geometry order and file-failure
+scope.
+
+Actual local MSVC Release `AYEntity_LevelToolChecks` passed2.26624s; the
+standard production Tool build passed5.438s. The single finite gate performed
+seven preview invocations: four successful outputs and three explicit refusals.
+Selected hand vertices/world and viewBox bits, path origin independent of body
+offset, mask0, repeated terrain whole-SVG byte equality and XML parsing of all
+four outputs passed. The terrain output has5518 bytes,11 actors,1 path instance
+and2 waypoints, with contentHash `1216874329789544449`.
+No simulation tick/current CP, browser-rendering acceptance, future reachability,
+independent full-CP golden or native/transport authentication is established.
+Physical flush/close fault injection was not run; final native VM Deferred.
+The accepted source is stage60-tool2; earlier old Stage59 CLI execution is excluded.

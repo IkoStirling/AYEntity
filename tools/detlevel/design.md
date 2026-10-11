@@ -135,3 +135,36 @@ Snapshots remain unchanged within each batch; fixture keyword changed across
 batches. First target-name failure had no product tests, first Host/CLI grammar
 rejection remains, and genuine Resource pass from overall-Failed host1 was
 retained without rerun. Production/hand checks unchanged; native final VM Deferred.
+
+## §8 Stage60 private static SVG construction (local checks passed; native Deferred)
+
+A private builder consumes a completely checked Level and no Session callback.
+It materializes world endpoints with public software AABB/filled-wedge types;
+four absolute AABB vertices avoid recomputing max from a rounded visual width.
+Each path is instanced at actor.position+point.offset, independent of body.offset.
+The renderer's Yflip does not mutate content; exact decimal formatting never
+passes through native float. The enclosing viewBox is a display-only bound.
+
+The builder limits64 actors,64 path instances,24 points each/1536 total and1MiB
+complete SVG. Finite endpoints and aggregate spans are checked before SVG/I/O;
+zero-span layout has a1-unit fallback, never invented collision area. Fixed SVG
+templates and escaped labels use no script/href/external style. Full SVG and
+receipt exist before the established fresh-only writer is called. Existing
+output refusal and possible physical-failure partial fresh files are unchanged.
+
+No core facade, current checkpoint reader, second parser or tick owner is added.
+Actual local MSVC Release `AYEntity_LevelToolChecks` passed2.26624s; the
+standard production Tool build passed5.438s. The single finite gate performed
+seven preview invocations: four successful outputs and three explicit refusals.
+Selected hand vertices/world and viewBox bits, path origin independent of body
+offset, mask0, repeated terrain whole-SVG byte equality and XML parsing of all
+four outputs passed. The terrain output has5518 bytes,11 actors,1 path instance
+and2 waypoints, with contentHash `1216874329789544449`.
+Evidence is `stage60-actual-freeze.json` / `stage60-tool2`. The earlier
+`stage60-tool1` ran the old Stage59 CLI after a closure-plan EOF/guarded-install
+refusal and is explicitly excluded from preview acceptance. Only the closure
+plan was repaired before the genuine installed-preview gate; no product behavior
+or hand oracle changed. Raw excluded and accepted records are preserved.
+No simulation tick/current CP, browser-rendering acceptance, future reachability,
+independent full-CP golden or native/transport authentication is established.
+Physical flush/close fault injection was not run; final native VM Deferred.

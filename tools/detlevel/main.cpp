@@ -1,6 +1,17 @@
 // Content authoring boundary: no file access or native float conversion in Sim.
 #include <AYEntity/DeterministicLevel2D.h>
 #include <AYMath/DetFloatText.h>
+#include <AYMath/DetGeometry2D.h>
+#include <AYMath/DetSlopeGeometry2D.h>
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -73,6 +84,123 @@ ayt::math::DetFloat32 finiteBits(std::string_view token) {
     auto value=ayt::math::DetFloat32::fromBits(raw);
     require(value.isFinite(),"float-bits requires a finite Float32 value");return value;
 }
+// Stage60 private offline SVG helper. Insert after Stage57 finiteBits(), before
+// inspect(); never export this as a gameplay/core facade. No simulation advance.
+struct PreviewSvg2D {
+    std::string svg;
+    ayt::math::DetVec2 worldMin{},worldMax{};
+    std::array<ayt::math::DetFloat32,4> viewBox{};
+    std::size_t actorCount=0,pathInstances=0,waypointCount=0;
+};
+std::string xml(std::string_view text) {
+    std::string result;
+    for(char c:text) {
+        if(c=='&')result+="&amp;";else if(c=='<')result+="&lt;";
+        else if(c=='>')result+="&gt;";else if(c=='\"')result+="&quot;";
+        else if(c=='\'')result+="&apos;";
+        else {require(static_cast<unsigned char>(c)>=32 || c=='\n' || c=='\t',"Invalid preview XML text");result+=c;}
+    }
+    return result;
+}
+PreviewSvg2D buildPreviewSvg2D(const DetLevel2D& level) {
+    using D=ayt::math::DetFloat32;using V=ayt::math::DetVec2;using Box=ayt::math::DetAabb2;
+    constexpr std::size_t maxBytes=1024*1024,maxPathPoints=64*24;
+    require(level.actors.size()<=64,"Preview actor budget exceeded");
+    PreviewSvg2D result;result.actorCount=level.actors.size();
+    struct Body {const DetLevelActor2D* source;std::optional<Box> box;};
+    struct Path {const DetLevelActor2D* source;const DetLevelPath2D* policy;std::vector<V> points;};
+    std::vector<Body> bodies;std::vector<Path> paths;bool haveBounds=false;
+    const auto finite=[](D value) {require(value.isFinite(),"Nonfinite or overflowing preview geometry/span");return value;};
+    const auto extend=[&](V point) {
+        require(point.isFinite(),"Nonfinite or overflowing preview point");
+        if(!haveBounds){result.worldMin=result.worldMax=point;haveBounds=true;}
+        else {result.worldMin.x=std::min(result.worldMin.x,point.x);result.worldMin.y=std::min(result.worldMin.y,point.y);
+            result.worldMax.x=std::max(result.worldMax.x,point.x);result.worldMax.y=std::max(result.worldMax.y,point.y);}
+    };
+    for(const auto& actor:level.actors) {
+        extend(actor.position);std::optional<Box> box;
+        if(actor.body.mode!=DetBodyMode2D::Disabled) {
+            // Exact runtime construction order; path origins below do not include offset.
+            box=Box::fromCenterHalf(actor.position+actor.body.offset,actor.body.half);
+            require(box->hasArea(),"Preview active body has no represented area");
+            (void)finite(box->max.x-box->min.x);(void)finite(box->max.y-box->min.y);
+            if(actor.body.shape!=DetCollisionShape2D::Aabb)
+                require(ayt::math::DetSlope2{*box,actor.body.shape==DetCollisionShape2D::SlopeRisesRight}.valid(),"Invalid preview filled wedge");
+            extend(box->min);extend(box->max);
+        }
+        bodies.push_back({&actor,box});
+        if(actor.path) {
+            const auto source=std::find_if(level.paths.begin(),level.paths.end(),[&](const auto& path){return path.id==actor.path;});
+            require(source!=level.paths.end() && source->waypoints.size()>=2 && source->waypoints.size()<=24,"Invalid preview path reference/budget");
+            require(result.waypointCount<=maxPathPoints-source->waypoints.size(),"Preview path point budget exceeded");
+            Path path{&actor,&*source,{}};
+            for(const auto& waypoint:source->waypoints) {const auto point=actor.position+waypoint.offset;extend(point);path.points.push_back(point);}
+            result.waypointCount+=path.points.size();paths.push_back(std::move(path));
+        }
+    }
+    result.pathInstances=paths.size();require(result.pathInstances<=64,"Preview path instance budget exceeded");
+    if(!haveBounds){result.worldMin={};result.worldMax={D::fromInt(1),D::fromInt(1)};}
+    auto width=finite(result.worldMax.x-result.worldMin.x),height=finite(result.worldMax.y-result.worldMin.y);
+    require(width>=D{} && height>=D{},"Invalid preview world bounds");
+    // A zero-width point-only/empty axis gets an explicit layout fallback, never
+    // invented collision area. Display bounds are separate from authored worldMin/Max.
+    auto viewX=result.worldMin.x,viewTop=-result.worldMax.y;
+    if(width.isZero()){width=D::fromInt(1);viewX=finite(viewX-D::fromInt(1)/D::fromInt(2));}
+    if(height.isZero()){height=D::fromInt(1);viewTop=finite(viewTop-D::fromInt(1)/D::fromInt(2));}
+    result.viewBox={finite(viewX),finite(viewTop),width,height};
+    auto font=finite(std::max(width,height)/D::fromInt(64));
+    if(font.isZero())font=std::max(width,height);
+    auto radius=finite(font/D::fromInt(4));if(radius.isZero())radius=font;
+    const auto number=[&](D value){return ayt::math::detFloat32ExactDecimal(finite(value));};
+    const auto point=[&](V value){return number(value.x)+","+number(value.y);};
+    const auto append=[&](std::string_view text) {
+        require(text.size()<=maxBytes-result.svg.size(),"Preview SVG exceeds 1 MiB budget");result.svg.append(text);
+    };
+    std::string view;
+    for(auto value:result.viewBox){if(!view.empty())view+=' ';view+=number(value);}
+    append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"1200\" height=\"800\" viewBox=\"0 0 1200 800\" data-preview-profile=\"1\">\n");
+    append("<title>Authored initial deterministic level content; no simulation executed</title>\n");
+    append("<rect x=\"0\" y=\"0\" width=\"1200\" height=\"800\" fill=\"white\"/>\n");
+    append("<text x=\"20\" y=\"28\" font-family=\"sans-serif\" font-size=\"18\">Initial authoring preview - browser pixels are not authoritative</text>\n");
+    append("<text x=\"20\" y=\"52\" font-family=\"sans-serif\" font-size=\"14\">Solid: gray / character: blue / trigger: orange dashed / one-way: purple / moving: teal / disabled-mask: pale</text>\n");
+    append("<svg id=\"world\" x=\"20\" y=\"72\" width=\"1160\" height=\"660\" overflow=\"visible\" viewBox=\""+view+"\">\n");
+    append("<g id=\"bodies\" transform=\"scale(1,-1)\" stroke-width=\"2\" vector-effect=\"non-scaling-stroke\">\n");
+    for(const auto& body:bodies) {
+        const auto& actor=*body.source;const auto id=std::to_string(actor.id);
+        if(!body.box) {append("<circle data-actor=\""+id+"\" data-kind=\"disabled-pose\" cx=\""+number(actor.position.x)+"\" cy=\""+number(actor.position.y)
+                +"\" r=\""+number(radius)+"\" fill=\"none\" stroke=\"#666\" vector-effect=\"non-scaling-stroke\"/>\n");continue;}
+        const auto& box=*body.box;std::string vertices=point(box.min)+" "+point({box.max.x,box.min.y});
+        if(actor.body.shape==DetCollisionShape2D::Aabb)vertices+=" "+point(box.max)+" "+point({box.min.x,box.max.y});
+        else vertices+=" "+point(actor.body.shape==DetCollisionShape2D::SlopeRisesRight?box.max:V{box.min.x,box.max.y});
+        const std::string role=actor.body.trigger?"trigger":actor.body.oneWay?"one-way":actor.character?"character":actor.body.mode==DetBodyMode2D::MovingObstacle?"moving":"solid";
+        const std::string color=actor.body.trigger?"#ffdcaa":actor.body.oneWay?"#d8c9ef":actor.character?"#b9d8f9":actor.body.mode==DetBodyMode2D::MovingObstacle?"#b9e1d8":"#dedede";
+        append("<polygon data-actor=\""+id+"\" data-kind=\""+(actor.body.shape==DetCollisionShape2D::Aabb?std::string{"aabb"}:std::string{"triangle"})
+            +"\" data-role=\""+role+"\" data-mode=\""+std::to_string(static_cast<std::uint32_t>(actor.body.mode))+"\" data-layer=\""+std::to_string(actor.body.layer)
+            +"\" data-mask=\""+std::to_string(actor.body.mask)+"\" points=\""+vertices+"\" fill=\""+color+"\" stroke=\"#333\" vector-effect=\"non-scaling-stroke\""
+            +(actor.body.mask?std::string{}:std::string{" opacity=\"0.35\""})+(actor.body.trigger?std::string{" stroke-dasharray=\"5 4\""}:std::string{})+">\n");
+        append("<title>"+xml("Actor "+id+" / "+role+" / authored initial shape")+"</title></polygon>\n");
+        if(actor.body.oneWay)append("<line data-one-way-top=\""+id+"\" x1=\""+number(box.min.x)+"\" y1=\""+number(box.max.y)+"\" x2=\""+number(box.max.x)
+            +"\" y2=\""+number(box.max.y)+"\" stroke=\"#735391\" stroke-width=\"4\" vector-effect=\"non-scaling-stroke\"/>\n");
+    }
+    append("</g>\n<g id=\"paths\" transform=\"scale(1,-1)\" fill=\"none\" stroke=\"#087d70\" stroke-width=\"2\">\n");
+    for(const auto& path:paths) {
+        std::string vertices;for(auto value:path.points){if(!vertices.empty())vertices+=' ';vertices+=point(value);}
+        if(path.policy->playback==DetPathPlayback2D::Loop)vertices+=" "+point(path.points.front());
+        const auto actorId=std::to_string(path.source->id),pathId=std::to_string(path.policy->id);
+        append("<polyline data-path=\""+pathId+"\" data-actor=\""+actorId+"\" data-waypoint-count=\""+std::to_string(path.points.size())
+            +"\" data-playback=\""+std::to_string(static_cast<std::uint32_t>(path.policy->playback))+"\" points=\""+vertices+"\" stroke-dasharray=\"4 3\" vector-effect=\"non-scaling-stroke\">\n");
+        const std::string mode=path.policy->playback==DetPathPlayback2D::Once?"Once":path.policy->playback==DetPathPlayback2D::Loop?"Loop":"PingPong";
+        append("<title>"+xml("Path "+pathId+" / actor "+actorId+" / "+mode+" / authored origin + waypoint offsets; not an executed or guaranteed reachable trajectory")+"</title></polyline>\n");
+        for(std::size_t n=0;n<path.points.size();++n)append("<circle data-path-point=\""+std::to_string(n)+"\" data-actor=\""+actorId+"\" cx=\""+number(path.points[n].x)
+            +"\" cy=\""+number(path.points[n].y)+"\" r=\""+number(radius)+"\" vector-effect=\"non-scaling-stroke\"/>\n");
+    }
+    append("</g>\n<g id=\"actor-labels\" font-family=\"sans-serif\" font-size=\""+number(font)+"\" fill=\"#111\" text-anchor=\"middle\">\n");
+    for(const auto& actor:level.actors)append("<text data-pose-label=\""+std::to_string(actor.id)+"\" x=\""+number(actor.position.x)+"\" y=\""+number(-actor.position.y)
+        +"\" dy=\"-0.25em\">"+xml(std::to_string(actor.id)+(actor.character?std::string{" character"}:std::string{}))+"</text>\n");
+    append("</g></svg>\n<text x=\"20\" y=\"772\" font-family=\"sans-serif\" font-size=\"14\">XY only. Paths show authored points; no CP, ticks, collision prediction, recovery, AI or game effects were rendered.</text>\n</svg>\n");
+    return result;
+}
+
 void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
     const auto config=detLevelSessionConfig(level);
     std::cout<<"{\"schema\":1,\"status\":\"passed\",\"source\":"<<json(source.generic_string())
@@ -205,13 +333,37 @@ int run(int argc,char** argv) {
             "aydetlevel float <finite-decimal>\n"
             "aydetlevel float-bits <eight-hex-digits>\n"
             "aydetlevel create <character|dash> <fresh.dlt>\n"
+            "aydetlevel preview <level.dlt> <fresh.svg>\n"
             "Validates the real initial Session pipeline. Canonicalize preserves exact Float32 bits.\n"
             "Starters use application/input1, fixed1/64 and require a matching application input recipe.\n"
+            "Preview shows authored initial shapes/paths only; no simulation ticks or current CP.\n"
             "Output must be fresh; failed physical writes may leave a partial new file.\n";
         return 0;
     }
     require(argc>=3,"Use aydetlevel --help for commands");
     const std::string_view command=argv[1];
+    if(command=="preview") {
+        require(argc==4,"preview requires a source level and a fresh SVG output path");
+        const std::filesystem::path source=argv[2],destination=argv[3];ordinary(source);
+        DetLevel2D level;std::string error;
+        const bool loaded=loadDetLevel2D(source,level,error);require(loaded,error);
+        // load performs the real initial Session preflight. Build every SVG byte
+        // and the receipt before exclusively creating the destination; never tick.
+        const auto preview=buildPreviewSvg2D(level);
+        const auto config=detLevelSessionConfig(level);
+        std::ostringstream receipt;
+        receipt<<"{\"schema\":1,\"status\":\"passed\",\"command\":\"preview\",\"previewProfile\":1"
+            <<",\"scope\":\"authored-initial-content\",\"simulationExecuted\":false"
+            <<",\"source\":"<<json(source.generic_string())<<",\"output\":"<<json(destination.generic_string())
+            <<",\"formatVersion\":"<<level.formatVersion<<",\"contentHash\":"<<json(std::to_string(config.contentHash))
+            <<",\"actorCount\":"<<preview.actorCount<<",\"pathInstances\":"<<preview.pathInstances
+            <<",\"waypointCount\":"<<preview.waypointCount<<",\"svgBytes\":"<<preview.svg.size()
+            <<",\"worldBoundsBits\":["<<json(bits(preview.worldMin.x.bits()))<<','<<json(bits(preview.worldMin.y.bits()))
+            <<','<<json(bits(preview.worldMax.x.bits()))<<','<<json(bits(preview.worldMax.y.bits()))<<"],\"viewBoxBits\":[";
+        bool first=true;for(auto value:preview.viewBox){if(!first)receipt<<',';first=false;receipt<<json(bits(value.bits()));}
+        receipt<<"],\"browserPixelsAuthoritative\":false}\n";
+        const auto record=receipt.str();writeFresh(destination,preview.svg);std::cout<<record;return 0;
+    }
     if(command=="create") {
         require(argc==4,"create requires a starter name and a fresh output path");
         auto level=starter(argv[2]);std::string error;

@@ -343,4 +343,5 @@ foreach(_field formatVersion contentHash actors attacks vitalityActors vitalityP
         message(FATAL_ERROR "Sight canonicalize changed authored ${_field}")
     endif()
 endforeach()
+include("${CMAKE_CURRENT_LIST_DIR}/PreviewLevelTool.cmake")
 message(STATUS "Level authoring: old/extended validate, inspect, canonicalize and protected/error flows passed; ${_run}")

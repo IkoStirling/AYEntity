@@ -2981,3 +2981,37 @@ remain. First levels1 harness named unknown AYEntity_LevelControl10Checks before
 product tests; corrected existing CharacterControl10 target then passed.
 Snapshots match before/after each batch; fixture source changed across batches,
 so cross-batch full snapshot equality is not claimed.
+
+## Stage60: initial-content geometry adapter (local checks passed; native Deferred)
+
+The tool adapts existing Level/Math authority rather than introducing a preview
+simulation or public geometry owner. Runtime-equivalent software bounds are
+formed in the order poseXY+body.offset, then center-half/center+half. SVG uses
+absolute polygon endpoints so a browser's min+rounded-width recomposition is
+not treated as the represented body. Wedges retain the complete filled triangle.
+
+Path display is separately poseXY+relative waypoint offset for each binding.
+This does not alter the body's offset, named path policy, future path guards,
+absolute spawn positions or content identity. Initial mask0/role data is visible;
+initial Disabled actors remain forbidden by Level itself.
+
+All geometry, aggregate software spans, SVG bytes and receipt are computed
+before exclusive I/O. The1MiB output and64x24 point ceilings bound this offline
+adapter; Yflip and viewBox are presentation only. Existing profiles and Sim,
+checkpoint/save/replay wire bytes are unchanged.
+
+Actual local MSVC Release `AYEntity_LevelToolChecks` passed2.26624s; the
+standard production Tool build passed5.438s. The single finite gate performed
+seven preview invocations: four successful outputs and three explicit refusals.
+Selected hand vertices/world and viewBox bits, path origin independent of body
+offset, mask0, repeated terrain whole-SVG byte equality and XML parsing of all
+four outputs passed. The terrain output has5518 bytes,11 actors,1 path instance
+and2 waypoints, with contentHash `1216874329789544449`.
+Evidence is `stage60-actual-freeze.json` / `stage60-tool2`. The earlier
+`stage60-tool1` ran the old Stage59 CLI after a closure-plan EOF/guarded-install
+refusal and is explicitly excluded from preview acceptance. Only the closure
+plan was repaired before the genuine installed-preview gate; no product behavior
+or hand oracle changed. Raw excluded and accepted records are preserved.
+No simulation tick/current CP, browser-rendering acceptance, future reachability,
+independent full-CP golden or native/transport authentication is established.
+Physical flush/close fault injection was not run; final native VM Deferred.

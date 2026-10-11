@@ -342,3 +342,41 @@ Complete old Control canonical bytes also match the accepted Stage56 output.
 First target-name/fixture-keyword failures remain; only `action 101` -> `target 101`
 source grammar was repaired, not production behavior or hand checks. host1
 stays overall Failed, its genuine Resource pass was not repeated. Native final VM Deferred.
+
+## Stage60: static authored-content SVG (local checks passed; native Deferred)
+
+```text
+aydetlevel preview AYRuntime/AYEntity/examples/detlevel/terrain.dlt fresh-terrain.svg
+```
+
+The command validates the entire input through the real Level pipeline, then
+shows initial AABBs/filled wedges, trigger/one-way/Character roles, mask0 and
+named paths instantiated at each bound actor's initial position. Paths use pose
+plus relative waypoint offsets, not body.offset. It never ticks, loads a current
+CP or predicts reachable paths, attacks, respawns or Brain decisions.
+
+Output must be fresh with an existing parent. Software geometry/spans must be
+finite and the completed SVG must fit1MiB. Exact decimal coordinates preserve
+software endpoints; browser layout/pixels are not authoritative. JSON reports
+scope authored-initial-content, simulationExecuted false, actorCount,
+pathInstances/waypointCount (per binding), svgBytes, worldBoundsBits and
+viewBoxBits. The latter is Y-flipped display layout, not new engine state.
+
+Validation/overflow/budget failure creates no SVG; existing files are protected.
+Physical write/close failure may retain a new partial file.
+
+Actual local MSVC Release `AYEntity_LevelToolChecks` passed2.26624s; the
+standard production Tool build passed5.438s. The single finite gate performed
+seven preview invocations: four successful outputs and three explicit refusals.
+Selected hand vertices/world and viewBox bits, path origin independent of body
+offset, mask0, repeated terrain whole-SVG byte equality and XML parsing of all
+four outputs passed. The terrain output has5518 bytes,11 actors,1 path instance
+and2 waypoints, with contentHash `1216874329789544449`.
+Evidence is `stage60-actual-freeze.json` / `stage60-tool2`. The earlier
+`stage60-tool1` ran the old Stage59 CLI after a closure-plan EOF/guarded-install
+refusal and is explicitly excluded from preview acceptance. Only the closure
+plan was repaired before the genuine installed-preview gate; no product behavior
+or hand oracle changed. Raw excluded and accepted records are preserved.
+No simulation tick/current CP, browser-rendering acceptance, future reachability,
+independent full-CP golden or native/transport authentication is established.
+Physical flush/close fault injection was not run; final native VM Deferred.
