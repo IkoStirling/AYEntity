@@ -57,6 +57,8 @@ struct DetPathMotionInput2D {bool enabled=true,paused=false,restart=false;};
  * are unchanged. Failed installation must be abandoned; executing errors require
  * explicit Session restore. Bounds/shape validity remain collision's responsibility.
  */
+/// @note With matching collision.movingSlopes, bindings also permit translating
+/// ordinary wedge bodies. Path profile1 remains unchanged; collision owns shape motion.
 bool installDetPathMotion2D(DeterministicSession& session,DetPathMotion2DConfig config);
 /// @brief Create canonical bound/unbound actor state at the first relative waypoint.
 std::vector<std::uint64_t> detPathMotionState2D(const DetPathMotion2DConfig& config,const DetPathMotionState2D& state={});

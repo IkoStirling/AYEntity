@@ -11,10 +11,11 @@ namespace {
 using D=math::DetFloat32;
 using V=math::DetVec2;
 constexpr std::uint64_t logicHash=0x4443433244503031ull,advancedLogicHash=0x4443433244503032ull,
-    stepLogicHash=0x4443433244503033ull,motionLogicHash=0x4443433244503034ull,slopeLogicHash=0x4443433244503035ull;
-std::uint32_t profile(const DetCharacterController2DConfig& c){return c.collision.staticSlopes?kDetCharacterController2DSlopeProfileVersion:
+    stepLogicHash=0x4443433244503033ull,motionLogicHash=0x4443433244503034ull,slopeLogicHash=0x4443433244503035ull,
+    movingSlopeLogicHash=0x4443433244503036ull,terrainLogicHash=0x4443433244503037ull;
+std::uint32_t profile(const DetCharacterController2DConfig& c){return c.collision.continuousTerrain?kDetCharacterController2DTerrainProfileVersion:(c.collision.movingSlopes?kDetCharacterController2DMovingSlopeProfileVersion:(c.collision.staticSlopes?kDetCharacterController2DSlopeProfileVersion:
     (c.collision.motionPolicy!=DetCollisionMotionPolicy2D::Fault?kDetCharacterController2DMotionProfileVersion:(c.collision.stepUp?kDetCharacterController2DStepProfileVersion:
-    (c.advanced?kDetCharacterController2DAdvancedProfileVersion:kDetCharacterController2DProfileVersion)));}
+    (c.advanced?kDetCharacterController2DAdvancedProfileVersion:kDetCharacterController2DProfileVersion)))));}
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic character 2D: invalid policy, character or support state");}
 D abs(D value){return value<D{}?-value:value;}
 bool zero(V value){return value.x.bits()==0 && value.y.bits()==0;}
@@ -33,7 +34,8 @@ bool validConfig(const DetCharacterController2DConfig& c) {
         || (!p.staticSlopes && c.maxSlopeRisePerRun.bits()!=D::fromInt(1).bits())
         || static_cast<std::uint32_t>(p.motionPolicy)>1
         || (p.motionPolicy!=DetCollisionMotionPolicy2D::Fault && p.maxTriggerPairs>59)
-        || (p.staticSlopes && p.maxTriggerPairs>58))return false;
+        || (p.staticSlopes && p.maxTriggerPairs>58) || (p.movingSlopes && (!p.staticSlopes || p.maxTriggerPairs>57))
+        || (p.continuousTerrain && (!p.movingSlopes || p.maxTriggerPairs>56)))return false;
     if(c.advanced!=p.oneWayPlatforms || c.coyoteTicks>65535 || c.jumpBufferTicks>65535
         || c.dropThroughTicks>65535 || !c.crouchHeightScale.isFinite()
         || !(c.crouchHeightScale>D{} && c.crouchHeightScale<D::fromInt(1))
@@ -98,6 +100,8 @@ DetTypedStateSchema policySchema(const DetCharacterController2DConfig& c) {
     if(p.stepUp){result.fields.push_back({32,true});result.fields.push_back({33,p.maxStepHeight});}
     if(p.motionPolicy!=DetCollisionMotionPolicy2D::Fault || p.staticSlopes)result.fields.push_back({34,static_cast<std::uint32_t>(p.motionPolicy)});
     if(p.staticSlopes){result.fields.push_back({35,true});result.fields.push_back({36,c.maxSlopeRisePerRun});}
+    if(p.movingSlopes)result.fields.push_back({37,true});
+    if(p.continuousTerrain)result.fields.push_back({38,true});
     return result;
 }
 DetTypedStateSchema bodySchema(const DetCharacterController2DConfig& c) {
@@ -707,8 +711,8 @@ bool installDetCharacterController2D(DeterministicSession& session,DetCharacterC
     if(!(session.registerTypedSchema(state) && session.registerTypedSchema(policy)
         && session.registerGlobalState(config.policySchema)
         && detail::installDetCharacterCollision2D(session,config.collision,config.stateSchema,config.maxSlopeRisePerRun)
-        && session.registerLogicProfile(config.logicProfileId,profile(config),config.collision.staticSlopes?slopeLogicHash:
-            (config.collision.motionPolicy!=DetCollisionMotionPolicy2D::Fault?motionLogicHash:(config.collision.stepUp?stepLogicHash:(config.advanced?advancedLogicHash:logicHash))))
+        && session.registerLogicProfile(config.logicProfileId,profile(config),config.collision.continuousTerrain?terrainLogicHash:(config.collision.movingSlopes?movingSlopeLogicHash:(config.collision.staticSlopes?slopeLogicHash:
+            (config.collision.motionPolicy!=DetCollisionMotionPolicy2D::Fault?motionLogicHash:(config.collision.stepUp?stepLogicHash:(config.advanced?advancedLogicHash:logicHash))))))
         && session.registerValidator(config.validatorId,profile(config),
             [config,stateLayout,policyLayout,bodyLayout](const auto& checkpoint,std::string& error){
                 try {validateCheckpoint(checkpoint,config,stateLayout,policyLayout,bodyLayout);return true;}

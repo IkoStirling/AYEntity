@@ -1,5 +1,5 @@
 // Included inside the collision implementation's private namespace.
-// design reference: AYEntity/design.md Stage26/28/29 whole-world trials, motion conflicts and static slopes.
+// design reference: AYEntity/design.md Stage26/28-31 whole-world trials, motion conflicts and translating terrain.
 struct TraceStep {std::vector<Body> before,after;};
 struct SolidContact {SimEntityId first,second;std::uint32_t axis;};
 struct StepTrialRejected {};
@@ -47,15 +47,23 @@ std::optional<PrescribedMotionConflict> opposedMotion(const std::vector<Body>& b
         for(std::uint32_t n=0;n<2;++n){
             std::optional<std::size_t> lower,upper;
             for(std::size_t j=0;j<bodies.size();++j){const auto& wall=bodies[j];
-                if(i==j || wall.data.trigger || wall.data.oneWay || wall.data.shape!=DetCollisionShape2D::Aabb
+                if(i==j || wall.data.trigger || wall.data.oneWay
+                    || (wall.data.shape!=DetCollisionShape2D::Aabb && !wall.movingSlopeProfile)
                     || (wall.data.mode!=DetBodyMode2D::Static && wall.data.mode!=DetBodyMode2D::MovingObstacle)
                     || !masks(actor.data.layer,actor.data.mask,wall.data.layer,wall.data.mask))continue;
                 const auto tangent=1u-n;
                 const auto edge=[](const V& v,std::uint32_t axis){return axis==0?v.x:v.y;};
                 if(!(edge(actor.box.min,tangent)<edge(wall.box.max,tangent) && edge(wall.box.min,tangent)<edge(actor.box.max,tangent)))continue;
-                if(edge(wall.box.max,n)==edge(actor.box.min,n)
+                const bool wedge=wall.data.shape!=DetCollisionShape2D::Aabb;
+                const bool right=wall.data.shape==DetCollisionShape2D::SlopeRisesRight;
+                const auto relative=remaining[i]-remaining[j];
+                const bool cap=!wedge || (right?(actor.box.max.x>wall.box.max.x || (actor.box.max.x==wall.box.max.x && relative.x>=D{}))
+                    :(actor.box.min.x<wall.box.min.x || (actor.box.min.x==wall.box.min.x && relative.x<=D{})));
+                const bool lowerFace=!wedge || (n==0?right:cap);
+                const bool upperFace=!wedge || (n==0?!right:true);
+                if(lowerFace && edge(wall.box.max,n)==edge(actor.box.min,n)
                     && (!lower || edge(remaining[*lower],n)<edge(remaining[j],n)))lower=j;
-                if(edge(wall.box.min,n)==edge(actor.box.max,n)
+                if(upperFace && edge(wall.box.min,n)==edge(actor.box.max,n)
                     && (!upper || edge(remaining[j],n)<edge(remaining[*upper],n)))upper=j;
             }
             if(!lower || !upper)continue;
@@ -74,7 +82,35 @@ std::optional<PrescribedMotionConflict> opposedMotion(const std::vector<Body>& b
 }
 // Profile3 top-plane sweep. Work in the platform frame; the ordinary full-box
 // sweep cannot represent a transparent side/bottom or an intentional interior passage.
+std::optional<math::DetHit2D> wedgePairHit(const Body& a,const Body& b,V relative) {
+    const auto vertices=[](const Body& p){return std::array<V,3>{p.box.min,V{p.box.max.x,p.box.min.y},
+        p.data.shape==DetCollisionShape2D::SlopeRisesRight?p.box.max:V{p.box.min.x,p.box.max.y}};};
+    const auto av=vertices(a),bv=vertices(b);const auto one=D::fromInt(1);
+    D enter=D::fromBits(0xff800000u),exit=D::fromBits(0x7f800000u);V normal{};std::uint32_t feature=0;bool selected=false;
+    const std::array<V,4> normals{V{one,D{}},V{D{},one},slope(a.box,a.data.shape).surfaceNormal(),slope(b.box,b.data.shape).surfaceNormal()};
+    for(unsigned k=0;k<normals.size();++k){const auto n=normals[k];
+        const auto dot=[&](V p){const auto x=n.x*p.x,y=n.y*p.y,value=x+y;
+            if(!x.isFinite() || !y.isFinite() || !value.isFinite())invalid();return value;};
+        // Project relative to a local origin, avoiding unnecessary large world products.
+        auto amin=dot(av[0]-a.box.min),amax=amin,bmin=dot(bv[0]-a.box.min),bmax=bmin;
+        for(unsigned v=1;v<3;++v){const auto ap=dot(av[v]-a.box.min),bp=dot(bv[v]-a.box.min);
+            amin=std::min(amin,ap);amax=std::max(amax,ap);bmin=std::min(bmin,bp);bmax=std::max(bmax,bp);}
+        const auto speed=dot(relative);
+        if(speed.isZero()){if(amax<=bmin || bmax<=amin)return {};continue;}
+        const auto gapLow=bmin-amax,gapHigh=bmax-amin;
+        if(!gapLow.isFinite() || !gapHigh.isFinite())invalid();
+        const auto lo=(speed>D{}?gapLow:gapHigh)/speed;
+        const auto hi=(speed>D{}?gapHigh:gapLow)/speed;
+        if(lo.isNaN() || hi.isNaN())invalid();
+        if(lo>enter || (!selected && lo==enter)){enter=lo;normal=speed>D{}?-n:n;feature=k<2?k:2;selected=true;}
+        exit=std::min(exit,hi);if(enter>exit)return {};
+    }
+    if(interior(a.box,a.data.shape,b.box,b.data.shape))return math::DetHit2D{D{},V{},0,true};
+    if(!selected || enter<D{} || enter>one || !(exit>enter))return {};
+    return math::DetHit2D{enter,normal,feature,false};
+}
 std::optional<math::DetHit2D> geometricHit(const Body& a,const Body& b,V relative) {
+    if(a.data.shape!=DetCollisionShape2D::Aabb && b.data.shape!=DetCollisionShape2D::Aabb)return wedgePairHit(a,b,relative);
     if(a.data.shape!=DetCollisionShape2D::Aabb || b.data.shape!=DetCollisionShape2D::Aabb){
         const bool platformFirst=a.data.shape!=DetCollisionShape2D::Aabb;
         const auto& wall=platformFirst?a:b;const auto& actor=platformFirst?b:a;
@@ -85,7 +121,26 @@ std::optional<math::DetHit2D> geometricHit(const Body& a,const Body& b,V relativ
     return math::detSweepAabb2D(a.box,relative,b.box);
 }
 std::optional<math::DetHit2D> solidHit(const Body& a,const Body& b,V relative) {
-    if(a.data.shape!=DetCollisionShape2D::Aabb || b.data.shape!=DetCollisionShape2D::Aabb)return geometricHit(a,b,relative);
+    if(a.data.shape!=DetCollisionShape2D::Aabb || b.data.shape!=DetCollisionShape2D::Aabb){
+        auto hit=geometricHit(a,b,relative);
+        const bool firstWall=a.data.shape!=DetCollisionShape2D::Aabb;
+        const auto& wall=firstWall?a:b;const auto& actor=firstWall?b:a;
+        if(hit && !hit->initialOverlap && hit->axis==0 && actor.terrain && actor.slopeGrounded
+            && actor.data.mode==DetBodyMode2D::Kinematic && wall.data.shape!=DetCollisionShape2D::Aabb){
+            const auto motion=firstWall?-relative:relative;const auto n=slope(wall.box,wall.data.shape).surfaceNormal();
+            const auto rise=(n.x<D{}?-n.x:n.x)/n.y;
+            const bool right=wall.data.shape==DetCollisionShape2D::SlopeRisesRight;
+            const auto corner=(right?actor.box.max.x:actor.box.min.x)+motion.x*hit->fraction;
+            const auto foot=actor.box.min.y+motion.y*hit->fraction;
+            if(rise<=actor.maxSlopeRisePerRun && (right?motion.x>D{}:motion.x<D{})
+                && corner==(right?wall.box.min.x:wall.box.max.x) && foot==wall.box.min.y){
+                // The low endpoint has zero vertical side area. Only a proved
+                // grounded, level seam promotes its X tie to the true walkable plane.
+                hit->axis=2;hit->normal=firstWall?-n:n;
+            }
+        }
+        return hit;
+    }
     if(!a.data.oneWay && !b.data.oneWay)return math::detSweepAabb2D(a.box,relative,b.box);
     const bool platformFirst=a.data.oneWay;
     const auto& platform=platformFirst?a:b;
@@ -104,14 +159,17 @@ std::optional<math::DetHit2D> solidHit(const Body& a,const Body& b,V relative) {
     return math::DetHit2D{fraction,V{D{},D::fromInt(platformFirst?-1:1)},1,false};
 }
 struct SlopeSurfaceChange {std::size_t actor,wall;D fraction;bool uphill;};
+D terrainOwnX(const Body& actor){return std::clamp(actor.data.velocity.x-actor.slopeCarry.x,
+    std::min(D{},actor.slopeOwnIntentX),std::max(D{},actor.slopeOwnIntentX));}
 std::optional<SlopeSurfaceChange> surfaceChange(const std::vector<Body>& bodies,const std::vector<V>& remaining,SimEntityId trialActor) {
     std::optional<SlopeSurfaceChange> best;
-    for(std::size_t i=0;i<bodies.size();++i){const auto& actor=bodies[i];const auto motion=remaining[i];
+    for(std::size_t i=0;i<bodies.size();++i){const auto& actor=bodies[i];
         if(actor.id==trialActor || !actor.slopeLimited || !actor.slopeGrounded || actor.data.trigger
-            || actor.data.mode!=DetBodyMode2D::Kinematic || motion.x.isZero())continue;
+            || actor.data.mode!=DetBodyMode2D::Kinematic)continue;
         for(std::size_t j=0;j<bodies.size();++j){const auto& wall=bodies[j];
-            if(wall.data.mode!=DetBodyMode2D::Static || wall.data.shape==DetCollisionShape2D::Aabb
+            if((wall.data.mode!=DetBodyMode2D::Static && wall.data.mode!=DetBodyMode2D::MovingObstacle) || wall.data.shape==DetCollisionShape2D::Aabb
                 || !masks(actor.data.layer,actor.data.mask,wall.data.layer,wall.data.mask))continue;
+            const auto motion=remaining[i]-remaining[j];if(!motion.isFinite())invalid();if(motion.x.isZero())continue;
             const auto wedge=slope(wall.box,wall.data.shape);
             const auto normal=wedge.surfaceNormal();
             const auto rise=(normal.x<D{}?-normal.x:normal.x)/normal.y;if(!rise.isFinite())invalid();
@@ -154,7 +212,7 @@ void moveTogether(std::vector<Body>& bodies,D dt,std::uint32_t iterations,std::v
     std::vector<SolidContact>* contacts=nullptr,SimEntityId trialActor=0,bool stopPrescribed=false,bool staticSlopes=false) {
     validateSolids(bodies,stopPrescribed);std::vector<V> remaining;
     for(const auto& b:bodies){const auto d=b.data.mode==DetBodyMode2D::Static?V{}:b.data.velocity*dt;if(!d.isFinite())invalid();remaining.push_back(d);}
-    bool finished=false;const auto one=D::fromInt(1),half=D::fromBits(0x3f000000u);
+    bool finished=false;D remainingTime=dt;const auto one=D::fromInt(1),half=D::fromBits(0x3f000000u);
     for(std::uint32_t pass=0;pass<iterations;++pass){
         if(stopPrescribed)if(auto conflict=opposedMotion(bodies,remaining))throw std::move(*conflict);
         std::optional<math::DetHit2D> best;std::optional<D> dynamicContactTime;std::size_t first=0,second=0;
@@ -186,10 +244,18 @@ void moveTogether(std::vector<Body>& bodies,D dt,std::uint32_t iterations,std::v
         TraceStep step{bodies,{}};const auto fraction=chosenFraction;
         for(std::size_t i=0;i<bodies.size();++i){bodies[i].position=bodies[i].position+remaining[i]*fraction;bodies[i].box=bounds(bodies[i]);
             remaining[i]=remaining[i]*(one-fraction);if(!remaining[i].isFinite())invalid();}
+        remainingTime=remainingTime*(one-fraction);if(!remainingTime.isFinite())invalid();
         if(following){auto& actor=bodies[change->actor];auto& rest=remaining[change->actor];
-            if(change->uphill){rest.y={};actor.data.velocity.y={};}
+            const auto& wall=bodies[change->wall];const auto wallRest=remaining[change->wall];
+            if(actor.terrain){const auto ownX=terrainOwnX(actor);
+                actor.data.velocity.x=ownX+wall.data.velocity.x;rest.x=actor.data.velocity.x*remainingTime;
+                actor.slopeCarry=wall.data.velocity;actor.slopeSupport=wall.id;}
+            if(change->uphill){rest.y=wall.data.mode==DetBodyMode2D::Static?D{}:wallRest.y;
+                actor.data.velocity.y=wall.data.mode==DetBodyMode2D::Static?D{}:wall.data.velocity.y;}
             else {const auto normal=slope(bodies[change->wall].box,bodies[change->wall].data.shape).surfaceNormal();
-                const auto gradient=-normal.x/normal.y;rest.y=gradient*rest.x;actor.data.velocity.y=gradient*actor.data.velocity.x;
+                const auto gradient=-normal.x/normal.y;
+                if(wall.data.mode==DetBodyMode2D::Static){rest.y=gradient*rest.x;actor.data.velocity.y=gradient*actor.data.velocity.x;}
+                else {rest.y=wallRest.y+gradient*(rest.x-wallRest.x);actor.data.velocity.y=wall.data.velocity.y+gradient*(actor.data.velocity.x-wall.data.velocity.x);}
                 if(!rest.isFinite() || !actor.data.velocity.isFinite())invalid();}
             step.after=bodies;trace.push_back(std::move(step));
             if(std::all_of(remaining.begin(),remaining.end(),[](const auto& v){return v.x.isZero() && v.y.isZero();})){finished=true;break;}
@@ -203,16 +269,37 @@ void moveTogether(std::vector<Body>& bodies,D dt,std::uint32_t iterations,std::v
         if(n==2){
             Body& actor=ak?a:b;const Body& wall=ak?b:a;auto& rest=remaining[ak?first:second];
             const auto normal=ak?best->normal:reverse.normal;
-            if(!staticSlopes || ak==bk || wall.data.mode!=DetBodyMode2D::Static || wall.data.shape==DetCollisionShape2D::Aabb || !(normal.y>D{}))invalid();
+            if(!staticSlopes || ak==bk || (wall.data.mode!=DetBodyMode2D::Static && wall.data.mode!=DetBodyMode2D::MovingObstacle) || wall.data.shape==DetCollisionShape2D::Aabb || !(normal.y>D{}))invalid();
             const auto rise=(normal.x<D{}?-normal.x:normal.x)/normal.y;if(!rise.isFinite())invalid();
+            auto relativeVelocity=wall.data.mode==DetBodyMode2D::Static?actor.data.velocity:actor.data.velocity-wall.data.velocity;
+            auto relativeRest=wall.data.mode==DetBodyMode2D::Static?rest:rest-remaining[ak?second:first];
             if(actor.slopeLimited && rise>actor.maxSlopeRisePerRun){
                 // Suppress uphill intent, then project inward gravity. Outward
                 // vertical jump motion remains free rather than being reattached.
                 const auto uphill=[&](D x){return normal.x<D{}?x>D{}:x<D{};};
-                if(uphill(actor.data.velocity.x))actor.data.velocity.x={};
-                if(uphill(rest.x))rest.x={};
+                if(uphill(relativeVelocity.x))relativeVelocity.x={};
+                if(uphill(relativeRest.x))relativeRest.x={};
             }
-            actor.data.velocity=slopeTangent(actor.data.velocity,normal);rest=slopeTangent(rest,normal);
+            const bool lowTouch=wall.data.shape==DetCollisionShape2D::SlopeRisesRight?
+                actor.box.max.x==wall.box.min.x:actor.box.min.x==wall.box.max.x;
+            if(actor.terrain && actor.slopeGrounded && lowTouch && remainingTime.isZero()){
+                // At a terminal low endpoint there is no positive footprint yet.
+                // Retain the old floor's valid terminal tangent until real entry.
+            }else if(actor.terrain && (actor.slopeGrounded || actor.slopeLanding) && actor.id!=trialActor && rise<=actor.maxSlopeRisePerRun){
+                // A real upward contact replaces the local support tangent while
+                // preserving the character's already-solved own horizontal motion.
+                // A descending, nonjumping actual landing has the same contact
+                // proof; a nearby airborne body alone never enters this branch.
+                const auto ownX=terrainOwnX(actor);
+                actor.data.velocity.x=ownX+wall.data.velocity.x;
+                actor.data.velocity.y=wall.data.velocity.y+(-normal.x/normal.y)*ownX;
+                rest.x=actor.data.velocity.x*remainingTime;
+                rest.y=remaining[ak?second:first].y+((-normal.x/normal.y)*ownX)*remainingTime;
+                actor.slopeSupport=wall.id;actor.slopeCarry=wall.data.velocity;actor.slopeGrounded=true;
+            }else {actor.data.velocity=slopeTangent(relativeVelocity,normal);rest=slopeTangent(relativeRest,normal);
+                if(wall.data.mode!=DetBodyMode2D::Static){actor.data.velocity=actor.data.velocity+wall.data.velocity;
+                    rest=rest+remaining[ak?second:first];}}
+            if(!actor.data.velocity.isFinite() || !rest.isFinite())invalid();
             snapSlope(actor,wall);
         }else if(ak && bk){
             const auto shared=axis(remaining[first],n)*half+axis(remaining[second],n)*half;
@@ -223,6 +310,13 @@ void moveTogether(std::vector<Body>& bodies,D dt,std::uint32_t iterations,std::v
         }else if(ak){axis(remaining[first],n)=axis(remaining[second],n);axis(a.data.velocity,n)=axis(b.data.velocity,n);snap(a,b,*best);}
         else if(bk){axis(remaining[second],n)=axis(remaining[first],n);axis(b.data.velocity,n)=axis(a.data.velocity,n);snap(b,a,reverse);}
         else invalid();
+        if(n==1 && ak!=bk){auto& actor=ak?a:b;const auto& wall=ak?b:a;const auto normal=ak?best->normal:reverse.normal;
+            if(actor.terrain && actor.slopeGrounded && actor.id!=trialActor && normal.y>D{}
+                && (wall.data.mode==DetBodyMode2D::Static || wall.data.mode==DetBodyMode2D::MovingObstacle)){
+                const auto ownX=terrainOwnX(actor);actor.data.velocity.x=ownX+wall.data.velocity.x;
+                remaining[ak?first:second].x=actor.data.velocity.x*remainingTime;
+                actor.slopeSupport=wall.id;actor.slopeCarry=wall.data.velocity;
+            }}
         if(stopPrescribed || staticSlopes){
             if(ak && (n==2?a.data.velocity!=oldA:axis(a.data.velocity,n)!=axis(oldA,n)))markMotion(a,DetCollisionMotionResult2D::Blocked,b.id,n);
             if(bk && (n==2?b.data.velocity!=oldB:axis(b.data.velocity,n)!=axis(oldB,n)))markMotion(b,DetCollisionMotionResult2D::Blocked,a.id,n);
@@ -311,7 +405,7 @@ std::vector<DetCollisionPair2D> transientPairs(const std::vector<TraceStep>& tra
     return {crossing.begin(),crossing.end()};
 }
 template<class Read> void validateMotionOutput(const DetSessionCheckpoint& state,SimEntityId id,
-    const DetCollisionBody2D& data,const DetStateLayout& body,std::uint32_t schema,Read read,bool staticSlopes=false,bool recoverable=false) {
+    const DetCollisionBody2D& data,const DetStateLayout& body,std::uint32_t schema,Read read,bool staticSlopes=false,bool recoverable=false,bool movingSlopes=false) {
     const auto result=std::get<std::uint32_t>(read(DetBodyMotionResult));
     const auto other=std::get<DetEntityRef>(read(DetBodyMotionOther)).value;
     const auto n=std::get<std::uint32_t>(read(DetBodyMotionAxis));
@@ -327,8 +421,10 @@ template<class Read> void validateMotionOutput(const DetSessionCheckpoint& state
         const auto& words=found->second.blocks.at(schema);
         const auto otherMode=static_cast<DetBodyMode2D>(std::get<std::uint32_t>(body.read(words,DetBodyMode)));
         if(std::get<bool>(body.read(words,DetBodyTrigger)) || otherMode==DetBodyMode2D::Disabled)invalid();
-        if(n==2 && (otherMode!=DetBodyMode2D::Static
-            || std::get<std::uint32_t>(body.read(words,DetBodyShape))==static_cast<std::uint32_t>(DetCollisionShape2D::Aabb)))invalid();
+        if(n==2){const bool otherWedge=std::get<std::uint32_t>(body.read(words,DetBodyShape))!=static_cast<std::uint32_t>(DetCollisionShape2D::Aabb);
+            if(!movingSlopes?(otherMode!=DetBodyMode2D::Static || !otherWedge):
+                ((otherMode!=DetBodyMode2D::Static && otherMode!=DetBodyMode2D::MovingObstacle)
+                    || (!otherWedge && data.shape==DetCollisionShape2D::Aabb)))invalid();}
         if(result==2){
             if(data.mode==DetBodyMode2D::MovingObstacle && otherMode!=DetBodyMode2D::Kinematic)invalid();
             if(data.mode==DetBodyMode2D::Kinematic && otherMode!=DetBodyMode2D::MovingObstacle)invalid();
@@ -347,6 +443,8 @@ void validateExtendedState(const DetSessionCheckpoint& state,const DetCollision2
     if(c.stepUp && std::get<D>(history.read(words,9)).bits()!=c.maxStepHeight.bits())invalid();
     if(motionState(c) && u(128)!=static_cast<std::uint32_t>(c.motionPolicy))invalid();
     if(c.staticSlopes && (!std::get<bool>(history.read(words,129)) || u(130)!=math::kDetSlopeGeometry2DProfileVersion))invalid();
+    if(c.movingSlopes && !std::get<bool>(history.read(words,131)))invalid();
+    if(c.continuousTerrain && !std::get<bool>(history.read(words,132)))invalid();
     const auto count=u(5);if(count>c.maxTriggerPairs)invalid();DetCollisionPair2D previous{};
     const auto known=[&](SimEntityId id){return state.actors.contains(id) || std::binary_search(state.retiredIds.begin(),state.retiredIds.end(),id);};
     for(std::uint32_t i=0;i<c.maxTriggerPairs;++i){const DetCollisionPair2D p{std::get<DetEntityRef>(history.read(words,10+2*i)).value,std::get<DetEntityRef>(history.read(words,11+2*i)).value};
@@ -367,8 +465,8 @@ void validateExtendedState(const DetSessionCheckpoint& state,const DetCollision2
             }
         }
         if(c.staticSlopes)data.shape=static_cast<DetCollisionShape2D>(std::get<std::uint32_t>(body.read(w,DetBodyShape)));
-        validateBody(data,true,c.oneWayPlatforms,c.staticSlopes);
-        if(motionState(c))validateMotionOutput(state,id,data,body,c.bodySchema,[&](std::uint32_t field){return body.read(w,field);},c.staticSlopes,stopping(c));
+        validateBody(data,true,c.oneWayPlatforms,c.staticSlopes,c.movingSlopes);
+        if(motionState(c))validateMotionOutput(state,id,data,body,c.bodySchema,[&](std::uint32_t field){return body.read(w,field);},c.staticSlopes,stopping(c),c.movingSlopes);
         if(data.mode==DetBodyMode2D::Disabled)continue;
         Body b{id,data,V::fromBits({a.pose.position[0],a.pose.position[1]}),D::fromBits(a.pose.position[2]),{}};b.box=bounds(b);active.push_back(b);
     }

@@ -2211,3 +2211,56 @@ transition failures and standalone-cap support failure remain preserved in root
 out/detmotion27-29-20261011.
 Final native acceptance remains Deferred to Final VM. See
 [Stage27–29](../../AYDocs/DETERMINISTIC-MOTION-AND-SLOPES-STAGE27-29.md).
+
+## Stages30–32: translating wedges, continuous terrain and canonical level content
+
+Collision7/controller6 explicitly enable ordinary translating MovingObstacle
+wedges; collision8/controller7 add grounded terrain continuity. Flags require
+staticSlopes/extended, and terrain also requires movingSlopes. History adds only
+Bool131/132 in new versions, policy37/38 mirrors them, and schema/validator/logic
+versions and hashes bind semantics. Pair caps57/56 retain the128-field ceiling
+even with optional step-up. Old profile defaults/schema bytes and existing wires
+are preserved. Math/geometry profile1 is unchanged.
+
+Narrowphase uses relative AABB/wedge or a true continuous triangle/triangle SAT
+over X/Y and both inclined normals. Finite projection/gap operands are checked
+before time division. Inclined kinematic response projects relative velocity and
+remaining motion then adds the prescribed wall frame; snap uses its same-time
+true geometry. Surface transitions use relative footprint corner displacement.
+Direct opposed-axis conflict classification may use real wedge base, high side
+and local high-foot horizontal segment only in the new profile. Nonparallel
+diagonal crush and arbitrary chains are not classified as recoverable.
+
+Terrain scratch reads Enabled/Grounded/Support, accepted carry and Intent from
+typed state each tick. True walkable upward contacts preserve own X clamped to
+the registered intent's sign/range and adopt the new carrier; actual residual time
+determines the remaining path. This avoids speed loss at a valley and fictitious
+reverse own motion after carrier clipping. High-end whole-world splits, crest
+caps and low flat seams consume the same bounded contact-pass budget. A low
+vertex's zero-area X tie is promoted to its slope only with exact height continuity
+and prior ground proof; other real walls keep axis precedence. At a terminal low
+vertex with no positive footprint, old valid support/tangent persists. No second
+pose writer or persistent adjacency/broadphase cache exists. Accepted carry writes
+occur after scratch validation and are consumed/cleared by the ordinary post.
+A real inclined landing also takes this response when own IntentY is nonpositive
+and registered Jumped/DropStarted are false. This requires an actual upward sweep
+contact, never mere airborne proximity. It settles a fresh airborne character's
+own motion and carry together rather than repeatedly projecting gravity without
+accepting support. Only enabled controllers qualify; the accepted contact marks
+scratch ground proof for a later high-cap transition in the same tick.
+Old profile6 static surface-change operations retain their
+original signed-zero order.
+
+Experimental level format1 (`AYDLEVEL`, `.dlt`) is configured before actors/seal,
+with64KiB ASCII /8KiB canonical semantic-byte limits,64 bodies and8 paths. Float
+tokens are eight hex bits; IDs and named path bindings increase. It imports only
+initial XY/body/role/policy, not arbitrary checkpoint fields. Decoder and loader
+replace output only after actual fresh Session factory/install/seal validation.
+Destination configure is not transactional: registration failure requires discard.
+Complete LE canonical bytes plus length are packed into UInt64 typed defaults,
+registered globals and actor copies, with immutable pure validation. ContentHash
+identifies content; all bytes independently participate in manifest compatibility.
+File whitespace has no authority, while any policy/bit/role/path change does.
+Resource loading remains outside ticks; no automatic editor/cook/Scene/Tilemap
+integration is implied. See the root
+[Stage30–32](../../AYDocs/DETERMINISTIC-TERRAIN-STAGE30-32.md) for actual evidence.

@@ -811,3 +811,35 @@ remains deferred to the user's VM environment. No new campaign/long-stability
 matrix is added. Actual input pins, logs and retained failures are recorded in
 [acceptance.json](../../out/detmotion27-29-20261011/acceptance.json). See
 [Stage27–29](../../AYDocs/DETERMINISTIC-MOTION-AND-SLOPES-STAGE27-29.md).
+
+### Stages30–32: moving terrain and loadable levels
+
+Explicit `collision.movingSlopes=true` requires staticSlopes/extended and selects
+collision7/controller6; `continuousTerrain=true` additionally selects8/7. Fixed
+ordinary MovingObstacle wedges use platform-relative sweep, tangent, carry and
+surface transitions. True triangle/triangle prescribed motion uses continuous SAT.
+Only proved direct opposed flat features receive the single Stop retry; arbitrary
+diagonal crushing/chains still fault. Pair capacities are57/56. Rotation, mass and
+one-way/trigger/Kinematic wedges are outside this surface.
+
+Grounded walkable terrain traversal preserves bounded actual own X when changing
+support, including after a wall clips carrier motion. Crest, valley and exact low
+endpoint handoff share the sole whole-world solver and real continuous trace;
+terminal zero-overlap low endpoints keep the valid old floor tangent. Jump/gap
+motion does not implicitly attach. Old default manifests/wire remain unchanged.
+On an actual walkable inclined landing, terrain8 also settles bounded own X and
+carry together when own intent descends and no jump/drop is active.
+
+Include `AYEntity/DeterministicLevel2D.h` and load a bounded Experimental `.dlt`
+resource before configuration. Use `detLevelSessionConfig(level)` and
+`configureDetLevel2D` in a fresh Session or standard Host recipe, then register
+application input separately. Exact software bits, stable IDs, collision layers,
+characters and named paths are validated through the actual installers. Full
+canonical content enters typed defaults and a pure validator, not only a hash.
+No runtime file owner, mutable cache, general Scene import or automatic packaging
+is introduced. Registration failure still requires discarding the partial Session.
+Examples and actual necessary acceptance are tracked in
+[Stage30–32](../../AYDocs/DETERMINISTIC-TERRAIN-STAGE30-32.md).
+Necessary Windows Release acceptance passed:8 directed/affected regression targets
+and one standard Host Live128 target. SDK doctor passed with no errors/warnings.
+Native platform acceptance remains deferred to the user's final VM environment.

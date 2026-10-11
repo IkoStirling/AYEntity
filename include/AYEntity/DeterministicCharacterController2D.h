@@ -7,6 +7,8 @@ inline constexpr std::uint32_t kDetCharacterController2DAdvancedProfileVersion=2
 inline constexpr std::uint32_t kDetCharacterController2DStepProfileVersion=3;
 inline constexpr std::uint32_t kDetCharacterController2DMotionProfileVersion=4;
 inline constexpr std::uint32_t kDetCharacterController2DSlopeProfileVersion=5;
+inline constexpr std::uint32_t kDetCharacterController2DMovingSlopeProfileVersion=6;
+inline constexpr std::uint32_t kDetCharacterController2DTerrainProfileVersion=7;
 /// Applied once on release/jump with policy caps; direct support changes do not inherit the old carrier.
 enum class DetCharacterLeaveVelocity2D : std::uint32_t {Discard=0,Inherit=1};
 /// Stable fields; internal intent/carry fields are zero at every committed boundary.
@@ -73,7 +75,7 @@ struct DetCharacterController2DConfig {
     /// Scale is finite and strictly between zero and one, even when disabled.
     bool crouchEnabled=false;
     math::DetFloat32 crouchHeightScale=math::DetFloat32::fromInt(1)/math::DetFloat32::fromInt(2);
-    /// Static-slope profile only: maximum rise/run in (0,16]. Steeper surfaces slide and cannot be walked uphill.
+    /// Slope profiles: maximum rise/run in (0,16]. Steeper surfaces slide and cannot be walked uphill.
     /// Default1 is also required when staticSlopes is off, keeping old policy bytes unchanged.
     math::DetFloat32 maxSlopeRisePerRun=math::DetFloat32::fromInt(1);
 };
@@ -197,6 +199,11 @@ struct DetCharacterState2D {
  * request/result fields are internal and zero at every committed boundary.
  */
 /// @brief Install registered character intent/support systems and the sole relative XY collision motion owner.
+/// @note movingSlopes selects controller6/collision7; continuousTerrain selects7/8.
+/// Translating supports use relative tangent/carry. Grounded seam handoff preserves
+/// the actual bounded own X after walls, with one solver and registered carry state.
+/// Terrain8 also adopts carry at a real walkable upward landing while own intent
+/// descends and jump/drop are absent; proximity alone does not attach an airborne body.
 bool installDetCharacterController2D(DeterministicSession& session,DetCharacterController2DConfig config={});
 /// Validated actor block defaults/overrides; other actors keep the disabled zero defaults.
 std::vector<std::uint64_t> detCharacterState2D(const DetCharacterController2DConfig& config,const DetCharacterState2D& state={});

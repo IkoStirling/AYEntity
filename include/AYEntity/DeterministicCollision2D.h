@@ -11,6 +11,8 @@ inline constexpr std::uint32_t kDetCollision2DOneWayProfileVersion=3;
 inline constexpr std::uint32_t kDetCollision2DStepProfileVersion=4;
 inline constexpr std::uint32_t kDetCollision2DMotionProfileVersion=5;
 inline constexpr std::uint32_t kDetCollision2DSlopeProfileVersion=6;
+inline constexpr std::uint32_t kDetCollision2DMovingSlopeProfileVersion=7;
+inline constexpr std::uint32_t kDetCollision2DTerrainProfileVersion=8;
 enum class DetBodyMode2D : std::uint32_t {Disabled=0,Static=1,Kinematic=2,MovingObstacle=3};
 enum class DetCollisionShape2D : std::uint32_t {Aabb=0,SlopeRisesRight=1,SlopeRisesLeft=2};
 enum class DetCollisionMotionPolicy2D : std::uint32_t {Fault=0,StopPrescribedOnConflict=1};
@@ -34,7 +36,8 @@ struct DetCollisionBody2D {
     /// Profile3: one stable one-way ID ignored by this solid Kinematic body.
     /// A retired identity is harmless; unknown/self/non-platform references are rejected.
     DetEntityRef ignoredOneWay{};
-    /// Profile6 only: filled static right-triangle wedge; never one-way/trigger.
+    /// Profile6: Static filled wedge. Profile7 additionally permits translating
+    /// MovingObstacle wedges. Never Kinematic, one-way or trigger wedges.
     DetCollisionShape2D shape=DetCollisionShape2D::Aabb;
 };
 /** @brief Immutable registered collision policy, captured by value by the installed system.
@@ -82,6 +85,14 @@ struct DetCollision2DConfig {
     /// split the whole-world path at the wedge's high-end surface transition;
     /// these events share the ordinary contact-pass budget. Old profiles are unchanged.
     bool staticSlopes=false;
+    /// Explicit profile7, requires staticSlopes. Fixed wedge shapes may translate
+    /// as ordinary MovingObstacle bodies; all sweeps and responses are relative.
+    /// At most57 trigger pairs. No rotation, one-way or trigger wedges.
+    bool movingSlopes=false;
+    /// Explicit profile8, requires movingSlopes. Grounded support follows the
+    /// continuous upper surface of adjacent walkable shapes in the sole solver.
+    /// At most56 trigger pairs; jumps and airborne actors never attach implicitly.
+    bool continuousTerrain=false;
 };
 struct DetCollisionProxy2D {
     SimEntityId id=0;
@@ -132,8 +143,13 @@ std::vector<std::uint64_t> detCollisionBodyState2D(const DetCollision2DConfig& c
  * Only classified prescribed conflicts receive one safe retry. Original invalid
  * geometry, nonfinite/unrepresentable motion and resource errors are not recovery.
  * Ordinary one-way passages are unchanged and are not opposed-face pinch evidence.
- * @note Profile6 uses filled wedge narrowphase and separately rounded tangent projection;
- * no capsule, curved/moving slope, mass, restitution or surface-friction solver.
+ * @note Profile6 uses filled wedge narrowphase and separately rounded tangent projection.
+ * Explicit movingSlopes/continuousTerrain select profiles7/8 (57/56 pair caps).
+ * Moving wedge responses use the platform frame; true triangle/triangle prescribed
+ * sweeps use SAT. Recoverable pinch still requires directly proved opposed flat
+ * features; arbitrary diagonal crushing/chains fault. Profile8 follows grounded
+ * walkable seams while preserving bounded own X; no implicit gap/jump attachment.
+ * No capsule, curved/rotating slope, mass, restitution or surface-friction solver.
  */
 bool installDetCollision2D(DeterministicSession& session,DetCollision2DConfig config={});
 enum class DetTriggerPhase2D : std::uint32_t {Enter=1,Stay=2,Exit=3};

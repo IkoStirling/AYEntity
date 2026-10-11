@@ -15,7 +15,7 @@ struct DetCollisionQueryFilter2D {
     bool includeTriggers=true;
 };
 /// @brief Stable actor identity and an owned software-geometry scene-query hit.
-/// @note Profiles1..5 have axis0/1. Profile6 axis2 identifies the non-unit upward
+/// @note Profiles1..5 have axis0/1. Profiles6..8 axis2 identifies the non-unit upward
 /// slope normal; consumers must not interpret it as an AABB Y response axis.
 struct DetCollisionQueryHit2D {
     SimEntityId entity=0;
@@ -41,12 +41,14 @@ struct DetCollisionQueryHit2D {
  * a previous snapshot keeps its original values. Z, rotation and scale do not affect
  * shapes; offsets are in world XY. Sweep uses frozen target boxes, including moving
  * obstacles, and does not predict their subsequent movement or solve response.
- * Matching collision profiles1..6 are supported. Profile3 one-way and ignored
+ * Matching collision profiles1..8 are supported. Profile3 one-way and ignored
  * platform flags do not remove geometric proxies or apply top-only response:
  * queries report full represented boxes from every direction.
  * Profile6 static wedges retain their actual filled triangle narrowphase;
  * the empty enclosing-box corner does not overlap/hit. Axis2 identifies the
  * raw upward slope normal, with time/axis/stable-ID ordering (X/Y/Slope ties).
+ * Profiles7/8 include translating wedges at their captured position, retaining
+ * the same frozen geometric query semantics; they do not predict platform motion.
  *
  * overlap returns all matching stable IDs in ascending order. Ray/sweep hits are
  * ordered by (software fraction, axis, stable ID); X wins exact entry-time ties.
