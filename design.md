@@ -2866,3 +2866,31 @@ standard build exit1 had no compiler diagnostic; cause remains unconfirmed.
 All three failed receipts remain. The new test changed across batches, so whole
 source snapshots are not claimed identical between them. Stage55 standalone
 core evidence remains separate historical scope.
+
+## Stage57: validated starter acquisition and bit-text boundary
+
+The existing CLI adapts software text and public Level factories. `float-bits`
+requires exact8 hexadecimal spelling and finite binary32, then formats that same
+bit pattern without native floating conversion; `float` retains its previous
+parser/rounding. No numeric/profile/checkpoint/save/replay wire changes follow.
+
+The two source-defined starters are initial content, not an application factory.
+Both author reciprocal solid Kinematic10/Static100 bodies at exact dyadic standing
+positions; format1 selects ordinary Character, format10 selects explicit advanced
+Character/one-way policy and one groundOnly Control owner. application/input1 and
+step1/64 belong to their content identity. No Enemy, HP, attacks, progress, rules,
+mutable dash phase or input mapping is inferred. A caller needs matching input
+and Host ownership. The first pre can legitimately refuse groundOnly dash when
+initial committed support has not yet been established.
+
+Complete validation/seal and canonical encoding precede fresh exclusive output;
+existing targets never get replaced. Flush and close failures retain diagnostics
+and can leave a partial new file for explicit handling, without deletion or
+durability claims. Existing format1..10 serialization branches are unchanged.
+Actual local Stage57 LevelToolChecks passed1.8485s; standard Tool build4.953s.
+The existing finite gate exercised reverse1.25/-0 and malformed/nonfinite cases,
+both real fresh starters/create/validate/inspect, full canonical byte roundtrip,
+and no-overwrite/invalid-kind paths. Source/executable pins and before/after
+snapshots match stage57-actual-freeze.json; no production retry/fix. Physical
+flush/close fault injection was not run. No simulation matrix or new Host
+recipe is accepted by these static authoring checks; native final VM Deferred.

@@ -265,3 +265,46 @@ not new10 content Pak combat. Initial fresh seal is static acquisition, not
 movement/save proof. New fixture ADL/source-vs-canonical failures and the
 diagnostic-free first standard build failure are preserved; production unchanged.
 Final native VM deferred, without new matrix or long campaign.
+
+## Stage57: finite bits and editable character/dash starters
+
+```text
+aydetlevel float-bits 3FA00000
+aydetlevel float-bits 80000000
+aydetlevel create character fresh-character.dlt
+aydetlevel create dash fresh-dash.dlt
+aydetlevel validate fresh-dash.dlt
+aydetlevel inspect fresh-dash.dlt
+```
+
+`float-bits` takes exactly eight hexadecimal digits, either letter case, without
+`0x`, spaces or nonhex characters. It rejects NaN/Inf patterns and returns the
+same JSON bits/textProfile/exactDecimal fields: `3FA00000` gives `3fa00000`/`1.25`,
+and `80000000` retains `-0`. Existing finite-decimal `float` is unchanged. Finite
+subnormals and signed zero use the existing exact software formatter; no native
+float conversion or new numeric profile is introduced.
+
+`create character` emits canonical format1. `create dash` emits format10 with
+advanced Character, explicit one-way-capable collision and one groundOnly
+Control1 owner (dashSpeed8, duration8, cooldown16). Both contain hero10 center(0,1/2), half(1/4,1/2), layer1/mask2,
+and Static floor100 center(0,-1/2), half(8,1/2), layer2/mask1. These are exactly
+two actors, with no Brain/Attack/HP/rules. Both use app/input1 and step1/64.
+The returned inspection describes the created content. Its validity is checked
+through actual public Level preparation/fresh Session seal before canonical text
+is exclusively written. The caller still needs a matching application input/
+Host recipe; these starters are not the existing app56/input7 detcontrol scene.
+A groundOnly dash may be denied on the first pre before support is committed.
+
+Output must be fresh and its parent must exist. Unknown kind, invalid content or
+invalid arguments do not create output. An existing output is never replaced;
+physical write/flush/close failure may leave a partial new file for explicit
+handling. There is no automatic cleanup, save migration or crash-durability claim.
+All commands run outside Sim; the tool does not provide a new tick/input owner.
+
+Actual Stage57 local Release LevelToolChecks passed1.8485s, and standard Tool
+build passed4.953s. The single finite gate exercised reverse1.25/signed-zero and
+malformed/nonfinite rejection, both real create/validate/inspect starters/full
+canonical byte roundtrips, existing-output and unknown-kind protection. Source
+and executable pins match stage57-actual-freeze.json and before/after snapshots
+are equal; no production retry/fix. Physical I/O fault injection was not run.
+Historical gameplay receipts are separate; native final VM Deferred.

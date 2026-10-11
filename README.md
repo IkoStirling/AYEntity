@@ -1321,3 +1321,26 @@ standard build exit1 had no compiler diagnostic; cause remains unconfirmed.
 All three failed receipts remain. The new test changed across batches, so whole
 source snapshots are not claimed identical between them. Stage55 standalone
 core evidence remains separate historical scope.
+
+## Stage57: offline finite bits and editable character content starters
+
+The offline `aydetlevel float-bits <eight-hex-digits>` accepts finite software
+Float32 patterns (no `0x`/whitespace), returns canonical lowercase bits and the
+unchanged exact decimal formatter, including signed zero. Existing decimal
+`float` behavior is unchanged.
+
+`aydetlevel create character fresh.dlt` and `create dash fresh.dlt` prepare and
+validate public Level content before exclusive canonical output. Both have
+Kinematic hero10 standing on Static floor100; character uses format1, dash uses
+format10/advanced Character and one groundOnly Control owner. They use app/input1
+and step1/64 with no Brain/Attack/HP/rules. Supply a matching application input/
+Host recipe; the existing app56/input7 detcontrol scene is separate. Static seal
+does not establish future motion or first-pre ground evidence. Fresh-only output
+protects existing files; an I/O failure may retain a partial new file.
+
+See [tool usage](tools/detlevel/README.md) and [tool design](tools/detlevel/design.md).
+Actual Stage57 local Release LevelToolChecks passed1.8485s; standard Tool build
+passed4.953s. Both starter create/validate/inspect and complete canonical bytes,
+finite1.25/-0, malformed/nonfinite and protected/unknown-kind cases passed with
+unchanged source snapshots. No new Host/matrix/long gate,
+numeric/simulation wire profile or native success is implied. Final VM Deferred.

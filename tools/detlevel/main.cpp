@@ -29,6 +29,50 @@ void ordinary(const std::filesystem::path& path) {
     require(!std::filesystem::is_symlink(path) && std::filesystem::is_regular_file(path),
         "Input must be an ordinary, non-symlink file");
 }
+// Offline authoring helper: every value entering a level is software binary32.
+DetLevel2D starter(std::string_view kind) {
+    using D=ayt::math::DetFloat32;
+    require(kind=="character" || kind=="dash","Unknown starter; choose character or dash");
+    DetLevel2D level;
+    DetLevelActor2D hero;hero.id=10;hero.character=true;hero.body.mode=DetBodyMode2D::Kinematic;
+    hero.position={D{},D::fromInt(1)/D::fromInt(2)};
+    hero.body.half={D::fromInt(1)/D::fromInt(4),D::fromInt(1)/D::fromInt(2)};
+    hero.body.layer=1;hero.body.mask=2;
+    DetLevelActor2D floor;floor.id=100;floor.body.mode=DetBodyMode2D::Static;
+    floor.position={D{},-D::fromInt(1)/D::fromInt(2)};
+    floor.body.half={D::fromInt(8),D::fromInt(1)/D::fromInt(2)};
+    floor.body.layer=2;floor.body.mask=1;
+    level.actors={hero,floor};
+    if(kind=="dash") {
+        level.formatVersion=kDetLevel2DCharacterControlProfileVersion;
+        level.character.advanced=true;level.character.collision.oneWayPlatforms=true;
+        DetCharacterControlOwner2D owner;owner.actor=hero.id;owner.groundOnly=true;
+        level.characterControlOwners={owner};
+    }
+    return level;
+}
+void writeFresh(const std::filesystem::path& destination,const std::string& canonical) {
+    require(!std::filesystem::exists(destination) && !std::filesystem::is_symlink(destination),"Output must be fresh");
+    std::ofstream output(destination,std::ios::binary|std::ios::out|std::ios::noreplace);
+    require(bool(output),"Cannot exclusively create output");
+    output.write(canonical.data(),static_cast<std::streamsize>(canonical.size()));output.flush();
+    const bool wrote=bool(output);output.close();
+    require(wrote && bool(output),"Canonical output failed; partial fresh file may remain");
+}
+ayt::math::DetFloat32 finiteBits(std::string_view token) {
+    require(token.size()==8,"float-bits requires exactly eight hexadecimal digits");
+    std::uint32_t raw=0;
+    for(char c:token) {
+        unsigned digit;
+        if(c>='0' && c<='9')digit=static_cast<unsigned>(c-'0');
+        else if(c>='a' && c<='f')digit=static_cast<unsigned>(c-'a'+10);
+        else if(c>='A' && c<='F')digit=static_cast<unsigned>(c-'A'+10);
+        else throw std::runtime_error("float-bits requires hexadecimal digits");
+        raw=(raw<<4)|digit;
+    }
+    auto value=ayt::math::DetFloat32::fromBits(raw);
+    require(value.isFinite(),"float-bits requires a finite Float32 value");return value;
+}
 void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
     const auto config=detLevelSessionConfig(level);
     std::cout<<"{\"schema\":1,\"status\":\"passed\",\"source\":"<<json(source.generic_string())
@@ -158,12 +202,29 @@ int run(int argc,char** argv) {
         std::cout<<"aydetlevel validate <level.dlt>\naydetlevel inspect <level.dlt>\n"
             "aydetlevel canonicalize <level.dlt> <fresh.dlt>\n"
             "aydetlevel float <finite-decimal>\n"
+            "aydetlevel float-bits <eight-hex-digits>\n"
+            "aydetlevel create <character|dash> <fresh.dlt>\n"
             "Validates the real initial Session pipeline. Canonicalize preserves exact Float32 bits.\n"
-            "No input overwrite, arbitrary Scene import, runtime hot reload or cook is performed.\n";
+            "Starters use application/input1, fixed1/64 and require a matching application input recipe.\n"
+            "Output must be fresh; failed physical writes may leave a partial new file.\n";
         return 0;
     }
     require(argc>=3,"Use aydetlevel --help for commands");
     const std::string_view command=argv[1];
+    if(command=="create") {
+        require(argc==4,"create requires a starter name and a fresh output path");
+        auto level=starter(argv[2]);std::string error;
+        require(validateDetLevel2D(level,error),error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[3];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
+    }
+    if(command=="float-bits") {
+        require(argc==3,"float-bits requires one finite binary32 bit token");const auto value=finiteBits(argv[2]);
+        std::cout<<"{\"schema\":1,\"status\":\"passed\",\"command\":\"float-bits\",\"textProfile\":"
+            <<ayt::math::kDetFloatTextProfileVersion<<",\"bits\":"<<json(bits(value.bits()))
+            <<",\"exactDecimal\":"<<json(ayt::math::detFloat32ExactDecimal(value))<<"}\n";return 0;
+    }
     if(command=="float"){
         require(argc==3,"float requires one finite decimal token");ayt::math::DetFloat32 value;
         require(ayt::math::parseDetFloat32Decimal(argv[2],value),"Invalid, overflowing or over-budget finite decimal");
@@ -177,12 +238,7 @@ int run(int argc,char** argv) {
     DetLevel2D level;std::string error;require(loadDetLevel2D(source,level,error),error);
     if(command=="canonicalize") {
         const std::filesystem::path destination=argv[3];
-        require(!std::filesystem::exists(destination) && !std::filesystem::is_symlink(destination),"Output must be fresh");
-        const auto canonical=encodeDetLevel2D(level);
-        std::ofstream output(destination,std::ios::binary|std::ios::out|std::ios::noreplace);
-        require(bool(output),"Cannot exclusively create output");
-        output.write(canonical.data(),static_cast<std::streamsize>(canonical.size()));output.flush();
-        const bool wrote=bool(output);output.close();require(wrote && bool(output),"Canonical output failed; partial fresh file may remain");
+        const auto canonical=encodeDetLevel2D(level);writeFresh(destination,canonical);
     }
     inspect(level,source);return 0;
 }
