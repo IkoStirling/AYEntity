@@ -2298,3 +2298,47 @@ playback, seek and real interactive input, plus per-tick replay/seek traces.
 No existing numeric/geometry/collision/controller/path/level/wire profile changes;
 no new persistent resource format. Full contract and actual acceptance are in
 [Stage33–35](../../AYDocs/DETERMINISTIC-INTERACTION-STAGE33-35.md).
+
+## Stage36–40: authored policy, finite progress and external persistence
+
+Level format2 extends the existing strict grammar after actors with actions and
+rules. Format1 refuses nondefault new fields and preserves original semantic
+bytes/hash. Format2 binds full tables and resolved action/path authority into the
+level's canonical content. Real fresh install/seal preflight checks references,
+schema budgets, geometry and ordering; decode/getters do not invoke application
+callbacks. Destination configuration then installs internal facades, invokes the
+optional beforeActors hook once, registers content identity and creates actors.
+Setup is not transactional; any rejection leaves a destination to discard.
+
+Progress profile1 binds complete Actions identity plus sorted counters,
+thresholds and claim permissions in up to10000 policy bytes/10 chunks. Mutable
+global state has at most57 fields; immutable actor copies stay at defaults.
+Counter operations use checked UInt64 arithmetic and inclusive bounds. Objectives
+are derived, with no irreversible completion latch. A claim self-checks producer,
+type, delivered Enter pair, live reciprocal participation and counter range before
+the sole Actions collision disable. Only Applied increments/marks the claim.
+Denied requests register a result but preserve progress and target participation.
+Retired references remain known; an unknown identity or a re-enabled collected
+live trigger is semantically invalid. Pure validation covers identity, defaults,
+values, results and time stamps at seal, commit, capture and restore.
+
+Save envelope1 adds only an ordinary-file container around the original canonical
+checkpoint codec; input/checkpoint/replay profiles are unchanged. Exact EOF and
+8MiB payload bound precede staged decode. Encode/decode preflight precedes exclusive
+fresh creation; write/flush/close failures explicitly retain possible partial
+output. There is no replacement transaction, resource handle persistence, slot
+manager, authentication or durability claim. Session restore remains the semantic
+and manifest gate. The Host example performs read/restore/resume outside tick
+callbacks and accepts recovery only in Live mode.
+
+The authoring CLI consumes the same decoder/real seal as runtime and emits exact
+bits/stable IDs without native floating-point rounding. Its canonicalizer retains
+every authored field and format version, with fresh-only output. The real content
+Host adds registered application progress consumers/observers; they consume actual
+Enter events and inspect committed mask/path/support results. Six short process
+paths compare complete checkpoints and per-tick continuation traces, including a
+fresh Host loaded at64 and real stdin recovery. Tests establish these bounded
+scenarios, not an independent full-byte oracle or general rigid-body correctness.
+All seven necessary/affected local Release targets pass; native VM acceptance and
+resource/editor/cook integration remain outside this stage. See
+[the execution record](../../AYDocs/DETERMINISTIC-CONTENT-TEN-HOUR-20261011.md).

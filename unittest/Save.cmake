@@ -1,0 +1,15 @@
+# design reference: AYEntity/design.md Stage38; fresh persistent canonical saves.
+if(NOT DEFINED _det_character_library)
+    set(_det_character_library AYEntityDeterminism)
+endif()
+add_executable(AYEntity_SaveChecks "${AYENTITY_ROOT}/unittest/portable/save.cpp")
+target_link_libraries(AYEntity_SaveChecks PRIVATE ${_det_character_library})
+target_compile_features(AYEntity_SaveChecks PRIVATE cxx_std_23)
+if(MSVC)
+    target_compile_options(AYEntity_SaveChecks PRIVATE /utf-8)
+endif()
+set(_det_save_artifacts "${CMAKE_CURRENT_BINARY_DIR}/save-artifacts")
+file(MAKE_DIRECTORY "${_det_save_artifacts}")
+add_test(NAME AYEntity_SaveChecks COMMAND AYEntity_SaveChecks --output "${_det_save_artifacts}")
+set_tests_properties(AYEntity_SaveChecks PROPERTIES TIMEOUT 60
+    LABELS "ayentity;determinism;save;checkpoint;restore")

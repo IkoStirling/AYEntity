@@ -71,19 +71,9 @@ DetTypedStateSchema statistics(){return {statsSchema,1,{{DoorWasClosed,true},{Pa
     {RestartDeniedCount,std::uint64_t{0}}}};}
 void count(DetTickContext& ctx,std::uint32_t field){const auto before=ctx.readGlobal<std::uint64_t>(statsSchema,field);
     require(before!=UINT64_MAX,"Example feature counter overflow");ctx.writeGlobal(statsSchema,field,before+1);}
-DetActions2DConfig actionPolicy(const DetLevel2D& level){DetActions2DConfig c;c.collision=level.character.collision;
-    c.targets={{door,1,true,std::nullopt},{platform,16,true,detLevelPathConfig2D(level,1)},
-        {collectible,1,true,std::nullopt}};return c;}
-DetInteraction2DConfig interactionPolicy(const DetActions2DConfig& actions){DetInteraction2DConfig c;c.actions=actions;
-    c.rules={{1,200,player,DetTriggerPhase2D::Enter,{door,DetActionKind2D::CollisionDisable},false,8,2},
-        {2,200,player,DetTriggerPhase2D::Exit,{platform,DetActionKind2D::PathPause},false,8,0},
-        {3,210,player,DetTriggerPhase2D::Enter,{platform,DetActionKind2D::PathResume},false,8,2},
-        {4,collectible,player,DetTriggerPhase2D::Enter,{collectible,DetActionKind2D::CollisionDisable},true,0,0},
-        {5,collectible,player,DetTriggerPhase2D::Exit,{door,DetActionKind2D::CollisionEnable},false,0,8}};return c;}
 bool configure(DeterministicSession& session,const DetLevel2D& level,const DetInteraction2DConfig& rules){
     if(!session.registerTypedSchema(statistics()) || !session.registerGlobalState(statsSchema)
-        || !session.registerLogicProfile(observeSystem,1,0x44494e54484f5331ULL)
-        || !installDetActions2D(session,rules.actions) || !installDetInteraction2D(session,rules))return false;
+        || !session.registerLogicProfile(observeSystem,1,0x44494e54484f5331ULL))return false;
     if(!session.registerSystem(inputSystem,level.character.collision.priority,[level,actions=rules.actions](DetTickContext& ctx){
         const auto& commands=ctx.input().commands;
         if(commands.empty() || commands.size()>2)return false;
@@ -172,7 +162,7 @@ void help(){std::cout<<"Commands: right [ticks], left [ticks], idle [ticks], jum
 int run(const Options& opts){require(std::filesystem::is_regular_file(opts.level) && !std::filesystem::is_symlink(opts.level),"Level must be an ordinary file");
     DetLevel2D level;std::string error;require(loadDetLevel2D(opts.level,level,error),error);
     require(level.stepNumerator==1 && level.stepDenominator==64,"Example requires1/64fixed step");
-    const auto rules=interactionPolicy(actionPolicy(level));
+    const auto rules=detLevelInteractionConfig2D(level);
     if(opts.mode==DetHostMode::Record){auto path=opts.replay;if(!std::filesystem::path(path).has_extension())path+=".rpl";
         require(!std::filesystem::exists(path) && !std::filesystem::exists(ayt::replay::FileReplayRecorder::rotationPathFor(path,0)),"Record destination exists");}
     if(!opts.output.empty())for(const auto* suffix:{".state",".trace",".summary.json"})

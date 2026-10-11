@@ -95,6 +95,8 @@ add_library(ReplayArchiveKernel STATIC "${AYENTITY_ROOT}/src/AYDeterministicSess
     "${AYENTITY_ROOT}/src/AYDeterministicCharacterController2D.cpp" "${AYENTITY_ROOT}/src/AYDeterministicPathMotion2D.cpp" "${AYENTITY_ROOT}/src/AYDeterministicReplay.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicLevel2D.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicActions2D.cpp" "${AYENTITY_ROOT}/src/AYDeterministicInteraction2D.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicSave.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicProgress2D.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRollback.cpp" "${AYENTITY_ROOT}/src/AYDeterministicRollbackNetwork.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRollbackReplay.cpp" "${AYMATH_ROOT}/src/DetFloat.cpp" "${AYMATH_ROOT}/src/DetMath.cpp"
     $<TARGET_OBJECTS:TypedStateBackend>)
@@ -146,5 +148,9 @@ include("${AYENTITY_ROOT}/unittest/MotionPolicy.cmake")
 include("${AYENTITY_ROOT}/unittest/CharacterSlopes.cmake")
 include("${AYENTITY_ROOT}/unittest/MovingSlopes.cmake")
 include("${AYENTITY_ROOT}/unittest/Level2D.cmake")
+include("${AYENTITY_ROOT}/unittest/LevelInteraction2D.cmake")
+include("${AYENTITY_ROOT}/unittest/Save.cmake")
+include("${AYENTITY_ROOT}/unittest/Progress2D.cmake")
+include("${AYENTITY_ROOT}/unittest/LevelTool.cmake")
 include("${AYENTITY_ROOT}/unittest/Actions2D.cmake")
 include("${AYENTITY_ROOT}/unittest/Interaction2D.cmake")

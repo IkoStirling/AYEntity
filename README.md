@@ -867,3 +867,47 @@ existing Record/Replay/Seek. Build with testing or
 gate are in [the example](examples/detinteraction/README.md); necessary local
 acceptance and final native deferral are recorded in
 [Stage33–35](../../AYDocs/DETERMINISTIC-INTERACTION-STAGE33-35.md).
+
+## Authored interactions, progress and persistent content (Stage36–40)
+
+Experimental `.dlt` format2 adds bounded action targets and Enter/Exit rules to
+the level file. `configureDetLevel2D` installs these internally; acquire their
+resolved policies through `detLevelActionsConfig2D` and
+`detLevelInteractionConfig2D`, rather than installing a second copy. Format1's
+canonical bytes and identity remain unchanged. All authored fields and resolved
+path policies bind the manifest. The optional `beforeActors` registration hook
+runs only on the destination, after scratch preflight and internal installers,
+before level identity and actors; false/throw requires discarding that Session.
+
+`DeterministicProgress2D.h` provides16 inclusive UInt64 counters,8 derived AND
+objectives (up to8 thresholds each), and16 collectible permissions. Install it
+after matching Actions and before actors. Explicit operations precede path and
+character pre. A claim requires an actual canonical Enter and an Applied trigger
+disable; normal refusal preserves both value and claim state. Objectives can
+reverse after subtraction. Collected live triggers must retain mask0; full policy,
+values, claims and result stamps are checkpoint authority. No automatic consumer
+or retry queue is installed by this facade.
+
+`DeterministicSave.h` reads/writes bounded `.dsv` files outside Sim. A16-byte
+AYDSAVE1/version1/length envelope holds the unchanged complete checkpoint payload
+(at most8MiB). Writes exclusively create fresh files. Decode is output-atomic;
+application compatibility still requires Session restore. Host callers use
+`readDetSave` then controller restore/resume at a permitted Live frame boundary.
+An I/O failure may leave a partial new file; replacement, migration and crash
+durability are not provided.
+
+The `AYEntity_DetLevelTool` target produces `aydetlevel validate/inspect/canonicalize`;
+see [the authoring tool](tools/detlevel/README.md). The new
+`AYEntity_DetContentExample` uses an actual moving platform, pause/resume zones,
+two collectibles, a door, a conditional finish and persistent save/load. Build
+with testing or `AY_ENTITY_BUILD_DET_CONTENT_EXAMPLE=ON`; commands and integration
+scope are in [the content example](examples/detcontent/README.md).
+
+Necessary Windows Release checks are **LocalPassed**: LevelInteraction2D,
+Progress2D, Save and LevelTool; the unchanged-format Level2D regression and
+affected Interaction Host also pass. The content Host gate compares complete
+final checkpoints across six short Live/load/Record/Replay/Seek/stdin processes,
+with actual feature observations and saved64-tick continuation. Native acceptance
+remains deferred to the user's final VM environment. Actual evidence and the
+ongoing ten-hour task are tracked in
+[the execution plan](../../AYDocs/DETERMINISTIC-CONTENT-TEN-HOUR-20261011.md).

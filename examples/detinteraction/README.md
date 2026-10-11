@@ -1,4 +1,4 @@
-# Deterministic interactive level (Stage35)
+# Deterministic interactive level (Stage35, file-authored Stage36)
 
 This console example uses the standard `EngineModuleRuntime` and module-owned
 `DeterminismHost`. It loads the existing `.dlt` format and binds public Actions
@@ -21,6 +21,11 @@ commands act once and advance one tick. `status` and `help` do not tick.
 boundary and resumes. Record does not allow rewriting history. `quit` or EOF
 ends the current session. Input is read before Host frames and encoded into
 canonical tick commands; the simulation callbacks never read stdin/devices.
+
+The `.dlt` format2 target/rule sections configure the sample; the Host no longer
+hardcodes the rule table or repeats the Actions/Interaction installers. Level
+getters resolve the exact registered policies; changing a rule changes complete
+manifest identity. Format1 resources retain their original encoding and defaults.
 
 The sample's plate200 opens door110 after2 ticks. Leaving it pauses platform130;
 entering plate210 resumes the platform after2 ticks. Collectible220 disables its
@@ -61,6 +66,8 @@ complete final checkpoint bytes across all five, Record/Replay per-tick hashes,
 and the Seek suffix. Necessary local results are recorded in
 [Stage33–35](../../../../AYDocs/DETERMINISTIC-INTERACTION-STAGE33-35.md).
 
-No new file format, rule hot reload, arbitrary callback action, persistent
-inventory, visual input binding or editor/AYResource/cook integration is implied.
-Rule/target configuration is immutable C++ policy with full manifest identity.
+The original Stage35 results remain historical. Current file-authored validation
+is recorded in [the execution record](../../../../AYDocs/DETERMINISTIC-CONTENT-TEN-HOUR-20261011.md).
+There is no rule hot reload, arbitrary callback action, visual input binding or
+editor/AYResource/cook integration. Registered progress and file saves are separate
+facades demonstrated in [the content example](../detcontent/README.md).
