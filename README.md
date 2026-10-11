@@ -927,8 +927,8 @@ including denial. Non-once requires a later false→true edge. Registered counts
 results, edge memory and complete policy restore with the Session. The policy
 limit12288 bytes can require13 chunks plus two mutable schemas, within the total
 Session budget. A later write changing a routed objective's truth faults at the
-boundary. Level2 can install Progress/Flow through its beforeActors hook; file
-authored Progress/Flow is a separate forthcoming format3 capability.
+boundary. Level2 can install Progress/Flow through its beforeActors hook; formats3/4
+also author and internally install complete Progress/Flow tables.
 
 `AYEntity_ProgressFlow2DChecks` is LocalPassed in Windows Release (0.264903s),
 including actual Enter/gates/denials, objective reversal,8-tick complete checkpoint
@@ -977,3 +977,23 @@ The necessary Windows Release gate is LocalPassed: three resource lanes,8ticks e
 27 complete checkpoint comparisons,14 rejection checks and302-character cache
 staging/replacement/reuse. Deep-path copy has no separate coverage claim. Final
 native VM acceptance remains deferred.
+
+## Stage46: authored checkpoint/death/manual content
+
+`AYDLEVEL 4` retains all existing content and adds explicit Respawn ownership and
+actor-specific spawn/default/region tables. Configure installs the sole fresh
+controller8/collision9/Respawn1 and RespawnFlow1. Read `detLevelRespawnConfig2D` /
+`detLevelRespawnFlowConfig2D`; do not install a second motion facade. Input precedes
+routing, which precedes ProgressFlow, Interaction and all path/character pre.
+Original1/2/3 bytes/hash remain unchanged. Actions2 binds complete new ownership;
+false retains Actions1. Progress/Flow/Path algorithm and profile remain1. The Path
+facade exposes its unchanged canonical state descriptor for pure typed observers.
+
+Routes select all real checkpoint Enter events before death/manual arbitration.
+Death wins manual; each actor attempts once per tick, and ordinary denial/Stay has
+no hidden retry. Accepted endpoint Enter is real and can select a checkpoint again.
+Copied registered state distinguishes requests from actual collision outcomes.
+Start from [the standard Host example](examples/detcheckpoint/README.md). Necessary
+core/Level4 and six128-tick Host paths passed, including keys/exit, collision door,
+real platform carrying, death and manual relocation with save/load/replay/seek/stdin.
+This stage adds no implicit damage/health system or final native acceptance.

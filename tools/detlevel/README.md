@@ -79,6 +79,28 @@ Nonfinite, overflow or out-of-budget input is refused with a JSON diagnostic.
 Registration ranges remain an application choice
 in `DetLevel2DOptions`, rather than arbitrary gameplay-authored system IDs.
 
+Format4 retains every format3 table, adds `characterRespawn` as the final collision
+row boolean, and appends before `end`:
+
+```text
+respawn <spawn-count> <actor-default-count> <region-count>
+spawn <id> <actor-id> <x-bits> <y-bits>
+defaultspawn <actor-id> <spawn-id>
+region <id> <trigger-id> <actor-id> <kind> <spawn-id>
+```
+
+Spawn/default/region limits are8/8/16 and references are actor-specific. Kind0 is
+Checkpoint and names a spawn; kind1 is Death and requires spawn0. Death uses the
+active checkpoint after all delivered checkpoint Enter events are selected. A
+simultaneous death wins over the one-tick manual flag. Each actor attempts at most
+one request in a processing tick. Normal denial has no hidden retry; Stay does
+not request again. Accepted endpoint Enter is an actual event on the next tick.
+Respawn requires advanced/extended/one-way policy and at most55 trigger pairs;
+false requires all three new tables empty. Formats1..3 reject the new flag/tables
+and keep original canonical bytes/hash. Validate tests the actual combined Session
+budget. Start from [the checkpoint example](../../examples/detcheckpoint/content.dlt).
+`inspect` returns complete spawn/default/region tables plus their counts and opt-in.
+
 This tool does not import a Scene/Tilemap, use native float parsing, hot reload
 a running Session, migrate a save or cook/package an asset. Resource loading and
 authoring stay outside simulation ticks. See

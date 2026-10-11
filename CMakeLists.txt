@@ -10,6 +10,7 @@ option(AY_ENTITY_BUILD_DET_CHARACTER_EXAMPLE "Build the standard Host determinis
 option(AY_ENTITY_BUILD_DET_TERRAIN_EXAMPLE "Build the standard Host deterministic level example" OFF)
 option(AY_ENTITY_BUILD_DET_INTERACTION_EXAMPLE "Build the interactive deterministic level example" OFF)
 option(AY_ENTITY_BUILD_DET_CONTENT_EXAMPLE "Build the deterministic progress and persistent save example" OFF)
+option(AY_ENTITY_BUILD_DET_CHECKPOINT_EXAMPLE "Build authored checkpoint and death content example" OFF)
 option(AY_ENTITY_LEVEL_RESOURCES "Enable optional deterministic level Resource/import/cook adapters" OFF)
 
 # These defaults also allow AYEntity to be configured as a standalone
@@ -108,6 +109,7 @@ if(TARGET AYReplay)
         src/AYDeterministicProgress2D.cpp
         src/AYDeterministicProgressFlow2D.cpp
         src/AYDeterministicCharacterRespawn2D.cpp
+        src/AYDeterministicCharacterRespawnFlow2D.cpp
         src/AYDeterministicLevelCooked2D.cpp
         src/AYDeterministicLockstepProtocol.cpp src/AYDeterministicLockstep.cpp
         src/AYDeterministicRollback.cpp src/AYDeterministicRollbackNetwork.cpp src/AYDeterministicTransport.cpp)
@@ -178,9 +180,12 @@ if(TARGET AYReplay)
         include(unittest/ProgressFlow2D.cmake)
         include(unittest/LevelProgress3.cmake)
         include(unittest/CharacterRespawn.cmake)
+        include(unittest/CharacterRespawnFlow2D.cmake)
+        include(unittest/LevelRespawn4.cmake)
         include(unittest/LevelCooked2D.cmake)
         include(unittest/LevelTool.cmake)
         include(unittest/ContentHost.cmake)
+        include(unittest/CheckpointHost.cmake)
         include(unittest/Actions2D.cmake)
         include(unittest/Interaction2D.cmake)
         include(unittest/InteractionHost.cmake)
@@ -238,7 +243,16 @@ function(ay_entity_add_determinism_host_integration)
             target_compile_options(AYEntity_DetContentExample PRIVATE /utf-8)
         endif()
     endif()
+    if(BUILD_TESTING OR AY_ENTITY_BUILD_DET_CHECKPOINT_EXAMPLE)
+        add_executable(AYEntity_DetCheckpointExample "${_root}/examples/detcheckpoint/host.cpp")
+        target_link_libraries(AYEntity_DetCheckpointExample PRIVATE AYEntityDeterminismHost)
+        target_compile_features(AYEntity_DetCheckpointExample PRIVATE cxx_std_23)
+        if(MSVC)
+            target_compile_options(AYEntity_DetCheckpointExample PRIVATE /utf-8)
+        endif()
+    endif()
       if(BUILD_TESTING)
+        ay_entity_add_checkpoint_host_check()
         ay_entity_add_content_host_check()
         ay_entity_add_interaction_host_check()
         ay_entity_add_terrain_host_check()

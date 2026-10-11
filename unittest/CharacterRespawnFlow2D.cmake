@@ -1,0 +1,15 @@
+# design reference: AYEntity/design.md finite registered content respawn routing.
+if(NOT DEFINED _det_character_library)
+    set(_det_character_library AYEntityDeterminism)
+endif()
+add_executable(AYEntity_CharacterRespawnFlow2DChecks "${AYENTITY_ROOT}/unittest/portable/respawnflow2d.cpp")
+target_link_libraries(AYEntity_CharacterRespawnFlow2DChecks PRIVATE ${_det_character_library})
+target_compile_features(AYEntity_CharacterRespawnFlow2DChecks PRIVATE cxx_std_23)
+if(MSVC)
+    target_compile_options(AYEntity_CharacterRespawnFlow2DChecks PRIVATE /utf-8)
+endif()
+set(_respawn_flow_artifacts "${CMAKE_CURRENT_BINARY_DIR}/respawn-flow-artifacts")
+file(MAKE_DIRECTORY "${_respawn_flow_artifacts}")
+add_test(NAME AYEntity_CharacterRespawnFlow2DChecks COMMAND AYEntity_CharacterRespawnFlow2DChecks --output "${_respawn_flow_artifacts}")
+set_tests_properties(AYEntity_CharacterRespawnFlow2DChecks PROPERTIES TIMEOUT 120
+    LABELS "ayentity;determinism;character;respawn;content;2d;rollback;replay")

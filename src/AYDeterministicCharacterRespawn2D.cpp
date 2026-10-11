@@ -87,6 +87,7 @@ void validate(const DetSessionCheckpoint& cp,const DetCharacterRespawn2DConfig& 
 }
 }
 namespace detail {
+void validateRespawnCheckpoint(const DetSessionCheckpoint& checkpoint,const DetCharacterRespawn2DConfig& config){validate(checkpoint,config);}
 bool validRespawnConfig(const DetCharacterRespawn2DConfig& c){
     const auto& k=c.character;const auto& p=k.collision;
     if(!k.advanced || !p.extended || !p.oneWayPlatforms || !p.characterRespawn || p.maxTriggerPairs>55

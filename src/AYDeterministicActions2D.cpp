@@ -11,6 +11,10 @@ namespace ayt::entity {
 namespace {
 using D=math::DetFloat32;using V=math::DetVec2;
 constexpr std::size_t policyChunkBytes=1000,maxPolicyBytes=8000;
+std::uint32_t profile(const DetActions2DConfig& c){return c.collision.characterRespawn?
+    kDetActions2DRespawnProfileVersion:kDetActions2DProfileVersion;}
+std::uint64_t logicHash(const DetActions2DConfig& c){return c.collision.characterRespawn?
+    UINT64_C(0x4441433244503032):UINT64_C(0x4441433244503031);}
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic actions 2D: invalid configuration, policy or registered state");}
 bool equal(V a,V b){return a.x.bits()==b.x.bits() && a.y.bits()==b.y.bits();}
 struct Writer {
@@ -25,6 +29,9 @@ void collisionBytes(Writer& w,const DetCollision2DConfig& c){
     w.u32(c.eventType);w.u32(c.maxBodies);w.u32(c.maxTriggerPairs);w.flag(c.extended);w.u32(c.maxContactIterations);
     w.flag(c.oneWayPlatforms);w.flag(c.stepUp);w.scalar(c.maxStepHeight);w.u32(static_cast<std::uint32_t>(c.motionPolicy));
     w.flag(c.staticSlopes);w.flag(c.movingSlopes);w.flag(c.continuousTerrain);
+    // Profile2 makes this extension explicit. False stays absent in Actions1,
+    // including every complete nested Path collision policy.
+    if(c.characterRespawn)w.flag(true);
 }
 void pathBytes(Writer& w,const DetPathMotion2DConfig& p){
     collisionBytes(w,p.collision);w.u32(p.stateSchema);w.u32(p.policySchema);w.u32(p.preSystemId);w.u32(p.postSystemId);
@@ -34,7 +41,7 @@ void pathBytes(Writer& w,const DetPathMotion2DConfig& p){
 }
 std::vector<std::uint8_t> collisionBytes(const DetCollision2DConfig& c){Writer w;collisionBytes(w,c);return std::move(w.bytes);}
 std::vector<std::uint8_t> pathBytes(const DetPathMotion2DConfig& p){Writer w;pathBytes(w,p);return std::move(w.bytes);}
-DetTypedStateSchema stateSchema(const DetActions2DConfig& c){return {c.stateSchema,1,{
+DetTypedStateSchema stateSchema(const DetActions2DConfig& c){return {c.stateSchema,profile(c),{
     {DetActionsTotalCount,std::uint64_t{}},{DetActionsBudgetTick,std::uint64_t{}},{DetActionsTickCount,std::uint32_t{}},
     {DetActionsLastCode,std::uint32_t{}},{DetActionsLastTarget,DetEntityRef{}},{DetActionsLastKind,std::uint32_t{}},
     {DetActionsLastTick,std::uint64_t{}}}};}
@@ -56,10 +63,9 @@ struct Plan {
 Plan plan(const DetActions2DConfig& c){
     if(c.stateSchema<2 || c.stateSchema==UINT32_MAX || c.policySchemaBase<2 || c.policySchemaBase==UINT32_MAX
         || !c.validatorId || !c.logicProfileId || c.validatorId==c.collision.systemId
-        || !c.maxActionsPerTick || c.maxActionsPerTick>1024 || c.targets.size()>8
-        || c.collision.characterRespawn)invalid();
+        || !c.maxActionsPerTick || c.maxActionsPerTick>1024 || c.targets.size()>8)invalid();
     Plan p;p.state=stateSchema(c);p.body=detCollisionBodySchema2D(c.collision);
-    Writer w;w.u32(kDetActions2DProfileVersion);collisionBytes(w,c.collision);
+    Writer w;w.u32(profile(c));collisionBytes(w,c.collision);
     w.u32(c.stateSchema);w.u32(c.policySchemaBase);w.u32(c.validatorId);w.u32(c.logicProfileId);
     w.u32(c.maxActionsPerTick);w.u32(static_cast<std::uint32_t>(c.targets.size()));
     SimEntityId previous=0;
@@ -85,7 +91,7 @@ Plan plan(const DetActions2DConfig& c){
     if(!schemas.insert(c.stateSchema).second)invalid();
     for(std::size_t chunk=0;chunk<chunks;++chunk){
         const auto id=c.policySchemaBase+static_cast<std::uint32_t>(chunk);if(!schemas.insert(id).second)invalid();
-        DetTypedStateSchema policy{id,1,{{1,static_cast<std::uint32_t>(chunk)},
+        DetTypedStateSchema policy{id,profile(c),{{1,static_cast<std::uint32_t>(chunk)},
             {2,static_cast<std::uint32_t>(chunks)},{3,static_cast<std::uint32_t>(p.bytes.size())}}};
         const auto begin=chunk*policyChunkBytes,end=std::min(begin+policyChunkBytes,p.bytes.size());
         for(std::size_t offset=begin;offset<end;offset+=8){std::uint64_t value=0;
@@ -168,7 +174,9 @@ DetActionCode2D apply(DetTickContext& context,const DetActions2DConfig& c,const 
 void validateCheckpoint(const DetSessionCheckpoint& cp,const DetActions2DConfig& c,const Plan& p){
     const DetStateLayout state(p.state),body(p.body);
     const auto manifest=detwire::manifestLayout(cp.manifest);
-    if(manifest.systems.at(c.collision.systemId)!=c.collision.priority
+    if(manifest.validatorVersions.at(c.validatorId)!=profile(c)
+        || manifest.logicProfiles.at(c.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{profile(c),logicHash(c)}
+        || manifest.systems.at(c.collision.systemId)!=c.collision.priority
         || (c.collision.extended && manifest.validatorVersions.at(c.collision.systemId)!=p.body.version))invalid();
     // A matching installed collision manifest/history is required even when no
     // enable action has run. This pure capture checks every collision body first.
@@ -220,8 +228,8 @@ bool installDetActions2D(DeterministicSession& session,DetActions2DConfig c){
     catch(const std::invalid_argument&){return false;}
     if(!(session.registerTypedSchema(p.state) && session.registerGlobalState(c.stateSchema)))return false;
     for(const auto& schema:p.policies)if(!(session.registerTypedSchema(schema) && session.registerGlobalState(schema.id)))return false;
-    return session.registerLogicProfile(c.logicProfileId,1,0x4441433244503031ull)
-        && session.registerValidator(c.validatorId,1,[c,p](const DetSessionCheckpoint& cp,std::string& error){
+    return session.registerLogicProfile(c.logicProfileId,profile(c),logicHash(c))
+        && session.registerValidator(c.validatorId,profile(c),[c,p](const DetSessionCheckpoint& cp,std::string& error){
             try{validateCheckpoint(cp,c,p);return true;}catch(const std::exception& e){error=e.what();return false;}});
 }
 DetActionResult2D executeDetAction2D(DetTickContext& context,const DetActions2DConfig& c,DetActionRequest2D request){

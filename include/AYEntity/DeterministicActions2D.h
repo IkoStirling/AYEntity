@@ -4,6 +4,8 @@
 
 namespace ayt::entity {
 inline constexpr std::uint32_t kDetActions2DProfileVersion=1;
+/// @brief Explicit respawn-pipeline identity; ordinary Actions1 bytes remain unchanged.
+inline constexpr std::uint32_t kDetActions2DRespawnProfileVersion=2;
 enum class DetActionKind2D : std::uint32_t {
     CollisionEnable=1,CollisionDisable=2,PathEnable=3,PathDisable=4,
     PathPause=5,PathResume=6,PathRestart=7
@@ -41,7 +43,11 @@ struct DetActionTarget2D {
  * into at most8 typed policy chunks (at most8KiB), registered as globals and
  * actor copies, and checked at every Session boundary and action call.
  * Mutable authority is global only; all actor copies of stateSchema remain zero.
+ * characterRespawn selects explicit Actions2, binding the complete respawn collision
+ * flag in top-level and nested path policy. It adds no character action kind;
+ * respawn requests use the independent registered Respawn/RespawnFlow facade.
  */
+/// @brief Complete fixed authority; explicit respawn ownership selects profile2, otherwise1.
 struct DetActions2DConfig {
     DetCollision2DConfig collision;
     std::uint32_t stateSchema=64,policySchemaBase=65,validatorId=61,logicProfileId=61;
@@ -82,7 +88,7 @@ std::uint64_t detActionCount2D(DetTickContext& context,const DetActions2DConfig&
 DetTypedStateSchema detActionsStateSchema2D(const DetActions2DConfig& config);
 /// @brief Immutable registered chunk descriptors for dependent pure boundary validators.
 std::vector<DetTypedStateSchema> detActionsPolicySchemas2D(const DetActions2DConfig& config);
-/// @brief Profile1 canonical configuration identity bytes, not a replay/file parser.
+/// @brief Selected profile1/2 canonical identity bytes, not a replay/file parser.
 /// Includes all IDs, collision options, table masks and optional full path policy.
 std::vector<std::uint8_t> encodeDetActionsConfig2D(const DetActions2DConfig& config);
 } // namespace ayt::entity

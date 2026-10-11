@@ -10,6 +10,8 @@ DetTypedStateSchema respawnStateSchema(const DetCharacterRespawn2DConfig& config
 DetTypedStateSchema respawnPolicySchema(const DetCharacterRespawn2DConfig& config);
 bool registerRespawnState(DeterministicSession& session,const DetCharacterRespawn2DConfig& config);
 void respawnPolicyMatches(DetTickContext& context,const DetCharacterRespawn2DConfig& config);
+/// Reuse complete pure closure validation without requiring a live result actor.
+void validateRespawnCheckpoint(const DetSessionCheckpoint& checkpoint,const DetCharacterRespawn2DConfig& config);
 const DetRespawnSpawn2D* respawnSpawn(const DetCharacterRespawn2DConfig& config,std::uint32_t id);
 /// Collision-owned private result. Applied remains true only until character post.
 void resolveRespawn(DetTickContext& context,SimEntityId actor,const DetCharacterRespawn2DConfig& config,

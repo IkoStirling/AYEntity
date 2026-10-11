@@ -1,4 +1,4 @@
-// design reference: AYEntity/design.md Stage32/36/42 bounded complete level content.
+// design reference: AYEntity/design.md Stage32/36/42/46 bounded complete level content.
 #include <AYEntity/DeterministicLevel2D.h>
 #include <algorithm>
 #include <charconv>
@@ -43,11 +43,13 @@ struct BinaryCodec {Writer w;
     template<class E>void enumeration(E value){w.u(static_cast<std::uint32_t>(value));}
 };
 Bytes canonical(const DetLevel2D& level){
-    // Format1..3 intentionally has no respawn authoring fields. Do not silently
-    // omit a newly enabled facade option from the legacy collision byte layout.
-    if(level.character.collision.characterRespawn)invalid("Level formats1..3 do not author character respawn");
+    const bool respawnContent=!level.respawnSpawns.empty() || !level.respawnBindings.empty() || !level.respawnRegions.empty();
+    if(level.formatVersion<4 && (level.character.collision.characterRespawn || respawnContent))invalid("Older level formats cannot author character respawn");
+    if(level.respawnSpawns.size()>kDetCharacterRespawn2DMaxSpawns || level.respawnBindings.size()>kDetCharacterRespawnFlow2DMaxBindings
+        || level.respawnRegions.size()>kDetCharacterRespawnFlow2DMaxRegions
+        || (level.character.collision.characterRespawn?level.respawnSpawns.empty() || level.respawnBindings.empty():respawnContent))invalid("Level respawn table budget or opt-in mismatch");
     if(level.paths.size()>8 || level.actors.empty() || level.actors.size()>64)invalid("Level body/path count limit");
-    if(level.formatVersion<1 || level.formatVersion>3)invalid("Unknown level format version");
+    if(level.formatVersion<1 || level.formatVersion>4)invalid("Unknown level format version");
     if(level.formatVersion==1 && (!level.actionTargets.empty() || !level.rules.empty() || level.maxActionsPerTick!=64))invalid("Format1 cannot author actions/rules");
     if(level.actionTargets.size()>8 || level.rules.size()>kDetInteraction2DMaxRules
         || !level.maxActionsPerTick || level.maxActionsPerTick>1024 || (level.actionTargets.empty() && !level.rules.empty()))invalid("Level action/rule budget");
@@ -59,11 +61,11 @@ Bytes canonical(const DetLevel2D& level){
         || level.flowBindings.size()>kDetProgressFlow2DMaxClaims || level.objectiveActions.size()>kDetProgressFlow2DMaxRules)invalid("Level progress/flow budget");
     for(const auto& objective:level.objectives)if(objective.conditions.empty() || objective.conditions.size()>kDetProgress2DMaxConditions)invalid("Level objective condition budget");
     BinaryCodec io;const auto magic=level.formatVersion==1?std::string_view("AYDLV001"):
-        level.formatVersion==2?std::string_view("AYDLV002"):std::string_view("AYDLV003");
+        level.formatVersion==2?std::string_view("AYDLV002"):level.formatVersion==3?std::string_view("AYDLV003"):std::string_view("AYDLV004");
     for(auto ch:magic)io.w.u(static_cast<unsigned char>(ch),1);
     io.word(level.formatVersion);io.word(level.applicationVersion);io.word(level.inputVersion);
     io.word(level.stepNumerator);io.word(level.stepDenominator);
-    auto policy=level.character;collision(io,policy.collision);character(io,policy);
+    auto policy=level.character;collision(io,policy.collision);if(level.formatVersion>=4)io.boolean(policy.collision.characterRespawn);character(io,policy);
     io.word(static_cast<std::uint32_t>(level.paths.size()));
     for(const auto& path:level.paths){if(path.waypoints.size()<2 || path.waypoints.size()>24)invalid("Level waypoint count limit");
         io.word(path.id);io.enumeration(path.playback);io.word(static_cast<std::uint32_t>(path.waypoints.size()));
@@ -78,7 +80,7 @@ Bytes canonical(const DetLevel2D& level){
         for(const auto& target:level.actionTargets){io.w.u(target.actor,8);io.word(target.collisionMask);io.boolean(target.collisionControl);io.word(target.path);}
         io.word(static_cast<std::uint32_t>(level.rules.size()));for(const auto& rule:level.rules){io.word(rule.id);io.w.u(rule.trigger,8);io.w.u(rule.actor,8);
             io.enumeration(rule.phase);io.w.u(rule.action.target,8);io.enumeration(rule.action.kind);io.boolean(rule.once);io.word(rule.cooldownTicks);io.word(rule.delayTicks);}}
-    if(level.formatVersion==3){io.word(static_cast<std::uint32_t>(level.counters.size()));
+    if(level.formatVersion>=3){io.word(static_cast<std::uint32_t>(level.counters.size()));
         io.word(static_cast<std::uint32_t>(level.objectives.size()));io.word(static_cast<std::uint32_t>(level.claims.size()));
         for(const auto& counter:level.counters){io.word(counter.id);io.w.u(counter.minimum,8);io.w.u(counter.maximum,8);io.w.u(counter.initial,8);}
         for(const auto& objective:level.objectives){io.word(objective.id);io.word(static_cast<std::uint32_t>(objective.conditions.size()));
@@ -87,6 +89,11 @@ Bytes canonical(const DetLevel2D& level){
         io.word(static_cast<std::uint32_t>(level.flowBindings.size()));io.word(static_cast<std::uint32_t>(level.objectiveActions.size()));
         for(const auto& binding:level.flowBindings){io.word(binding.claim);io.word(binding.requiredObjective);}
         for(const auto& rule:level.objectiveActions){io.word(rule.id);io.word(rule.objective);io.w.u(rule.action.target,8);io.enumeration(rule.action.kind);io.boolean(rule.once);}}
+    if(level.formatVersion>=4){io.word(static_cast<std::uint32_t>(level.respawnSpawns.size()));
+        io.word(static_cast<std::uint32_t>(level.respawnBindings.size()));io.word(static_cast<std::uint32_t>(level.respawnRegions.size()));
+        for(const auto& spawn:level.respawnSpawns){io.word(spawn.id);io.w.u(spawn.actor,8);io.w.vector(spawn.position);}
+        for(const auto& binding:level.respawnBindings){io.w.u(binding.actor,8);io.word(binding.spawn);}
+        for(const auto& region:level.respawnRegions){io.word(region.id);io.w.u(region.trigger,8);io.w.u(region.actor,8);io.enumeration(region.kind);io.word(region.spawn);}}
     if(io.w.bytes.size()>kDetLevel2DMaxCanonicalBytes)invalid("Level canonical content limit");return std::move(io.w.bytes);
 }
 std::uint64_t hash(const Bytes& bytes){std::uint64_t h=14695981039346656037ull;for(auto byte:bytes){h^=byte;h*=1099511628211ull;}return h;}
@@ -94,7 +101,8 @@ struct Chunk {DetTypedStateSchema schema;std::vector<std::uint64_t> words;};
 struct Prepared {Bytes bytes;std::vector<DetPathMotion2DConfig> paths;std::vector<Chunk> chunks;
     std::vector<std::pair<SimEntityId,DetActorState>> actors;
     std::optional<DetActions2DConfig> actions;std::optional<DetInteraction2DConfig> interaction;
-    std::optional<DetProgress2DConfig> progress;std::optional<DetProgressFlow2DConfig> flow;};
+    std::optional<DetProgress2DConfig> progress;std::optional<DetProgressFlow2DConfig> flow;
+    std::optional<DetCharacterRespawn2DConfig> respawn;std::optional<DetCharacterRespawnFlow2DConfig> respawnFlow;};
 void unique(std::set<std::uint32_t>& ids,std::uint32_t value,bool schema=false){
     if(!value || value==UINT32_MAX || (schema && value<2) || !ids.insert(value).second)invalid("Level registration namespace conflict");
 }
@@ -187,6 +195,32 @@ Prepared prepare(const DetLevel2D& level,const DetLevel2DOptions& options){
             unique(systems,flow.systemId);unique(validators,flow.validatorId);unique(logic,flow.logicProfileId);result.flow=std::move(flow);
         }
     }
+    if(bc.characterRespawn){
+        DetCharacterRespawn2DConfig respawn;respawn.character=cc;respawn.stateSchema=options.respawnStateSchema;
+        respawn.policySchema=options.respawnPolicySchema;respawn.validatorId=options.respawnValidatorId;
+        respawn.logicProfileId=options.respawnLogicProfileId;respawn.spawns=level.respawnSpawns;
+        DetCharacterRespawnFlow2DConfig flow;flow.respawn=respawn;flow.stateSchema=options.respawnFlowStateSchema;
+        flow.policySchemaBase=options.respawnFlowPolicySchemaBase;flow.systemId=options.respawnFlowSystemId;
+        flow.validatorId=options.respawnFlowValidatorId;flow.logicProfileId=options.respawnFlowLogicProfileId;
+        flow.bindings=level.respawnBindings;flow.regions=level.respawnRegions;
+        for(const auto& spawn:respawn.spawns){const auto& actor=actorAt(spawn.actor);
+            if(!actor.character || actor.body.trigger || actor.body.mode!=DetBodyMode2D::Kinematic)invalid("Level respawn actor must be an initial character Kinematic");}
+        for(const auto& region:flow.regions){const auto& trigger=actorAt(region.trigger).body;
+            const auto& actor=actorAt(region.actor);if(!trigger.trigger || trigger.mode==DetBodyMode2D::Disabled
+                || trigger.oneWay || trigger.shape!=DetCollisionShape2D::Aabb || !actor.character
+                || actor.body.trigger || actor.body.mode!=DetBodyMode2D::Kinematic)invalid("Level respawn region role mismatch");}
+        if(flow.systemId>=cc.preSystemId || flow.systemId>=bc.systemId
+            || (result.flow && flow.systemId>=result.flow->systemId)
+            || (result.interaction && flow.systemId>=result.interaction->systemId))invalid("Level respawn flow ordering conflict");
+        for(const auto& path:result.paths)if(flow.systemId>=path.preSystemId)invalid("Level respawn flow must precede every path pre");
+        (void)encodeDetCharacterRespawnFlowConfig2D(flow);
+        unique(schemas,respawn.stateSchema,true);unique(schemas,respawn.policySchema,true);
+        unique(validators,respawn.validatorId);unique(logic,respawn.logicProfileId);
+        unique(schemas,detCharacterRespawnFlowStateSchema2D(flow).id,true);
+        for(const auto& schema:detCharacterRespawnFlowPolicySchemas2D(flow))unique(schemas,schema.id,true);
+        unique(systems,flow.systemId);unique(validators,flow.validatorId);unique(logic,flow.logicProfileId);
+        result.respawn=std::move(respawn);result.respawnFlow=std::move(flow);
+    }
     std::vector<std::uint64_t> words(1+(result.bytes.size()+7)/8);words[0]=result.bytes.size();
     for(std::size_t n=0;n<result.bytes.size();++n)words[1+n/8]|=std::uint64_t{result.bytes[n]}<<(8*(n%8));
     for(std::size_t offset=0;offset<words.size();offset+=128){const auto id=indexed(options.identitySchemaBase,result.chunks.size());
@@ -228,14 +262,16 @@ bool install(DeterministicSession& session,const DetLevel2D& level,const DetLeve
     const std::function<bool(DeterministicSession&)>& beforeActors={}){
     if(prepared.actions && !installDetActions2D(session,*prepared.actions))return false;
     if(prepared.interaction && !installDetInteraction2D(session,*prepared.interaction))return false;
-    if(!installDetCharacterController2D(session,level.character))return false;
+    if(prepared.respawn){if(!installDetCharacterRespawn2D(session,*prepared.respawn))return false;}
+    else if(!installDetCharacterController2D(session,level.character))return false;
     for(const auto& p:prepared.paths)if(!installDetPathMotion2D(session,p))return false;
     if(prepared.progress && !installDetProgress2D(session,*prepared.progress))return false;
     if(prepared.flow && !installDetProgressFlow2D(session,*prepared.flow))return false;
+    if(prepared.respawnFlow && !installDetCharacterRespawnFlow2D(session,*prepared.respawnFlow))return false;
     if(beforeActors && !beforeActors(session))return false;
     if(session.sealed() || session.faulted() || session.nextTick()!=0)return false;
     for(const auto& chunk:prepared.chunks)if(!(session.registerTypedSchema(chunk.schema) && session.registerGlobalState(chunk.schema.id)))return false;
-    const auto identityHash=level.formatVersion==1?0x41444c5630303031ull:level.formatVersion==2?0x41444c5630303032ull:0x41444c5630303033ull;
+    const auto identityHash=level.formatVersion==1?0x41444c5630303031ull:level.formatVersion==2?0x41444c5630303032ull:level.formatVersion==3?0x41444c5630303033ull:0x41444c5630303034ull;
     if(!session.registerLogicProfile(options.identityLogicId,level.formatVersion,identityHash))return false;
     if(!session.registerValidator(options.identityValidatorId,level.formatVersion,[chunks=prepared.chunks](const DetSessionCheckpoint& cp,std::string& error){
         for(const auto& chunk:chunks){auto g=cp.globals.find(chunk.schema.id);if(g==cp.globals.end() || g->second!=chunk.words){error="Immutable level content global changed";return false;}
@@ -283,12 +319,16 @@ DetProgress2DConfig detLevelProgressConfig2D(const DetLevel2D& level,const DetLe
     if(!p.progress)invalid("Level has no Progress content");return std::move(*p.progress);}
 DetProgressFlow2DConfig detLevelProgressFlowConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options){auto p=prepare(level,options);
     if(!p.flow)invalid("Level has no Progress Flow content");return std::move(*p.flow);}
+DetCharacterRespawn2DConfig detLevelRespawnConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options){auto p=prepare(level,options);
+    if(!p.respawn)invalid("Level has no Respawn content");return std::move(*p.respawn);}
+DetCharacterRespawnFlow2DConfig detLevelRespawnFlowConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options){auto p=prepare(level,options);
+    if(!p.respawnFlow)invalid("Level has no Respawn Flow content");return std::move(*p.respawnFlow);}
 bool validateDetLevel2D(const DetLevel2D& level,std::string& error,const DetLevel2DOptions& options){try{(void)checked(level,options);error.clear();return true;}catch(const std::exception& e){error=e.what();return false;}}
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,const DetLevel2DOptions& options){std::size_t location=0;bool semantic=false;try{
     TokenReader r(text,location);DetLevel2D value;r.expect("AYDLEVEL");value.formatVersion=r.integer<std::uint32_t>();
-    if(value.formatVersion<1 || value.formatVersion>3)invalid("Unknown level format version");
+    if(value.formatVersion<1 || value.formatVersion>4)invalid("Unknown level format version");
     r.expect("session");r.word(value.applicationVersion);r.word(value.inputVersion);r.word(value.stepNumerator);r.word(value.stepDenominator);
-    r.expect("collision");collision(r,value.character.collision);r.expect("character");character(r,value.character);
+    r.expect("collision");collision(r,value.character.collision);if(value.formatVersion>=4)r.boolean(value.character.collision.characterRespawn);r.expect("character");character(r,value.character);
     r.expect("paths");const auto paths=r.integer<std::uint32_t>();if(paths>8)invalid("Level path count limit");
     for(std::uint32_t n=0;n<paths;++n){r.expect("path");DetLevelPath2D p;r.word(p.id);r.enumeration(p.playback);const auto count=r.integer<std::uint32_t>();
         if(count<2 || count>24)invalid("Level waypoint count limit");for(std::uint32_t k=0;k<count;++k){r.expect("point");DetPathWaypoint2D point;r.vector(point.offset);r.word(point.travelTicks);r.word(point.dwellTicks);p.waypoints.push_back(point);}value.paths.push_back(std::move(p));}
@@ -303,7 +343,7 @@ bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& erro
         for(std::uint32_t n=0;n<count;++n){r.expect("rule");DetInteractionRule2D rule;r.word(rule.id);rule.trigger=r.integer<std::uint64_t>();
             rule.actor=r.integer<std::uint64_t>();r.enumeration(rule.phase);rule.action.target=r.integer<std::uint64_t>();r.enumeration(rule.action.kind);
             r.boolean(rule.once);r.word(rule.cooldownTicks);r.word(rule.delayTicks);value.rules.push_back(rule);}}
-    if(value.formatVersion==3){r.expect("progress");const auto counters=r.integer<std::uint32_t>(),objectives=r.integer<std::uint32_t>(),claims=r.integer<std::uint32_t>();
+    if(value.formatVersion>=3){r.expect("progress");const auto counters=r.integer<std::uint32_t>(),objectives=r.integer<std::uint32_t>(),claims=r.integer<std::uint32_t>();
         if(counters>kDetProgress2DMaxCounters || objectives>kDetProgress2DMaxObjectives || claims>kDetProgress2DMaxClaims)invalid("Level progress count limit");
         for(std::uint32_t n=0;n<counters;++n){r.expect("counter");DetProgressCounter2D counter;r.word(counter.id);
             counter.minimum=r.integer<std::uint64_t>();counter.maximum=r.integer<std::uint64_t>();counter.initial=r.integer<std::uint64_t>();value.counters.push_back(counter);}
@@ -317,6 +357,12 @@ bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& erro
         for(std::uint32_t n=0;n<bindings;++n){r.expect("binding");DetProgressFlowClaimBinding2D binding;r.word(binding.claim);r.word(binding.requiredObjective);value.flowBindings.push_back(binding);}
         for(std::uint32_t n=0;n<rules;++n){r.expect("objectiveaction");DetProgressFlowRule2D rule;r.word(rule.id);r.word(rule.objective);
             rule.action.target=r.integer<std::uint64_t>();r.enumeration(rule.action.kind);r.boolean(rule.once);value.objectiveActions.push_back(rule);}}
+    if(value.formatVersion>=4){r.expect("respawn");const auto spawns=r.integer<std::uint32_t>(),bindings=r.integer<std::uint32_t>(),regions=r.integer<std::uint32_t>();
+        if(spawns>kDetCharacterRespawn2DMaxSpawns || bindings>kDetCharacterRespawnFlow2DMaxBindings || regions>kDetCharacterRespawnFlow2DMaxRegions)invalid("Level respawn count limit");
+        for(std::uint32_t n=0;n<spawns;++n){r.expect("spawn");DetRespawnSpawn2D spawn;r.word(spawn.id);spawn.actor=r.integer<std::uint64_t>();r.vector(spawn.position);value.respawnSpawns.push_back(spawn);}
+        for(std::uint32_t n=0;n<bindings;++n){r.expect("defaultspawn");DetRespawnFlowBinding2D binding;binding.actor=r.integer<std::uint64_t>();r.word(binding.spawn);value.respawnBindings.push_back(binding);}
+        for(std::uint32_t n=0;n<regions;++n){r.expect("region");DetRespawnFlowRegion2D region;r.word(region.id);region.trigger=r.integer<std::uint64_t>();
+            region.actor=r.integer<std::uint64_t>();r.enumeration(region.kind);r.word(region.spawn);value.respawnRegions.push_back(region);}}
     r.expect("end");r.end();semantic=true;(void)checked(value,options);output=std::move(value);error.clear();return true;
 }catch(const std::exception& e){error=e.what();if(semantic)error+=" [semantic preflight]";
     else {std::size_t line=1,column=1;for(std::size_t n=0;n<std::min(location,text.size());++n){if(text[n]=='\n'){++line;column=1;}else ++column;}
@@ -328,7 +374,7 @@ bool loadDetLevel2D(const std::filesystem::path& path,DetLevel2D& output,std::st
 }catch(const std::exception& e){error=e.what();return false;}}
 std::string encodeDetLevel2D(const DetLevel2D& level,const DetLevel2DOptions& options){(void)checked(level,options);TextWriter w;w.stream<<"AYDLEVEL "<<level.formatVersion<<"\nsession";
     w.word(level.applicationVersion);w.word(level.inputVersion);w.word(level.stepNumerator);w.word(level.stepDenominator);
-    auto policy=level.character;w.stream<<"\ncollision";collision(w,policy.collision);w.stream<<"\ncharacter";character(w,policy);
+    auto policy=level.character;w.stream<<"\ncollision";collision(w,policy.collision);if(level.formatVersion>=4)w.boolean(policy.collision.characterRespawn);w.stream<<"\ncharacter";character(w,policy);
     w.stream<<"\npaths";w.word(static_cast<std::uint32_t>(level.paths.size()));for(const auto& path:level.paths){w.stream<<"\npath";w.word(path.id);w.enumeration(path.playback);w.word(static_cast<std::uint32_t>(path.waypoints.size()));
         for(const auto& point:path.waypoints){w.stream<<"\npoint";w.vector(point.offset);w.word(point.travelTicks);w.word(point.dwellTicks);}}
     w.stream<<"\nactors";w.word(static_cast<std::uint32_t>(level.actors.size()));for(const auto& actor:level.actors){w.stream<<"\nactor "<<actor.id;w.enumeration(actor.body.mode);w.enumeration(actor.body.shape);
@@ -339,7 +385,7 @@ std::string encodeDetLevel2D(const DetLevel2D& level,const DetLevel2DOptions& op
         w.stream<<"\nrules";w.word(static_cast<std::uint32_t>(level.rules.size()));for(const auto& rule:level.rules){w.stream<<"\nrule";w.word(rule.id);
             w.stream<<' '<<rule.trigger<<' '<<rule.actor;w.enumeration(rule.phase);w.stream<<' '<<rule.action.target;w.enumeration(rule.action.kind);
             w.boolean(rule.once);w.word(rule.cooldownTicks);w.word(rule.delayTicks);}}
-    if(level.formatVersion==3){w.stream<<"\nprogress";w.word(static_cast<std::uint32_t>(level.counters.size()));
+    if(level.formatVersion>=3){w.stream<<"\nprogress";w.word(static_cast<std::uint32_t>(level.counters.size()));
         w.word(static_cast<std::uint32_t>(level.objectives.size()));w.word(static_cast<std::uint32_t>(level.claims.size()));
         for(const auto& counter:level.counters)w.stream<<"\ncounter "<<counter.id<<' '<<counter.minimum<<' '<<counter.maximum<<' '<<counter.initial;
         for(const auto& objective:level.objectives){w.stream<<"\nobjective";w.word(objective.id);w.word(static_cast<std::uint32_t>(objective.conditions.size()));
@@ -349,6 +395,11 @@ std::string encodeDetLevel2D(const DetLevel2D& level,const DetLevel2DOptions& op
         for(const auto& binding:level.flowBindings)w.stream<<"\nbinding "<<binding.claim<<' '<<binding.requiredObjective;
         for(const auto& rule:level.objectiveActions){w.stream<<"\nobjectiveaction "<<rule.id<<' '<<rule.objective<<' '<<rule.action.target;
             w.enumeration(rule.action.kind);w.boolean(rule.once);}}
+    if(level.formatVersion>=4){w.stream<<"\nrespawn";w.word(static_cast<std::uint32_t>(level.respawnSpawns.size()));
+        w.word(static_cast<std::uint32_t>(level.respawnBindings.size()));w.word(static_cast<std::uint32_t>(level.respawnRegions.size()));
+        for(const auto& spawn:level.respawnSpawns){w.stream<<"\nspawn "<<spawn.id<<' '<<spawn.actor;w.vector(spawn.position);}
+        for(const auto& binding:level.respawnBindings)w.stream<<"\ndefaultspawn "<<binding.actor<<' '<<binding.spawn;
+        for(const auto& region:level.respawnRegions){w.stream<<"\nregion "<<region.id<<' '<<region.trigger<<' '<<region.actor;w.enumeration(region.kind);w.word(region.spawn);}}
     w.stream<<"\nend\n";
     auto result=w.stream.str();if(result.size()>kDetLevel2DMaxTextBytes)invalid("Encoded level text size limit");return result;}
 bool configureDetLevel2D(DeterministicSession& session,const DetLevel2D& level,std::string& error,const DetLevel2DOptions& options,

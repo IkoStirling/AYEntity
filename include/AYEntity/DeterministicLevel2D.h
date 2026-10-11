@@ -3,6 +3,7 @@
 #include <AYEntity/DeterministicPathMotion2D.h>
 #include <AYEntity/DeterministicInteraction2D.h>
 #include <AYEntity/DeterministicProgressFlow2D.h>
+#include <AYEntity/DeterministicCharacterRespawnFlow2D.h>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -17,6 +18,8 @@ inline constexpr std::uint32_t kDetLevel2DProfileVersion=1;
 inline constexpr std::uint32_t kDetLevel2DInteractionProfileVersion=2;
 /// @brief Complete counters/claims/automatic progress authoring profile; older bytes are unchanged.
 inline constexpr std::uint32_t kDetLevel2DProgressProfileVersion=3;
+/// @brief Checkpoint/death/manual respawn authoring; earlier semantic bytes are unchanged.
+inline constexpr std::uint32_t kDetLevel2DRespawnProfileVersion=4;
 /// @brief Bound on original ASCII source bytes, before decoding.
 inline constexpr std::size_t kDetLevel2DMaxTextBytes=65536;
 /// @brief Bound on complete field-wise semantic bytes entering the manifest.
@@ -65,6 +68,12 @@ struct DetLevel2D {
     /// Format3: explicit automatic claim permissions and rising-objective actions.
     std::vector<DetProgressFlowClaimBinding2D> flowBindings;
     std::vector<DetProgressFlowRule2D> objectiveActions;
+    /// Format4: sorted actor-specific spawn authority, at most8 entries.
+    std::vector<DetRespawnSpawn2D> respawnSpawns;
+    /// Format4:1..8 actor defaults when respawn is enabled;0 otherwise.
+    std::vector<DetRespawnFlowBinding2D> respawnBindings;
+    /// Format4:0..16 exact Enter permissions; empty allows manual-only routing.
+    std::vector<DetRespawnFlowRegion2D> respawnRegions;
 };
 /// @brief Application-owned registration ranges; adjust these before combining other schemas/systems.
 /// @note Defaults reserve schemas 8..23 for paths,32..47 for content; path pre 11..18/post 41..48.
@@ -80,8 +89,12 @@ struct DetLevel2DOptions {
         progressValidatorId=64,progressLogicProfileId=64;
     std::uint32_t flowCollectStateSchema=112,flowObjectiveStateSchema=113,flowPolicySchemaBase=114,
         flowSystemId=8,flowValidatorId=65,flowLogicProfileId=65;
+    std::uint32_t respawnStateSchema=136,respawnPolicySchema=137,
+        respawnValidatorId=72,respawnLogicProfileId=72;
+    std::uint32_t respawnFlowStateSchema=144,respawnFlowPolicySchemaBase=145,
+        respawnFlowSystemId=7,respawnFlowValidatorId=73,respawnFlowLogicProfileId=73;
 };
-/// @brief Strict ASCII AYDLEVEL1/2/3 decode with 8-hex-digit Float32 bits; failure leaves output unchanged.
+/// @brief Strict ASCII AYDLEVEL1/2/3/4 decode with 8-hex-digit Float32 bits; failure leaves output unchanged.
 /// @note Rejects unknown/trailing tokens, nonfinite values, invalid roles/policies and initial geometry.
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,
     const DetLevel2DOptions& options={});
@@ -98,7 +111,7 @@ DetSessionConfig detLevelSessionConfig(const DetLevel2D& level);
 /// @brief Resolve the registered path binding used by configure; unknown IDs/options throw.
 DetPathMotion2DConfig detLevelPathConfig2D(const DetLevel2D& level,std::uint32_t path,
     const DetLevel2DOptions& options={});
-/// @brief Resolve complete registered Actions authority from format2/3 content.
+/// @brief Resolve complete registered Actions authority from format2/3/4 content.
 /// @note Format3 pure counters may resolve a zero-target authority. Otherwise empty
 /// action content, invalid references/options or unsupported controls throw.
 DetActions2DConfig detLevelActionsConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
@@ -111,6 +124,12 @@ DetProgress2DConfig detLevelProgressConfig2D(const DetLevel2D& level,const DetLe
 /// @brief Resolve complete registered Flow policy from format3 explicit bindings/rules.
 /// @note Empty Flow tables or invalid references/options throw; unbound claims are not automatically collected.
 DetProgressFlow2DConfig detLevelProgressFlowConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
+/// @brief Resolve full format4 actor-specific spawn policy with selected registration IDs.
+/// @note No respawn content or invalid references/options throw; this does not install a pipeline.
+DetCharacterRespawn2DConfig detLevelRespawnConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
+/// @brief Resolve full format4 checkpoint/death/manual routing, never a hidden retry queue.
+/// @note Regions may be empty for manual-only permissions; matching Respawn is installed by configure.
+DetCharacterRespawnFlow2DConfig detLevelRespawnFlowConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
 /** @details Configure initial level authority in a fresh Session; does not seal or own the tick loop.
  * @note Set Host recipe.config=detLevelSessionConfig(level), then call this from recipe.configure.
  * Install an earlier canonical input system separately. Collision remains the sole XY pose writer.
@@ -126,6 +145,14 @@ DetProgressFlow2DConfig detLevelProgressFlowConfig2D(const DetLevel2D& level,con
  * input version and dt are checked here. Standard Host retains tick ownership and presentation.
  * Format2 installs Actions, then optional Interaction, before the existing level pipeline.
  * Format3 additionally installs Progress and optional Flow before beforeActors.
+ * Format4 retains those features and, when characterRespawn is true, installs
+ * the fresh Respawn-owned controller/collision pipeline and RespawnFlow. Earlier
+ * formats reject this flag and all respawn tables. Checkpoints are selected before
+ * death/manual arbitration; death wins, one underlying request per actor/tick.
+ * Put manual input before RespawnFlow, which precedes ProgressFlow/Interaction
+ * and every path/character pre. Occupied/Unavailable/capacity denial has no hidden
+ * retry; Stay never retries. The destination-only hook remains after all facades.
+ * Entire tables and nested policies enter identity, not only a content hash.
  * Flow precedes Interaction and every path/character pre at collision.priority;
  * application Progress writes must precede Flow. Empty counters forbids objective,
  * claim and Flow tables. Pure counters still install matching zero-target Actions.

@@ -107,8 +107,11 @@ void validResult(const DetProgressResult2D& r,const DetProgress2DConfig& c,std::
 void validValue(std::uint64_t value,const DetProgressCounter2D& counter){if(value<counter.minimum || value>counter.maximum)invalid();}
 void validateCheckpoint(const DetSessionCheckpoint& cp,const DetProgress2DConfig& c,const Plan& p){
     const auto manifest=detwire::manifestLayout(cp.manifest);
+    const auto actionProfile=c.actions.collision.characterRespawn?kDetActions2DRespawnProfileVersion:kDetActions2DProfileVersion;
+    const auto actionHash=c.actions.collision.characterRespawn?UINT64_C(0x4441433244503032):actionsLogicHash;
     if(manifest.validatorVersions.at(c.validatorId)!=1 || manifest.logicProfiles.at(c.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{1,logicHash}
-        || manifest.validatorVersions.at(c.actions.validatorId)!=1 || manifest.logicProfiles.at(c.actions.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{1,actionsLogicHash}
+        || manifest.validatorVersions.at(c.actions.validatorId)!=actionProfile
+        || manifest.logicProfiles.at(c.actions.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{actionProfile,actionHash}
         || manifest.systems.at(c.actions.collision.systemId)!=c.actions.collision.priority
         || (c.actions.collision.extended && manifest.validatorVersions.at(c.actions.collision.systemId)!=p.body.version))invalid();
     (void)DetCollisionQuery2D(cp,c.actions.collision);descriptor(manifest,p.state);descriptor(manifest,p.actionState);

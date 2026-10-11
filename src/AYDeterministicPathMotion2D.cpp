@@ -175,6 +175,9 @@ bool installDetPathMotion2D(DeterministicSession& session,DetPathMotion2DConfig 
         && session.registerSystem(c.postSystemId,c.collision.priority,[c](DetTickContext& ctx){post(ctx,c);return true;})))return false;
     return true;
 }
+DetTypedStateSchema detPathMotionStateSchema2D(const DetPathMotion2DConfig& c){
+    if(!validConfig(c))invalid();return stateSchema(c);
+}
 std::vector<std::uint64_t> detPathMotionState2D(const DetPathMotion2DConfig& c,const DetPathMotionState2D& authored){
     if(!validConfig(c))invalid();auto s=authored;
     if(s.finished || s.blocked || s.waypoint || s.elapsedTicks || s.dwellRemaining || s.direction!=1 || !zero(s.lastVelocity))invalid();

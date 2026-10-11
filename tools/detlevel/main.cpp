@@ -40,6 +40,9 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         <<",\"counterCount\":"<<level.counters.size()<<",\"objectiveCount\":"<<level.objectives.size()
         <<",\"claimCount\":"<<level.claims.size()<<",\"flowBindingCount\":"<<level.flowBindings.size()
         <<",\"objectiveActionCount\":"<<level.objectiveActions.size()
+        <<",\"characterRespawn\":"<<(level.character.collision.characterRespawn?"true":"false")
+        <<",\"spawnCount\":"<<level.respawnSpawns.size()<<",\"respawnBindingCount\":"<<level.respawnBindings.size()
+        <<",\"respawnRegionCount\":"<<level.respawnRegions.size()
         <<",\"actors\":[";
     bool first=true;
     for(const auto& actor:level.actors) {
@@ -82,6 +85,18 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
     for(const auto& rule:level.objectiveActions){if(!first)std::cout<<',';first=false;
         std::cout<<"{\"id\":"<<rule.id<<",\"objective\":"<<rule.objective<<",\"target\":"<<json(std::to_string(rule.action.target))
             <<",\"kind\":"<<static_cast<std::uint32_t>(rule.action.kind)<<",\"once\":"<<(rule.once?"true":"false")<<'}';}
+    std::cout<<"],\"spawns\":[";first=true;
+    for(const auto& spawn:level.respawnSpawns){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"id\":"<<spawn.id<<",\"actor\":"<<json(std::to_string(spawn.actor))
+            <<",\"positionBits\":["<<json(bits(spawn.position.x.bits()))<<','<<json(bits(spawn.position.y.bits()))<<"]}";}
+    std::cout<<"],\"respawnBindings\":[";first=true;
+    for(const auto& binding:level.respawnBindings){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"actor\":"<<json(std::to_string(binding.actor))<<",\"spawn\":"<<binding.spawn<<'}';}
+    std::cout<<"],\"respawnRegions\":[";first=true;
+    for(const auto& region:level.respawnRegions){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"id\":"<<region.id<<",\"trigger\":"<<json(std::to_string(region.trigger))
+            <<",\"actor\":"<<json(std::to_string(region.actor))<<",\"kind\":"<<static_cast<std::uint32_t>(region.kind)
+            <<",\"spawn\":"<<region.spawn<<'}';}
     std::cout<<"]}\n";
 }
 int run(int argc,char** argv) {

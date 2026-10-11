@@ -2422,3 +2422,26 @@ the current source; checksums alone do not establish cache identity. Necessary l
 Release import/loose/two-Pak paths and302-character staging/replacement/reuse passed.
 No concurrent reload, running Session replacement, filesystem transaction or native
 cross-platform acceptance is implied; see the resource example for acquisition order.
+
+## Stage46: complete authored respawn routing
+
+Format4 adds one explicit collision ownership flag and actor-specific spawn/default/
+Checkpoint0-or-Death1 region tables, retaining complete format3 progress content.
+AYDLV004 binds new data while old1/2/3 use unchanged branches. Factory planning and
+fresh scratch seal enforce combined8KiB semantic/64schema/55pair budgets. Actions
+selects2 only for the new flag and encodes it in own/nestedPath collision identity;
+false keeps1 bytes/hash. Progress/ProgressFlow match the selected complete Actions
+identity without changing algorithm/profile1. Path's new descriptor factory returns
+its exact unchanged profile1 layout for committed observers.
+
+RespawnFlow1 owns at most121 mutable fields and4096byte/five-chunk full Respawn/routing
+policy. Canonical source/sequence then region ID selects first checkpoint per actor;
+all selections precede actor-ID requests. Death wins manual and uses the newly active
+spawn. ManualRequested is a registered one-tick protocol committedfalse, ProcessedTick
+equals nextTick. Request and outcome are separate; ordinary denial/Stay never retries.
+Accepted endpoint Enter remains a real subsequent event. Full descriptor/default/logic/
+policy, issued-retired references, counts/stamps and queued-this-tick outcome bind pure
+validation. A narrow internal wrapper reuses actual Respawn validation for empty retired
+worlds. The closure checks state consistency rather than historical authentication.
+The Host observer verifies cached door/path bools against actual typed state; six local
+content processes pass. Native VM deferred, no soak or generic Combat authority imported.
