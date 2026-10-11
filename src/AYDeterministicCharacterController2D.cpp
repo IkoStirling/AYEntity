@@ -2,6 +2,7 @@
 #include <AYMath/DetSlopeGeometry2D.h>
 #include "detail/DetCharacterCollision2D.h"
 #include "detail/DetCharacterRespawn2D.h"
+#include "detail/DetCharacterController2DIdentity.h"
 #include <algorithm>
 #include <array>
 #include <set>
@@ -640,10 +641,26 @@ void validateCheckpoint(const DetSessionCheckpoint& checkpoint,const DetCharacte
 }
 }
 DetTypedStateSchema detail::respawnCharacterStateSchema(const DetCharacterController2DConfig& config) {
-    if(!validConfig(config) || !config.collision.characterRespawn)invalid();return stateSchema(config);
+    if(!config.collision.characterRespawn)invalid();return detCharacterStateSchema2D(config);
 }
 DetTypedStateSchema detail::respawnCharacterPolicySchema(const DetCharacterController2DConfig& config) {
-    if(!validConfig(config) || !config.collision.characterRespawn)invalid();return policySchema(config);
+    if(!config.collision.characterRespawn)invalid();return detCharacterPolicySchema2D(config);
+}
+DetTypedStateSchema detCharacterStateSchema2D(const DetCharacterController2DConfig& config) {
+    if(!validConfig(config))invalid();return stateSchema(config);
+}
+DetTypedStateSchema detCharacterPolicySchema2D(const DetCharacterController2DConfig& config) {
+    if(!validConfig(config))invalid();return policySchema(config);
+}
+std::pair<std::uint32_t,std::uint64_t> detail::characterControllerIdentity2D(const DetCharacterController2DConfig& config) {
+    const auto version=detCharacterStateSchema2D(config).version;
+    const std::array<std::uint64_t,8> hashes{logicHash,advancedLogicHash,stepLogicHash,motionLogicHash,
+        slopeLogicHash,movingSlopeLogicHash,terrainLogicHash,respawnLogicHash};
+    if(!version || version>hashes.size())invalid();return {version,hashes[version-1]};
+}
+void detail::validateCharacterCheckpoint2D(const DetSessionCheckpoint& checkpoint,const DetCharacterController2DConfig& config) {
+    const DetStateLayout states(detCharacterStateSchema2D(config)),policies(detCharacterPolicySchema2D(config)),bodies(bodySchema(config));
+    validateCheckpoint(checkpoint,config,states,policies,bodies);
 }
 std::vector<std::uint64_t> detCharacterState2D(const DetCharacterController2DConfig& config,const DetCharacterState2D& state) {
     if(!validConfig(config) || state.stepped)invalid();validateState(state,config);const auto schema=stateSchema(config);
@@ -711,15 +728,15 @@ void detCharacterInput2D(DetTickContext& context,SimEntityId actor,const DetChar
 }
 namespace {
 bool installPipeline(DeterministicSession& session,const DetCharacterController2DConfig& config,const DetCharacterRespawn2DConfig* respawn) {
-    const auto state=stateSchema(config),policy=policySchema(config);
+    const auto state=detCharacterStateSchema2D(config),policy=detCharacterPolicySchema2D(config);
+    const auto identity=detail::characterControllerIdentity2D(config);
     const DetStateLayout stateLayout(state),policyLayout(policy),bodyLayout(bodySchema(config));
     const auto binding=respawn?std::optional{*respawn}:std::nullopt;
     if(!(session.registerTypedSchema(state) && session.registerTypedSchema(policy)
         && session.registerGlobalState(config.policySchema)
         && detail::installDetCharacterCollision2D(session,config.collision,config.stateSchema,config.maxSlopeRisePerRun,respawn)
-        && session.registerLogicProfile(config.logicProfileId,profile(config),config.collision.characterRespawn?respawnLogicHash:(config.collision.continuousTerrain?terrainLogicHash:(config.collision.movingSlopes?movingSlopeLogicHash:(config.collision.staticSlopes?slopeLogicHash:
-            (config.collision.motionPolicy!=DetCollisionMotionPolicy2D::Fault?motionLogicHash:(config.collision.stepUp?stepLogicHash:(config.advanced?advancedLogicHash:logicHash)))))))
-        && session.registerValidator(config.validatorId,profile(config),
+        && session.registerLogicProfile(config.logicProfileId,identity.first,identity.second)
+        && session.registerValidator(config.validatorId,identity.first,
             [config,stateLayout,policyLayout,bodyLayout](const auto& checkpoint,std::string& error){
                 try {validateCheckpoint(checkpoint,config,stateLayout,policyLayout,bodyLayout);return true;}
                 catch(const std::exception& e){error=e.what();return false;}})

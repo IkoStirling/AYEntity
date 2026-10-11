@@ -208,6 +208,12 @@ struct DetCharacterState2D {
 /// characterRespawn selects controller8/collision9 only through the fresh respawn
 /// facade; this ordinary installer rejects that flag. Old default bytes are unchanged.
 bool installDetCharacterController2D(DeterministicSession& session,DetCharacterController2DConfig config={});
+/// @brief Return the exact selected controller state descriptor without installing authority.
+/// @note The existing profile's field IDs, types and defaults are unchanged; invalid policy throws.
+DetTypedStateSchema detCharacterStateSchema2D(const DetCharacterController2DConfig& config={});
+/// @brief Return the exact selected immutable controller policy descriptor.
+/// @note Includes the selected policy's actual IDs/defaults; this is not a checkpoint getter or new writer.
+DetTypedStateSchema detCharacterPolicySchema2D(const DetCharacterController2DConfig& config={});
 /// Validated actor block defaults/overrides; other actors keep the disabled zero defaults.
 std::vector<std::uint64_t> detCharacterState2D(const DetCharacterController2DConfig& config,const DetCharacterState2D& state={});
 /// Copy enabled/ground/support/own velocity from the current callback's typed actor state.

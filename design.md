@@ -2651,3 +2651,61 @@ new attack content Pak run is inferred from existing resource compatibility. Ini
 unchanged Actions TU compile exit1 without diagnostic remains, same-source retry
 passed without runtime behavior changes. No new long campaign,
 compiler/sanitizer matrix, transport authentication or nativeVM result is claimed.
+
+## Stage53: bounded registered decisions and observation provenance
+
+Brain profile1 owns fixed sorted actor/target policy and registered input decisions,
+not a second motion/HP system. Installation matches actual Character descriptors/
+implementation identity and full Attack policy, then registers its own globals,
+literal policies and callback/validator. New public Character state/policy factories
+reuse actual builders without changing old wire, fields/types/defaults or algorithms;
+private identity selection is compatibility metadata, not a new gameplay facade.
+Brain schema272/273+, system3, validator/logic78 occupy distinct namespaces. Max8
+owners yields121 mutable fields; full nested policy <=18432bytes/19chunks and actual
+joint64-schema preflight apply. Dependencies are installed separately; failure
+abandons partially configured Session. All actor copies of Brain blocks are defaults.
+
+The same-priority Brain callback precedes Attack/Vitals/optional RespawnFlow and every
+nested path/Character pre. It acquires all owners' actual position/HP alive and prior
+Attack phase before writing any owner input. Inclusive finite center XY sense and X
+attack distance are deliberate policy; absolute patrol bounds choose direction but
+never clamp pose. Busy derives previous phase and releases held; Dead and Busy zero
+desired speed still execute ordinary deceleration/gravity/carrier/collision. The fixed
+target whitelist remains Attack's actual damage authority. The primary target selects sensing; it does not narrow
+the complete authored damage whitelist. There is no line of sight,
+navigation, obstacle/ledge avoidance, RNG, hidden timer or external mutable callback.
+
+ProcessedTick, per-owner decision/pulse counts, retained direction/facing, desired
+speed/held and observation phase/tick/alive/position are registered. CP.nextTickN
+observations came from tickN-1 before current Attack/HP/solver; observedAttackProcessedTick
+is N-1 and refers to prior Attack processing, not current checkpoint phase. Checked
+tick+1 stamps and default initial observation state close temporal consistency. Pure
+validation reconstructs the decision from recorded observations, binds full actual
+dependency layouts/priorities/validator/logic/literal defaults, verifies actor copies,
+and checks committed owner input. A real fresh Accepted respawn can clear targetSpeed;
+copied recovery counts alone cannot grant that exception. Live owners stay enabled,
+while issued retired refs permit a fresh queued-despawn frontier then Retired release.
+No simulation history or absence of transient input overwrites is authenticated.
+
+The short Brain fixture selects hand patrol/chase/range/facing, previous-Attack/Busy
+windows, dead/retired behavior and noninstant deceleration. A separate16tick/17CP
+baseline compares actual reverse registration/input, restore, late corrected rollback,
+confirmed effect drain, one sealed replay and seeks4/16. Invalid config/restore and
+foreign persistent input are rejected with explicit Session recovery. These are
+finite directed checks and actual full-byte execution equality, not a full-CP
+independent golden. Actual necessary MSVC Release passed four gates: Brain3.6326s,
+Controller6.04419s, Advanced4.27686s, Respawn0.21503s. Standard production Kernel
+compile passed29.344s, not a Host runtime acceptance. Summary27hand rows/107advance
+calls/81CPcomparisons/11negative restores/10configs/16confirmed events/1rollback/
+1replayed tick accompanies16tick/17CP, one physical sealed replay and two seeks.
+Source/executable freeze binds531candidate pins/9owned files/4binaries. First fixture
+C2665 referenced a nonexistent Character CP getter, then used the actual public
+descriptor typed read with unchanged7/4 oracle; production behavior was unchanged.
+The second reader rejected mixed Windows paths after actual test exit0; preserved
+material and full LastTest.log enabled OUT evidence recovery without repeating
+successful product gates. Receipt stage53core-evidence-completion/result.json and
+stage53-actual-freeze.json record both outcomes. Matching Brain respawn-recovery
+branch has no directed new-combination gate; old Respawn compatibility is separate.
+No new Host or Level authoring Brain route, Debug/ASan/native/backend matrix or
+long-run result; final native VM deferred. Existing numeric/Character/Attack/
+checkpoint/replay identities are unchanged; Brain full policy has a distinct manifest.

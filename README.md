@@ -1145,3 +1145,49 @@ load/seek suffix equality. Existing Resource compatibility passed0.975352s (27CP
 First unchanged Actions TU build exit1 without diagnosis remains in stage52-host1;
 same-source retry passed without a runtime fix. Receipts stage52-levels1/host2. No new
 long campaign/matrix/CI/native result; final native VM deferred. See design for closure.
+
+## Stage53: fixed-target deterministic character decisions
+
+Prefer `AYEntity/DeterministicBrain2D.h` with `AYEntity::DeterminismKernel`.
+Install matching Character and Attack/HP dependencies separately, then Brain before
+actors/seal; do not reinstall them. Respawn-enabled acquisition uses the matching
+existing recovery/Character pipeline. Default Brain3 -> player input4 -> Attack5 ->
+Vitals6 -> optional Flow7 -> motion pre uses the same collision priority. Player
+input must not replace Brain-owned inputs. Owners remain enabled while present;
+retirement is allowed. A primary target is fixed and Attack-whitelisted; sensing
+does not narrow the Attack facade’s full authored damage whitelist.
+
+Inclusive center sensing gives signed chase input or held attack requests; absent/
+dead targets patrol. Absolute patrol bounds change direction, not physical position.
+Busy follows the previous Attack phase, sends false held and zero desired speed;
+dead owners also request zero and retired owners release without missing Character
+reads. Zero intent is not instant velocity freeze: deceleration, gravity, carrying
+and sole collision motion still apply. No navigation, wall/ledge avoidance, line of
+sight, auto target selection, timer/RNG, body/HP/pose writer or native AI adoption.
+
+`detBrainState2D` copies registered decisions and pre-input/HP/motion observations.
+At CP.nextTickN these were observed on tickN-1; previous Attack metadata does not
+equal the later current Attack state. Request counts are not attacks/hits. Full
+Character/Attack/table literal identity, mutable globals/default actor copies and
+pure input/observation closure support restore/rollback/replay. Only actual fresh
+Accepted respawn permits target speed clearing. Max8 owners,121 mutable fields,
+18KiB/19 policy chunks still share joint64-schema and aggregate Session budgets.
+
+Read `detCharacterStateSchema2D` and `detCharacterPolicySchema2D` for actual selected
+descriptors; these factories install nothing and preserve old defaults and profiles.
+Necessary local MSVC Release four gates passed: Brain3.6326s, Controller6.04419s,
+Advanced4.27686s and Respawn0.21503s; standard production Kernel compiled29.344s.
+Brain actual16tick/17CP includes27selected hand rows,107advance calls,81CP comparisons,
+11restore/10config negatives,16confirmed events,1rollback/1replayed tick,1physical
+sealed rpl/2seeks. Hand behavior and complete actual execution equality have different
+scopes; no independent whole-CP golden or history authentication is claimed. Initial
+new fixture C2665 was corrected only to an existing public descriptor typed read,
+keeping the7/4 oracle; later mixed Windows-path reader rejection after test exit0
+was repaired only in OUT evidence collection. Both failures remain preserved; no
+production behavior fix or repeated successful gates. Receipts stage53-actual-freeze
+and stage53core-evidence-completion bind531source pins/9owned files/4executables.
+The matching Brain respawn-recovery combination was not separately directed;
+the ordinary Respawn compatibility pass does not establish that new combination.
+No new Level Brain grammar/Host content/Debug/ASan/native/backend matrix/long-run
+result; final native VM deferred.
+See [design](design.md) and [SDK contract](../../AYDocs/sdk/contracts/2d.md#2dsimulationdeterministic-brain).
