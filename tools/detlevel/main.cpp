@@ -278,6 +278,81 @@ void authorBindOrdinaryPath(DetLevel2D& level,SimEntityId id,const DetLevelPath2
     found->path=path.id;
 }
 
+// Stage65 private offline full-content geometry flattening. Reuse actual Level
+// and Stage61 ID/FloatText helpers; no new core/Scene/Resource prefab interface.
+struct SolidStampMap2D {SimEntityId source=0,destination=0;};
+std::vector<SolidStampMap2D> stampMap(std::string_view token) {
+    require(!token.empty() && token.size()<=1024,"Solid mapping token must contain1..1024 bytes");
+    std::vector<SolidStampMap2D> result;std::size_t begin=0;
+    while(begin<token.size()) {
+        const auto comma=token.find(',',begin);
+        const auto end=comma==std::string_view::npos?token.size():comma;
+        const auto entry=token.substr(begin,end-begin);const auto colon=entry.find(':');
+        require(colon!=std::string_view::npos && colon>0 && colon+1<entry.size()
+            && entry.find(':',colon+1)==std::string_view::npos,
+            "Each solid mapping must be exactly nonzero-old-ID:nonzero-new-ID");
+        const SolidStampMap2D item{editActorId(entry.substr(0,colon)),editActorId(entry.substr(colon+1))};
+        require(result.size()<16,"Solid mapping count exceeds16");
+        require(std::none_of(result.begin(),result.end(),[&](const auto& existing){
+            return existing.source==item.source || existing.destination==item.destination;
+        }),"Solid mapping contains a duplicate donor or new actor identity");
+        result.push_back(item);
+        if(comma==std::string_view::npos)break;
+        begin=comma+1;require(begin<token.size(),"Solid mapping must not contain an empty entry");
+    }
+    return result;
+}
+bool stampActorReferenced(const DetLevel2D& level,SimEntityId id) {
+    // Only actor-reference namespaces are compared: equal numeric counter/path/
+    // rule/objective/permission IDs alone do not confer actor authority.
+    for(const auto& row:level.actionTargets)if(row.actor==id)return true;
+    for(const auto& row:level.rules)if(row.trigger==id || row.actor==id || row.action.target==id)return true;
+    for(const auto& row:level.claims)if(row.trigger==id || row.actor==id)return true;
+    for(const auto& row:level.objectiveActions)if(row.action.target==id)return true;
+    for(const auto& row:level.respawnSpawns)if(row.actor==id)return true;
+    for(const auto& row:level.respawnBindings)if(row.actor==id)return true;
+    for(const auto& row:level.respawnRegions)if(row.trigger==id || row.actor==id)return true;
+    for(const auto& row:level.vitalityActors)if(row.actor==id)return true;
+    for(const auto& row:level.vitalityPermissions)if(row.actor==id)return true;
+    for(const auto& row:level.vitalityRegions)if(row.trigger==id || row.actor==id)return true;
+    for(const auto& row:level.attackOwners) {
+        if(row.actor==id)return true;
+        for(const auto& target:row.targets)if(target.actor==id)return true;
+    }
+    for(const auto& row:level.brainOwners)if(row.actor==id || row.target==id)return true;
+    for(const auto& row:level.characterControlOwners)if(row.actor==id)return true;
+    // flowBindings contain claim/objective IDs; their actor closure is already
+    // inspected through claims/objectiveActions, not through unrelated ID values.
+    return false;
+}
+std::vector<DetLevelActor2D> stampActors(const DetLevel2D& donor,const DetLevel2D& target,
+    const std::vector<SolidStampMap2D>& mappings,ayt::math::DetVec2 shift) {
+    require(!mappings.empty() && mappings.size()<=16,"Solid mapping count must be1..16");
+    require(target.actors.size()<=64 && mappings.size()<=64-target.actors.size(),"Level actor count limit");
+    std::vector<DetLevelActor2D> additions;additions.reserve(mappings.size());
+    for(const auto& mapping:mappings) {
+        const auto source=std::lower_bound(donor.actors.begin(),donor.actors.end(),mapping.source,
+            [](const auto& actor,SimEntityId id){return actor.id<id;});
+        require(source!=donor.actors.end() && source->id==mapping.source,"Mapped donor actor is not authored");
+        const auto conflict=std::lower_bound(target.actors.begin(),target.actors.end(),mapping.destination,
+            [](const auto& actor,SimEntityId id){return actor.id<id;});
+        require(conflict==target.actors.end() || conflict->id!=mapping.destination,"Mapped new actor identity already exists in target");
+        require(source->body.mode==DetBodyMode2D::Static && !source->body.trigger
+            && !source->body.oneWay && !source->body.ignoredOneWay.value && !source->character
+            && !source->path,"Only ordinary nontrigger unbound Static solids may be stamped");
+        require(!stampActorReferenced(donor,source->id),"Mapped donor actor has authored gameplay authority/references");
+        if(source->body.shape!=DetCollisionShape2D::Aabb)
+            require(target.character.collision.staticSlopes,"Target must already select staticSlopes for a stamped wedge");
+        auto copy=*source;copy.id=mapping.destination;
+        // Real software addition rounds normally, including signed-zero rules;
+        // zero shift is not promised to preserve every source position bit.
+        copy.position=source->position+shift;
+        require(copy.position.isFinite(),"Nonfinite or overflowing stamped position");
+        additions.push_back(std::move(copy));
+    }
+    return additions;
+}
+
 void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
     const auto config=detLevelSessionConfig(level);
     std::cout<<"{\"schema\":1,\"status\":\"passed\",\"source\":"<<json(source.generic_string())
@@ -416,6 +491,7 @@ int run(int argc,char** argv) {
             "aydetlevel add-path <source.dlt> <actor-id> <new-path-u32> <dx> <dy> <travel-ticks> <once|loop|pingpong> <fresh.dlt>\n"
             "aydetlevel bind-path <source.dlt> <actor-id> <existing-path-u32> <fresh.dlt>\n"
             "aydetlevel edit-waypoint <source.dlt> <path-u32> <index0> <dx> <dy> <travel-ticks> <dwell-ticks> <fresh.dlt>\n"
+            "aydetlevel stamp-solids <donor.dlt> <target.dlt> <shift-x> <shift-y> <old:new[,old:new...]> <fresh.dlt>\n"
             "aydetlevel preview <level.dlt> <fresh.svg>\n"
             "aydetlevel place <source.dlt> <actor-id> <x> <y> <fresh.dlt>\n"
             "aydetlevel resize-half <source.dlt> <actor-id> <half-x> <half-y> <fresh.dlt>\n"
@@ -572,6 +648,29 @@ int run(int argc,char** argv) {
         const auto canonical=encodeDetLevel2D(level);
         const std::filesystem::path destination=argv[9];writeFresh(destination,canonical);
         inspect(level,destination);return 0;
+    }
+
+    if(command=="stamp-solids") {
+        // argv0/command/donor/target/shiftX/shiftY/map/fresh = exactly8.
+        require(argc==8,"stamp-solids requires donor, target, two finite shifts, old:new comma mappings and fresh output");
+        const std::filesystem::path donorPath=argv[2],targetPath=argv[3];
+        ordinary(donorPath);ordinary(targetPath);
+        DetLevel2D donor,target;std::string error;
+        const bool donorLoaded=loadDetLevel2D(donorPath,donor,error);require(donorLoaded,error);
+        const bool targetLoaded=loadDetLevel2D(targetPath,target,error);require(targetLoaded,error);
+        const ayt::math::DetVec2 shift{editDecimal(argv[4]),editDecimal(argv[5])};
+        const auto mappings=stampMap(argv[6]);
+        // Resolve/check every reference, role, new ID, dependency and software
+        // translation before mutating even the local full target value.
+        const auto additions=stampActors(donor,target,mappings,shift);
+        target.actors.insert(target.actors.end(),additions.begin(),additions.end());
+        std::sort(target.actors.begin(),target.actors.end(),[](const auto& first,const auto& second){return first.id<second.id;});
+        // Donor policy is never transferred. Actual full destination factories
+        // decide represented bounds/penetration/configured and literal budgets.
+        const bool valid=validateDetLevel2D(target,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(target);
+        const std::filesystem::path destination=argv[7];writeFresh(destination,canonical);
+        inspect(target,destination);return 0;
     }
 
     if(command=="create") {

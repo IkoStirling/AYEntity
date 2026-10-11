@@ -256,3 +256,50 @@ Actual finite existing CLI checks cover all three playback spellings, actor-orig
 versus body-offset, sharing and preserved tables/roles/current formats, canonical
 stability, explicit moving-wedge policy, existing Path2 edits and protected limits.
 Actual local MSVC Release AYEntity_LevelToolChecks passed in 4.32962s; the standard tool build completed in 5.938s. The finite authoring gate checked Once/Loop/PingPong spellings, shared per-actor origins versus body offsets, one-point edits and previews, an explicitly enabled moving wedge, existing Path2 role preservation, complete modern Level11 tables, canonical stability, a valid eight-path source and 20 protected normal refusals. Source snapshots matched; the actual executable and raw artifacts are hash-bound in out/detcontent36-40-20261011/stage64-actual-freeze.json and stage64-tool1/result.json. No production/oracle repair or old gate reuse was needed for this actual invocation. No Sim tick, executed trajectory, future sampled reachability, collision safety, whole-checkpoint golden, Host/Pak/matrix, history authentication or native VM acceptance is implied; native final VM Deferred.
+
+## §12 Stage65 explicit static expansion planner (local verified; native VM Deferred)
+
+One bounded mapping token reuses full-token editActorId; shifts reuse software
+editDecimal. Resolve every source/destination/role/reference/translation before
+even local target insertion, sort the merged table, then call the actual complete
+validator/encoder and existing writeFresh. No whole main replacement or common
+prefab class is introduced.
+
+stamp-solids donor.dlt target.dlt shiftX shiftY old:new[,old:new...] fresh.dlt
+has argc8 including argv0. Both ordinary files independently load as complete
+validated Level. The map token is1..1024 bytes/1..16 full nonzero decimal UInt64
+pairs: exactly one colon per entry, no empty entry, overflow, duplicate donor/new
+ID, missing donor or existing target ID. Map order is irrelevant; merged actor
+IDs are sorted. Shifts use real finite software FloatText and software addition.
+Actual rounding and signed-zero rules apply, so zero shift does not universally
+preserve source position bits. A nonfinite translated pose is rejected.
+
+Only unbound ordinary nontrigger/non-one-way Static AABB or filled left/right
+wedges qualify, never Character or a path user. All authored actor references
+are rejected: Action targets; Interaction trigger/actor/action target; Progress
+claim trigger/actor and objective action target; Respawn spawn/binding/regions;
+Vitality actor/permission/region; Attack owner/targets; Brain owner/target; Control
+owner. Claim/objective/path/counter/rule IDs in separate namespaces are not
+misread as actor references. This closes known authored authority, without
+certifying unknown application code or remapping gameplay graphs.
+
+The eligible complete initial body is copied, changing only explicit actor ID
+and software-translated position. Shape, half extents, offset, layer/mask and
+zero velocity/default roles persist. Every destination format/app/input/step,
+policy/table and existing actor remains intact. Wedges require destination
+staticSlopes already enabled; donor policy is never imported or auto-upgraded.
+Actual full merged Level validation/fresh seal and canonical encoding precede
+exclusive fresh output. Max64/configured lower bodies, text64KiB/canonical8KiB,
+represented geometry/initial penetration and joint namespaces remain binding.
+Static-static overlap retains the existing composition semantics.
+
+Output is flat expanded initial content in the existing full identity, not a
+prefab/reference/hot reload handle; later donor edits do not propagate. Existing
+source/target/output are protected, normal refusal writes no file and physical
+I/O failure may leave a partial fresh file. Existing .dlt/.dlc loading recipes
+consume it unchanged. No .act/detprefab format, Resource loader, public facade,
+permission remap, running-state pose/HP writer, Sim advance or future motion/
+walkability/restore migration guarantee is added. inspect/preview stay offline;
+actual filled polygons are shown without simulation or history authentication.
+
+Actual local MSVC Release AYEntity_LevelToolChecks passed in 5.13788s; the standard tool build completed in 6.0s. The finite offline gate checked independent dyadic translated body fields, actual three-shape polygon/SVG vertices, permuted mapping and canonical reencoding whole-byte equality, complete unselected destination policy/actors and 22 protected normal refusals. Source snapshots matched; the actual executable and raw artifacts are hash-bound in out/detcontent36-40-20261011/stage65-actual-freeze.json and stage65-tool1/result.json. The product gate passed on its first actual invocation. JUnit stdout was truncated to 1024 characters; only the private freeze reader was adjusted to bind the genuine LastTest.log from the same CLI run directory. No product/oracle repair or gate rerun occurred. No Sim tick, Host, executed future movement, prefab lifecycle, whole-checkpoint golden, unknown application/historical authentication or native VM acceptance is implied; native final VM Deferred. No new capability/module/coverage or matrix.
