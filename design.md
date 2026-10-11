@@ -2894,3 +2894,45 @@ and no-overwrite/invalid-kind paths. Source/executable pins and before/after
 snapshots match stage57-actual-freeze.json; no production retry/fix. Physical
 flush/close fault injection was not run. No simulation matrix or new Host
 recipe is accepted by these static authoring checks; native final VM Deferred.
+
+## Stage58: scene capture, idle visibility and restore observation limits
+
+Brain2 retains the same finite owners/registered fields but opts into true
+geometric decision capture with `lineOfSight`. False takes the complete original
+Brain1 bytes/defaults/descriptor/validator/logic/behavior branch. True binds
+selected identity2 and query profile1 in full policy; Retired6 remains, mode7
+is SightBlocked, joint121-field/18KiB/19chunk/64schema limits remain real limits.
+No numeric/Character/Collision/Attack/checkpoint/save/replay profile changes.
+
+All owners share one matching immutable collision snapshot acquired before any
+owner input writes. Each alive present previous-idle sensed owner uses its
+actual reciprocal masks and closed pose-center segment. Ignore self, exclude
+triggers, skip primary-target hits; any other full solid AABB/wedge geometric
+hit blocks. Endpoints/inside starts/Kinematics count, one-way direction/drop
+does not filter sight, and prescribed motion is frozen. Every decision and
+finite subtraction is planned before stable-owner writes, without partial
+query results, hidden captures or runtime geometry state.
+
+Blocking changes only the new idle decision to normal patrol/false held;
+Busy/Dead/Retired retain precedence and an already open Attack still executes
+its actual authored targets/HP authority. There is no pathfinding, automatic
+target switch, freeze, blocker ID/cache or geometry-history claim. Pure closure
+uses the recorded blocked mode together with pre-motion center observations/
+range/phase/counters/input/full identity. A later checkpoint can have moved or
+changed masks, so it cannot substitute a new ray for prior visibility.
+
+Existing Level1..10 and standard examples retain default Brain1. The finite new
+LineOfSight2DChecks passed actual MSVC Release0.780831s, default Brain2DChecks
+3.65266s and existing BrainHostExample11.4542s. New2 actual selected dyadic
+ray/decision/HP/no-hit scope has12hand/6geometry rows,16advances/6CP comparisons/
+4bad restores/1bad config; the short closure is4ticks/5CP with max3scene bodies.
+Full actual CP continuation is separate from selected independent hand fields,
+not an independent whole-CP golden or historical visibility authentication.
+Nineteen selected legacy wholefiles are equal to their accepted Brain1 core
+initial/final CP, inputs, tick hashes and sealedRPL; old Host sixfinal states/
+twoSave38/six traces are unchanged. This does not certify a new2 archive, late
+rollback or LOS Host. Sources/executable/receipt pins and unchanged snapshots
+are fixed by stage58-actual-freeze.json. Initial core1 cl.exe CreateProcess
+Access is denied failed before tests; j4->2 same-source orchestration retry
+passed. The failure remains and no production/oracle change was made.
+No new Debug/ASan/matrix/long/native/VM proof; final native VM Deferred.

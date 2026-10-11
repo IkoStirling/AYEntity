@@ -1344,3 +1344,41 @@ passed4.953s. Both starter create/validate/inspect and complete canonical bytes,
 finite1.25/-0, malformed/nonfinite and protected/unknown-kind cases passed with
 unchanged source snapshots. No new Host/matrix/long gate,
 numeric/simulation wire profile or native success is implied. Final VM Deferred.
+
+## Stage58: opt-in captured line of sight for idle decisions
+
+Direct facade acquisition may set `DetBrain2DConfig::lineOfSight=true`; false
+keeps exact Brain1 descriptors/literal/logic/behavior. True selects Brain2 with
+the same field capacity and adds `SightBlocked=7` (`Retired=6` unchanged).
+Use the exact already-installed Character/Attack configs and their complete
+policy, then install Brain before actors/seal. The actual deterministic query
+dependency captures one immutable matching collision scene before all owner
+input writes; there is no second collision installer or mutable query cache.
+
+Alive idle sensed owners raycast a closed pose-XY center segment to their fixed
+target. Actual owner reciprocal layer/mask applies; owner is ignored, triggers
+excluded and target hits skipped. Any other solid full AABB/wedge hit blocks,
+including endpoints/inside starts and Kinematics. One-way boxes occlude by
+geometry, while translating proxies remain frozen at capture. Blocked sight
+requests patrol movement/false held, with real controller deceleration/gravity.
+Busy/Dead/Retired precedence stays. It does not cancel a launched Attack or
+filter its actual Hurt whitelist/damage, and does not provide navigation.
+
+The recorded mode is the earlier pre-motion decision, not a later checkpoint
+visibility claim. Pure restore checks registered consistency/full identity and
+does not rerun a historical ray on moved geometry. Existing Level1..10 Brain
+tables/standard Host still acquire Brain1; this direct opt-in adds no authoring
+or Host input grammar. Existing profile1 runtime records remain historical.
+See [SDK contract](../../AYDocs/sdk/contracts/2d.md#2dsimulationdeterministic-brain).
+Actual necessary local MSVC Release gates passed: new
+`AYEntity_BrainLineOfSight2DChecks`0.780831s, affected default Brain2DChecks3.65266s
+and existing BrainHostExample11.4542s. New2 scope is4tick/5CP restore continuation,
+12 selected hand rows/6geometry/16advances/6full actual CP comparisons/4bad
+restore/1bad config (max3scene bodies), not independent whole-CP goldens.
+Nineteen legacy complete files match prior Brain1 initial/final/input/hashtrace/
+physicalRPL plus old Host six states/twoSave38/six traces. They establish these
+actual default samples, not new LOS replay/late rollback/Host or history proof.
+First core1 cl.exe CreateProcess Access is denied remains; orchestration j4->2
+same-source retry passed with no production behavior/oracle edit.
+Actual source/exe/receipts match stage58-actual-freeze.json and before/after
+snapshots are equal. No matrix/long/native/VM gate; final native VM Deferred.

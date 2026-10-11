@@ -1,9 +1,11 @@
 // design reference: AYEntity/design.md Stage53 bounded registered enemy decisions.
 #include <AYEntity/DeterministicBrain2D.h>
+#include <AYEntity/DeterministicCollisionQuery2D.h>
 #include "detail/DetCharacterController2DIdentity.h"
 #include "detail/DetCharacterRespawn2D.h"
 #include "detail/DetSessionWire.h"
 #include <algorithm>
+#include <optional>
 #include <set>
 #include <stdexcept>
 
@@ -11,6 +13,9 @@ namespace ayt::entity {
 namespace {
 using D=math::DetFloat32;using V=math::DetVec2;using Bytes=std::vector<std::uint8_t>;
 constexpr std::uint64_t logicHash=UINT64_C(0x4442523244503031);
+std::pair<std::uint32_t,std::uint64_t> brainIdentity(const DetBrain2DConfig& c){
+    return c.lineOfSight?std::pair<std::uint32_t,std::uint64_t>{kDetBrain2DSightProfileVersion,UINT64_C(0x4442523244503032)}
+        :std::pair<std::uint32_t,std::uint64_t>{kDetBrain2DProfileVersion,logicHash};}
 constexpr std::size_t chunkBytes=1000;
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic brain 2D: invalid policy, authority, observation or input owner");}
 std::uint64_t add(std::uint64_t a,std::uint64_t b){if(a>UINT64_MAX-b)invalid();return a+b;}
@@ -25,13 +30,13 @@ struct Writer {Bytes bytes;void u(std::uint64_t value,unsigned width=4){for(unsi
     void schema(const DetTypedStateSchema& s){u(s.id);u(s.version);u(s.fields.size());for(const auto& f:s.fields){u(f.id);u(static_cast<std::uint32_t>(detStateType(f.initial)));
         const auto lanes=encodeDetStateValue(f.initial);u(lanes.size());for(auto lane:lanes)u(lane,8);}}};
 struct Plan {DetTypedStateSchema state,characterState,characterPolicy,body;std::vector<DetTypedStateSchema> policies;
-    std::pair<std::uint32_t,std::uint64_t> characterIdentity;Bytes bytes;};
+    std::pair<std::uint32_t,std::uint64_t> characterIdentity,identity;Bytes bytes;};
 Plan plan(const DetBrain2DConfig& c){
     if(c.owners.empty() || c.owners.size()>kDetBrain2DMaxOwners || c.stateSchema<2 || c.policySchemaBase<2
         || c.stateSchema==UINT32_MAX || c.policySchemaBase==UINT32_MAX || !c.systemId || !c.validatorId || !c.logicProfileId
         || c.systemId==UINT32_MAX || c.validatorId==UINT32_MAX || c.logicProfileId==UINT32_MAX
         || c.systemId>=c.attack.systemId || c.systemId>=c.character.preSystemId)invalid();
-    Plan p;p.characterState=detCharacterStateSchema2D(c.character);p.characterPolicy=detCharacterPolicySchema2D(c.character);
+    Plan p;p.identity=brainIdentity(c);p.characterState=detCharacterStateSchema2D(c.character);p.characterPolicy=detCharacterPolicySchema2D(c.character);
     p.characterIdentity=detail::characterControllerIdentity2D(c.character);const auto attackBytes=encodeDetAttackConfig2D(c.attack);
     auto authority=c.attack.vitality.progress.actions;const auto actualCollision=encodeDetActionsConfig2D(authority);
     authority.collision=c.character.collision;if(encodeDetActionsConfig2D(authority)!=actualCollision)invalid();
@@ -39,8 +44,8 @@ Plan plan(const DetBrain2DConfig& c){
         const auto& character=c.attack.vitality.respawnFlow->respawn.character;
         Writer a,b;a.schema(p.characterState);a.schema(p.characterPolicy);b.schema(detCharacterStateSchema2D(character));b.schema(detCharacterPolicySchema2D(character));
         if(a.bytes!=b.bytes)invalid();}
-    p.body=detCollisionBodySchema2D(c.character.collision);p.state={c.stateSchema,1,{{DetBrainProcessedTick,std::uint64_t{}}}};
-    Writer w;w.u(1);w.u(c.stateSchema);w.u(c.policySchemaBase);w.u(c.systemId);w.u(c.validatorId);w.u(c.logicProfileId);
+    p.body=detCollisionBodySchema2D(c.character.collision);p.state={c.stateSchema,p.identity.first,{{DetBrainProcessedTick,std::uint64_t{}}}};
+    Writer w;w.u(p.identity.first);if(c.lineOfSight){w.u(1);w.u(kDetCollisionQuery2DProfileVersion);}w.u(c.stateSchema);w.u(c.policySchemaBase);w.u(c.systemId);w.u(c.validatorId);w.u(c.logicProfileId);
     w.schema(p.characterState);w.schema(p.characterPolicy);w.u(attackBytes.size());w.bytes.insert(w.bytes.end(),attackBytes.begin(),attackBytes.end());w.u(c.owners.size());
     SimEntityId previous=0;const auto length=D::fromInt(1000000);
     for(std::size_t n=0;n<c.owners.size();++n){const auto& row=c.owners[n];const auto attackOwner=std::lower_bound(c.attack.owners.begin(),c.attack.owners.end(),row.actor,
@@ -87,7 +92,7 @@ Plan plan(const DetBrain2DConfig& c){
         logic.insert(flow.logicProfileId);logic.insert(respawn.logicProfileId);if(c.systemId>=flow.systemId)invalid();}
     if(systems.contains(c.systemId) || validators.contains(c.validatorId) || logic.contains(c.logicProfileId) || !schemas.insert(c.stateSchema).second)invalid();
     for(std::size_t n=0;n<chunks;++n){const auto id=c.policySchemaBase+static_cast<std::uint32_t>(n);if(!schemas.insert(id).second)invalid();
-        DetTypedStateSchema s{id,1,{{1,static_cast<std::uint32_t>(n)},{2,static_cast<std::uint32_t>(chunks)},{3,static_cast<std::uint32_t>(p.bytes.size())}}};
+        DetTypedStateSchema s{id,p.identity.first,{{1,static_cast<std::uint32_t>(n)},{2,static_cast<std::uint32_t>(chunks)},{3,static_cast<std::uint32_t>(p.bytes.size())}}};
         const auto begin=n*chunkBytes,end=std::min(begin+chunkBytes,p.bytes.size());for(std::size_t offset=begin;offset<end;offset+=8){std::uint64_t word=0;
             for(std::size_t byte=0;byte<8 && offset+byte<end;++byte)word|=std::uint64_t{p.bytes[offset+byte]}<<(8*byte);
             s.fields.push_back({static_cast<std::uint32_t>(4+(offset-begin)/8),word});}p.policies.push_back(std::move(s));}
@@ -104,22 +109,26 @@ template<class Read>State readState(Read&& get,std::size_t n){State r;r.mode=get
     r.position=get.template operator()<V>(field(n,130));r.targetPosition=get.template operator()<V>(field(n,140));r.pulses=get.template operator()<std::uint64_t>(field(n,150));return r;}
 V delta(const State& r){const auto difference=r.targetPosition-r.position;if(!difference.isFinite())invalid();return difference;}
 bool sensed(const State& r,const DetBrainOwner2D& row){if(!r.targetAlive)return false;const auto d=delta(r);return abs(d.x)<=row.senseHalfExtent.x && abs(d.y)<=row.senseHalfExtent.y;}
-void decision(State& r,const DetBrainOwner2D& row,bool present){r.speed={};r.held=false;
+void decision(State& r,const DetBrainOwner2D& row,bool present,bool sightBlocked=false){r.speed={};r.held=false;
     if(!present){r.mode=6;r.alive=false;r.position={};return;}if(!r.alive){r.mode=5;return;}
     if(r.position.x<=row.patrolLeft)r.right=true;else if(r.position.x>=row.patrolRight)r.right=false;
     if(r.phase){r.mode=4;return;}
-    if(sensed(r,row)){const auto d=delta(r);if(d.x<D{})r.facing=false;else if(d.x>D{})r.facing=true;
+    if(sensed(r,row) && !sightBlocked){const auto d=delta(r);if(d.x<D{})r.facing=false;else if(d.x>D{})r.facing=true;
         if(abs(d.x)<=row.attackDistance){r.mode=3;r.held=true;return;}r.mode=2;r.speed=r.facing?row.chaseSpeed:-row.chaseSpeed;return;}
-    r.mode=1;r.facing=r.right;r.speed=r.right?row.patrolSpeed:-row.patrolSpeed;}
+    r.mode=sightBlocked?7u:1u;r.facing=r.right;r.speed=r.right?row.patrolSpeed:-row.patrolSpeed;}
 template<class Read>void validOwned(Read&& get,const DetBrain2DConfig& c,std::uint64_t maximum,bool boundary){
     const auto processed=get.template operator()<std::uint64_t>(DetBrainProcessedTick);if(processed>maximum || (boundary && processed!=maximum))invalid();
     for(std::size_t n=0;n<c.owners.size();++n){const auto& row=c.owners[n];const auto r=readState(get,n);
-        if(r.mode>6 || r.phase>3 || r.count!=processed || r.at!=processed || r.pulses>r.count || !r.position.isFinite() || !r.targetPosition.isFinite())invalid();
+        if(r.mode>(c.lineOfSight?7u:6u) || r.phase>3 || r.count!=processed || r.at!=processed || r.pulses>r.count || !r.position.isFinite() || !r.targetPosition.isFinite())invalid();
         if(!processed){if(r.mode || r.phase || r.speed.bits() || r.held || r.observed || r.alive || r.targetPresent || r.targetAlive || r.pulses
                 || !zero(r.position) || !zero(r.targetPosition) || r.right!=row.initialRight || r.facing!=row.initialRight)invalid();continue;}
         if(r.observed!=processed-1 || (r.targetAlive && !r.targetPresent) || (!r.targetPresent && !zero(r.targetPosition)))invalid();
         if(r.mode==6){if(r.alive || !zero(r.position))invalid();}else if(!r.alive && r.mode!=5)invalid();
-        if(r.mode!=6 && r.mode!=5 && !r.alive)invalid();auto expected=r;decision(expected,row,r.mode!=6);
+        if(r.mode!=6 && r.mode!=5 && !r.alive)invalid();
+        const bool blocked=r.mode==7;if(blocked && (!c.lineOfSight || r.phase || !sensed(r,row)))invalid();
+        // Mode is the registered old observation. A later CP cannot reproduce the
+        // earlier closed segment after movement, masks or relocation have changed.
+        auto expected=r;decision(expected,row,r.mode!=6,blocked);
         if(expected.mode!=r.mode || expected.right!=r.right || expected.facing!=r.facing || expected.speed.bits()!=r.speed.bits() || expected.held!=r.held)invalid();
         if(r.held && (!r.pulses || r.phase || !r.targetAlive))invalid();}
 }
@@ -132,8 +141,8 @@ void policyMatches(DetTickContext& ctx,const Plan& p){for(const auto& s:p.polici
     for(const auto& f:p.characterPolicy.fields)std::visit([&]<class T>(const T& expected){if(encodeDetStateValue(ctx.readGlobal<T>(p.characterPolicy.id,f.id))!=encodeDetStateValue(expected))invalid();},f.initial);}
 void pure(const DetSessionCheckpoint& cp,const DetBrain2DConfig& c,const Plan& p){
     for(const auto& row:c.owners)(void)detAttackState2D(cp,c.attack,row.actor);detail::validateCharacterCheckpoint2D(cp,c.character);
-    const auto m=detwire::manifestLayout(cp.manifest);if(m.systems.at(c.systemId)!=c.character.collision.priority || m.validatorVersions.at(c.validatorId)!=1
-        || m.logicProfiles.at(c.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{1,logicHash}
+    const auto m=detwire::manifestLayout(cp.manifest);if(m.systems.at(c.systemId)!=c.character.collision.priority || m.validatorVersions.at(c.validatorId)!=p.identity.first
+        || m.logicProfiles.at(c.logicProfileId)!=p.identity
         || m.systems.at(c.character.preSystemId)!=c.character.collision.priority || m.systems.at(c.character.postSystemId)!=c.character.collision.priority
         || m.validatorVersions.at(c.character.validatorId)!=p.characterIdentity.first || m.logicProfiles.at(c.character.logicProfileId)!=p.characterIdentity)invalid();
     descriptor(m,p.characterState,false);descriptor(m,p.characterPolicy,true);descriptor(m,p.state,true);
@@ -163,6 +172,7 @@ bool run(DetTickContext& ctx,const DetBrain2DConfig& c,const Plan& p){policyMatc
     if(ctx.systemId()!=c.systemId || ctx.readGlobal<std::uint64_t>(c.stateSchema,DetBrainProcessedTick)!=ctx.tick())invalid();
     validOwned([&]<class T>(auto f){return ctx.readGlobal<T>(c.stateSchema,f);},c,ctx.tick(),true);
     const auto ids=ctx.entities();std::vector<State> planned;const auto at=stamp(ctx.tick());
+    std::optional<DetCollisionQuery2D> snapshot;if(c.lineOfSight)snapshot.emplace(ctx,c.character.collision);
     for(std::size_t n=0;n<c.owners.size();++n){const auto& row=c.owners[n];auto r=readState([&]<class T>(auto f){return ctx.readGlobal<T>(c.stateSchema,f);},n);
         const bool present=std::binary_search(ids.begin(),ids.end(),row.actor);const auto attack=detAttackState2D(ctx,c.attack,row.actor);
         r.phase=static_cast<std::uint32_t>(attack.phase);r.observed=ctx.readGlobal<std::uint64_t>(c.attack.stateSchema,DetAttackProcessedTick);if(r.observed!=ctx.tick())invalid();
@@ -170,7 +180,11 @@ bool run(DetTickContext& ctx,const DetBrain2DConfig& c,const Plan& p){policyMatc
         if(present){const auto character=detCharacterState2D(ctx,row.actor,c.character);if(!character.enabled)invalid();const auto pose=ctx.pose(row.actor).position;r.position={pose.x,pose.y};}
         r.targetPresent=std::binary_search(ids.begin(),ids.end(),row.target);r.targetAlive=r.targetPresent && !detVitalityState2D(ctx,c.attack.vitality,row.target).dead;r.targetPosition={};
         if(r.targetPresent){const auto pose=ctx.pose(row.target).position;r.targetPosition={pose.x,pose.y};}
-        decision(r,row,present);r.count=add(r.count,1);r.at=at;if(r.held)r.pulses=add(r.pulses,1);planned.push_back(r);}
+        bool blocked=false;if(snapshot && present && r.alive && !r.phase && sensed(r,row)){
+            const auto hits=snapshot->raycast(r.position,delta(r),{ctx.read<std::uint32_t>(row.actor,p.body.id,DetBodyLayer),
+                ctx.read<std::uint32_t>(row.actor,p.body.id,DetBodyMask),row.actor,false});
+            blocked=std::any_of(hits.begin(),hits.end(),[&](const auto& hit){return hit.entity!=row.target;});}
+        decision(r,row,present,blocked);r.count=add(r.count,1);r.at=at;if(r.held)r.pulses=add(r.pulses,1);planned.push_back(r);}
     // Every decision and finite subtraction is planned before any input is issued.
     for(std::size_t n=0;n<c.owners.size();++n){const auto& row=c.owners[n];const auto& r=planned[n];write(ctx,c,n,r);
         if(std::binary_search(ids.begin(),ids.end(),row.actor))detCharacterInput2D(ctx,row.actor,c.character,{r.speed,false,false,false});
@@ -189,9 +203,9 @@ std::uint32_t detBrainField2D(const DetBrain2DConfig& c,SimEntityId owner,DetBra
 bool installDetBrain2D(DeterministicSession& session,DetBrain2DConfig c){Plan p;try{p=plan(c);if(session.sealed() || session.faulted() || session.nextTick())return false;}catch(const std::invalid_argument&){return false;}
     if(!(session.registerTypedSchema(p.state) && session.registerGlobalState(p.state.id)))return false;
     for(const auto& policy:p.policies)if(!(session.registerTypedSchema(policy) && session.registerGlobalState(policy.id)))return false;
-    return session.registerLogicProfile(c.logicProfileId,1,logicHash)
+    return session.registerLogicProfile(c.logicProfileId,p.identity.first,p.identity.second)
         && session.registerSystem(c.systemId,c.character.collision.priority,[c,p](DetTickContext& ctx){return run(ctx,c,p);})
-        && session.registerValidator(c.validatorId,1,[c,p](const DetSessionCheckpoint& cp,std::string& error){try{pure(cp,c,p);return true;}catch(const std::exception& e){error=e.what();return false;}});}
+        && session.registerValidator(c.validatorId,p.identity.first,[c,p](const DetSessionCheckpoint& cp,std::string& error){try{pure(cp,c,p);return true;}catch(const std::exception& e){error=e.what();return false;}});}
 DetBrainState2D detBrainState2D(DetTickContext& ctx,const DetBrain2DConfig& c,SimEntityId owner){const auto p=plan(c);policyMatches(ctx,p);
     (void)detAttackState2D(ctx,c.attack,owner);validOwned([&]<class T>(auto f){return ctx.readGlobal<T>(c.stateSchema,f);},c,stamp(ctx.tick()),false);
     return copy(readState([&]<class T>(auto f){return ctx.readGlobal<T>(c.stateSchema,f);},ownerIndex(c,owner)));}
