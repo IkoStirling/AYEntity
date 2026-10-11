@@ -213,6 +213,30 @@ ayt::math::DetFloat32 editDecimal(std::string_view token) {
     return value;
 }
 
+// Stage63 private offline authoring helpers; insert after the Stage61 edit
+// helpers. Reuse actual FloatText and Level validation, without a second parser.
+std::uint32_t solidWord(std::string_view token) {
+    std::uint32_t value=0;
+    const auto parsed=std::from_chars(token.data(),token.data()+token.size(),value,10);
+    require(parsed.ec==std::errc{} && parsed.ptr==token.data()+token.size(),
+        "Layer/mask must be a decimal UInt32 without overflow");
+    return value;
+}
+DetCollisionShape2D solidShape(std::string_view token) {
+    if(token=="aabb")return DetCollisionShape2D::Aabb;
+    if(token=="slope-left")return DetCollisionShape2D::SlopeRisesLeft;
+    if(token=="slope-right")return DetCollisionShape2D::SlopeRisesRight;
+    throw std::runtime_error("Unknown solid shape; choose aabb, slope-left or slope-right");
+}
+DetLevel2D terrainStarter() {
+    // New explicit acquisition only: old character/dash starters stay unchanged.
+    // Static slopes do not require advanced/one-way Character. No moving slopes,
+    // continuous-terrain promise, relocation, step-up or gameplay tables implied.
+    auto level=starter("character");
+    level.character.collision.staticSlopes=true;
+    return level;
+}
+
 void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
     const auto config=detLevelSessionConfig(level);
     std::cout<<"{\"schema\":1,\"status\":\"passed\",\"source\":"<<json(source.generic_string())
@@ -346,7 +370,8 @@ int run(int argc,char** argv) {
             "aydetlevel canonicalize <level.dlt> <fresh.dlt>\n"
             "aydetlevel float <finite-decimal>\n"
             "aydetlevel float-bits <eight-hex-digits>\n"
-            "aydetlevel create <character|dash> <fresh.dlt>\n"
+            "aydetlevel create <character|dash|terrain> <fresh.dlt>\n"
+            "aydetlevel add-solid <source.dlt> <new-id> <aabb|slope-left|slope-right> <x> <y> <half-x> <half-y> <layer-u32> <mask-u32> <fresh.dlt>\n"
             "aydetlevel preview <level.dlt> <fresh.svg>\n"
             "aydetlevel place <source.dlt> <actor-id> <x> <y> <fresh.dlt>\n"
             "aydetlevel resize-half <source.dlt> <actor-id> <half-x> <half-y> <fresh.dlt>\n"
@@ -396,6 +421,50 @@ int run(int argc,char** argv) {
         const std::filesystem::path destination=argv[6];writeFresh(destination,canonical);
         inspect(level,destination);return 0;
     }
+    // Place this branch before the existing generic create handler.
+    if(command=="create" && argc>=3 && std::string_view(argv[2])=="terrain") {
+        require(argc==4,"create terrain requires a fresh output path");
+        auto level=terrainStarter();std::string error;
+        const bool valid=validateDetLevel2D(level,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[3];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
+    }
+    if(command=="add-solid") {
+        // argv: program, command, source, ID, shape, X, Y, halfX, halfY,
+        // layer, mask, destination. There are exactly twelve arguments.
+        require(argc==12,"add-solid requires source, new actor ID, shape, position, half extents, layer, mask and fresh output");
+        const std::filesystem::path source=argv[2];ordinary(source);
+        DetLevel2D level;std::string error;
+        const bool loaded=loadDetLevel2D(source,level,error);require(loaded,error);
+        const auto id=editActorId(argv[3]);const auto shape=solidShape(argv[4]);
+        const auto x=editDecimal(argv[5]),y=editDecimal(argv[6]);
+        const auto halfX=editDecimal(argv[7]),halfY=editDecimal(argv[8]);
+        const auto layer=solidWord(argv[9]),mask=solidWord(argv[10]);
+        require(halfX>ayt::math::DetFloat32{} && halfY>ayt::math::DetFloat32{},
+            "Solid half extents must be strictly positive");
+        require(level.actors.size()<64,"Level actor count limit");
+        if(shape!=DetCollisionShape2D::Aabb)
+            require(level.character.collision.staticSlopes,
+                "Slope solid requires the source's explicit staticSlopes policy; use create terrain for a new starter");
+        const auto insertion=std::lower_bound(level.actors.begin(),level.actors.end(),id,
+            [](const DetLevelActor2D& actor,SimEntityId identity){return actor.id<identity;});
+        require(insertion==level.actors.end() || insertion->id!=id,"Actor identity is already authored in this level");
+        DetLevelActor2D actor;actor.id=id;actor.position={x,y};
+        actor.body.mode=DetBodyMode2D::Static;actor.body.shape=shape;
+        actor.body.half={halfX,halfY};actor.body.layer=layer;actor.body.mask=mask;
+        // Fresh ordinary solid: defaults keep offset/velocity/ignoredOneWay/path
+        // zero, character/trigger/oneWay false. No authority table or policy edit.
+        level.actors.insert(insertion,std::move(actor));
+        // Layer0, represented bounds/area, configured maxBodies, actual complete
+        // policy/role/reference/namespace budgets and initial matching penetration
+        // remain the existing real Level pipeline's decision. Mask0 is legal.
+        const bool valid=validateDetLevel2D(level,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[11];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
+    }
+
     if(command=="create") {
         require(argc==4,"create requires a starter name and a fresh output path");
         auto level=starter(argv[2]);std::string error;

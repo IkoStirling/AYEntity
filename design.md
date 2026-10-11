@@ -3046,3 +3046,32 @@ This finite offline gate does not separately execute an edited bound path or
 absolute-spawn gameplay, Sim/current CP, physical I/O faults or browser rendering.
 No hot reload, save migration, runtime pose writer, new numeric/wire profile or
 historical authentication is added; final native VM Deferred.
+
+## Stage63: whole-content closure for one added Static (local verified; native VM Deferred)
+
+The offline CLI fully decodes a local Level and parses a new UInt64 identity,
+actual finite software decimals and UInt32 layer/mask before sorted insertion.
+argc12 has fixed source/ID/shape/XY/halfXY/layer/mask/destination slots. No state,
+system, permission, action, trigger or tick owner is added. The body's unused
+authoring fields retain canonical zero/false defaults, including offset/velocity/
+ignored reference/path/character/trigger/oneWay. Shape is Aabb or a true filled
+triangle, with the existing exact geometry and collision meaning.
+
+An existing source must already select staticSlopes for a wedge; absence is a
+normal authoring failure rather than policy inference. Existing format/session/
+input and every unselected policy/table remain. New create terrain sets only
+staticSlopes on the character starter, selecting existing controller5/collision6
+with format1, nonadvanced/non-one-way. No continuity or moving-wedge authority
+is silently enabled. Layer0 is rejected by actual validation and mask0 is legal.
+
+Actual full Level preparation/fresh seal checks represented geometry/initial
+matching penetration, references, identity, configured body count and real joint
+budgets before complete canonical encoding/exclusive fresh write. Static-static
+composition follows existing semantics. New content has a different full identity;
+this is not hot reload, restore migration, a Host/input mapping or future motion
+proof. Physical I/O partial fresh files retain the existing disclosure.
+
+The finite actual gate checks use independent dyadic actor bits/SVG triangle vertices,
+full unselected nonactor canonical lines and original actor equality, canonical
+stability, sorted IDs, mask0, property-edit composition and protected refusals.
+Actual local MSVC Release AYEntity_LevelToolChecks passed in 3.41s; the standard tool build completed in 6.188s. This finite gate exercised create/add/place/resize/preview, selected dyadic actor bits and actual filled-polygon points, sorted identities, full unselected canonical policy/original actors and canonical stability, legal mask0, a valid 64-body source and 16 protected normal refusals. The recorded source snapshots matched; the actual executable and artifacts are hash-bound. Evidence is out/detcontent36-40-20261011/stage63-actual-freeze.json and stage63-tool1/result.json. No Sim advance, future walkability, whole-checkpoint golden, authentication, new content Pak execution, broad matrix or native VM acceptance is claimed; native final VM remains Deferred. No production/oracle repair or prior gate reuse was needed for this actual invocation.

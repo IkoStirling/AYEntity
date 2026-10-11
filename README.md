@@ -1471,3 +1471,24 @@ This finite offline gate does not separately execute an edited bound path or
 absolute-spawn gameplay, Sim/current CP, physical I/O faults or browser rendering.
 No hot reload, save migration, runtime pose writer, new numeric/wire profile or
 historical authentication is added; final native VM Deferred.
+
+## Stage63: finite Static obstacle authoring (local verified; native VM Deferred)
+
+`aydetlevel create terrain fresh.dlt` supplies the existing character/
+floor starter with explicit staticSlopes only: format1/app1/input1/step1/64,
+collision6/controller5 and nonadvanced/non-one-way. It does not infer runtime
+input, moving/continuous terrain, respawn or gameplay tables.
+
+Use `add-solid source.dlt new-id shape x y half-x half-y layer mask fresh.dlt`
+for one ID-sorted ordinary nontrigger Static AABB or actual filled left/right wedge.
+ID is full nonzero UInt64 decimal; layer/mask are UInt32 decimal and coordinates/
+positive half extents use software FloatText. Wedges require an existing explicit
+staticSlopes policy; source format and all unselected authority are preserved.
+Layer0 fails real validation, while mask0 remains valid geometric authoring.
+
+The complete modified Level validates/seals/encodes before fresh exclusive output.
+Follow [tool usage](tools/detlevel/README.md) through place/resize-half/preview;
+no runtime motion writer or new simulation profile is added. Count64/configured
+lower limits/text64KiB/canonical8KiB/joint budgets remain.
+
+Actual local MSVC Release AYEntity_LevelToolChecks passed in 3.41s; the standard tool build completed in 6.188s. This finite gate exercised create/add/place/resize/preview, selected dyadic actor bits and actual filled-polygon points, sorted identities, full unselected canonical policy/original actors and canonical stability, legal mask0, a valid 64-body source and 16 protected normal refusals. The recorded source snapshots matched; the actual executable and artifacts are hash-bound. Evidence is out/detcontent36-40-20261011/stage63-actual-freeze.json and stage63-tool1/result.json. No Sim advance, future walkability, whole-checkpoint golden, authentication, new content Pak execution, broad matrix or native VM acceptance is claimed; native final VM remains Deferred. No production/oracle repair or prior gate reuse was needed for this actual invocation.

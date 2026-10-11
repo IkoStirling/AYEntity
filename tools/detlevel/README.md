@@ -417,3 +417,49 @@ This finite offline gate does not separately execute an edited bound path or
 absolute-spawn gameplay, Sim/current CP, physical I/O faults or browser rendering.
 No hot reload, save migration, runtime pose writer, new numeric/wire profile or
 historical authentication is added; final native VM Deferred.
+
+## Stage63: build ordinary Static obstacles (local verified; native VM Deferred)
+
+```text
+aydetlevel create terrain base.dlt
+aydetlevel add-solid base.dlt 90 slope-right 4 0.5 1 0.5 2 1 right.dlt
+aydetlevel add-solid right.dlt 50 slope-left -4 0.5 1 0.5 2 1 slopes.dlt
+aydetlevel add-solid slopes.dlt 200 aabb 7 1 0.5 1 2 1 solids.dlt
+aydetlevel place solids.dlt 200 6 1 placed.dlt
+aydetlevel resize-half placed.dlt 200 0.5 0.75 resized.dlt
+aydetlevel preview resized.dlt layout.svg
+```
+
+The exact add-solid interface is source/new-id/shape/X/Y/halfX/halfY/layer/mask/
+fresh output (argc12 including argv0). New nonzero UInt64 decimal IDs are checked
+for overflow/duplicates and inserted in order. Shape accepts only aabb,
+slope-left or slope-right. Layer and mask are full UInt32 decimal; layer0 is
+invalid, mask0 is a valid collision-disabled ordinary solid, never Disabled mode.
+All four coordinates use actual finite software decimal conversion; positive
+half extents must remain positive after software rounding. No native float.
+
+New bodies are Static, nontrigger, non-one-way and not characters or paths,
+with zero velocity/offset/ignored reference. For bounds min/max, right-rising
+vertices are min,(max.x,min.y),max; left-rising vertices are min,(max.x,min.y),
+(min.x,max.y). They are filled solid triangles with real geometry, not stairs
+or bounding-box-only slopes. inspect reports exact fields; preview renders
+the same authored filled polygon outside Sim, without executing gameplay.
+
+The source must already select staticSlopes for either wedge; absence refuses
+output rather than upgrading a policy. create terrain reuses character/floor10/
+100 and explicitly enables only staticSlopes: format1/app1/input1/step1/64,
+controller5/collision6, nonadvanced/non-one-way. It adds no moving/continuous
+terrain, step-up, respawn or gameplay tables. character/dash starters are unchanged.
+The caller supplies a matching input/Host recipe; initial validity does not
+guarantee future walkability, terrain seams or motion/restore compatibility.
+
+Every source field not selected remains in the canonical full content identity;
+there is no implicit source-version migration. Body64/configured lower limits,
+text64KiB/canonical8KiB and actual joint namespaces apply. Static-static overlap
+keeps existing composition semantics; initial matching ordinary character/solid
+interior penetration fails. The full Level validates/seals/encodes before fresh
+exclusive output. Normal failure has no output; existing files are protected,
+and physical I/O failure may leave a partial new file. No removal/shape replacement,
+running-state writer, editor, Tilemap import or durability promise is added.
+
+Actual local MSVC Release AYEntity_LevelToolChecks passed in 3.41s; the standard tool build completed in 6.188s. This finite gate exercised create/add/place/resize/preview, selected dyadic actor bits and actual filled-polygon points, sorted identities, full unselected canonical policy/original actors and canonical stability, legal mask0, a valid 64-body source and 16 protected normal refusals. The recorded source snapshots matched; the actual executable and artifacts are hash-bound. Evidence is out/detcontent36-40-20261011/stage63-actual-freeze.json and stage63-tool1/result.json. No Sim advance, future walkability, whole-checkpoint golden, authentication, new content Pak execution, broad matrix or native VM acceptance is claimed; native final VM remains Deferred. No production/oracle repair or prior gate reuse was needed for this actual invocation.
