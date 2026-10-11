@@ -2,6 +2,7 @@
 #include <AYEntity/DeterministicProgress2D.h>
 #include <AYEntity/DeterministicCollisionQuery2D.h>
 #include "detail/DetSessionWire.h"
+#include "detail/DetActions2DIdentity.h"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -9,7 +10,7 @@
 namespace ayt::entity {
 namespace {
 constexpr std::size_t chunkBytes=1000;
-constexpr std::uint64_t logicHash=0x4450523244503031ull,actionsLogicHash=0x4441433244503031ull;
+constexpr std::uint64_t logicHash=0x4450523244503031ull;
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic progress 2D: invalid configuration, policy or registered state");}
 std::uint64_t stamp(std::uint64_t tick){if(tick==UINT64_MAX)invalid();return tick+1;}
 std::uint32_t counterField(std::size_t index){return static_cast<std::uint32_t>(100+10*index);}
@@ -107,11 +108,10 @@ void validResult(const DetProgressResult2D& r,const DetProgress2DConfig& c,std::
 void validValue(std::uint64_t value,const DetProgressCounter2D& counter){if(value<counter.minimum || value>counter.maximum)invalid();}
 void validateCheckpoint(const DetSessionCheckpoint& cp,const DetProgress2DConfig& c,const Plan& p){
     const auto manifest=detwire::manifestLayout(cp.manifest);
-    const auto actionProfile=c.actions.collision.characterRespawn?kDetActions2DRespawnProfileVersion:kDetActions2DProfileVersion;
-    const auto actionHash=c.actions.collision.characterRespawn?UINT64_C(0x4441433244503032):actionsLogicHash;
+    const auto actionIdentity=detail::actionsIdentity2D(c.actions);
     if(manifest.validatorVersions.at(c.validatorId)!=1 || manifest.logicProfiles.at(c.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{1,logicHash}
-        || manifest.validatorVersions.at(c.actions.validatorId)!=actionProfile
-        || manifest.logicProfiles.at(c.actions.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{actionProfile,actionHash}
+        || manifest.validatorVersions.at(c.actions.validatorId)!=actionIdentity.first
+        || manifest.logicProfiles.at(c.actions.logicProfileId)!=actionIdentity
         || manifest.systems.at(c.actions.collision.systemId)!=c.actions.collision.priority
         || (c.actions.collision.extended && manifest.validatorVersions.at(c.actions.collision.systemId)!=p.body.version))invalid();
     (void)DetCollisionQuery2D(cp,c.actions.collision);descriptor(manifest,p.state);descriptor(manifest,p.actionState);

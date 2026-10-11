@@ -1,6 +1,7 @@
 // Stage47 dedicated HP authority, real Enter effects and pure restore closure.
 #include <AYEntity/DeterministicVitality2D.h>
 #include "detail/DetSessionWire.h"
+#include "detail/DetPathMotion2DIdentity.h"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -26,13 +27,6 @@ std::size_t regionIndex(const DetVitality2DConfig& c,std::uint32_t id){const aut
 bool kindValid(DetVitalityKind2D k){return k==DetVitalityKind2D::Hurt || k==DetVitalityKind2D::Heal;}
 struct Writer {std::vector<std::uint8_t> bytes;void u64(std::uint64_t v,unsigned w=8){for(unsigned n=0;n<w;++n)bytes.push_back(static_cast<std::uint8_t>(v>>(8*n)));}void u32(std::uint32_t v){u64(v,4);}};
 struct Plan {std::vector<std::uint8_t> bytes;DetTypedStateSchema state,body,recovery,regions;std::vector<DetTypedStateSchema> policies,pathPolicies,flowPolicies,flowStates;};
-// Path1 exposes its mutable descriptor but no immutable-policy factory. This
-// read-only dependency descriptor matches its public fixed policy fields.
-DetTypedStateSchema pathPolicy(const DetPathMotion2DConfig& c){DetTypedStateSchema s{c.policySchema,1,{{1,std::uint32_t{1}},
-    {2,c.collision.bodySchema},{3,c.collision.historySchema},{4,c.collision.systemId},{5,c.preSystemId},{6,c.postSystemId},
-    {7,c.validatorId},{8,c.logicProfileId},{9,c.tickPeriod},{10,static_cast<std::uint32_t>(c.playback)},{11,static_cast<std::uint32_t>(c.waypoints.size())}}};
-    for(std::size_t n=0;n<c.waypoints.size();++n){const auto id=static_cast<std::uint32_t>(20+3*n);const auto& point=c.waypoints[n];
-        s.fields.insert(s.fields.end(),{{id,point.offset},{id+1,point.travelTicks},{id+2,point.dwellTicks}});}return s;}
 Plan plan(const DetVitality2DConfig& c){
     if((!c.periodicRegions && c.regionStateSchema!=224) || (c.periodicRegions && (c.regions.empty() || c.regionStateSchema<2 || c.regionStateSchema==UINT32_MAX)))invalid();
     if(!c.respawnRecovery && (c.recoveryStateSchema!=208 || c.postSystemId!=62 || c.respawnFlow || !c.recoveries.empty()))invalid();
@@ -106,7 +100,7 @@ Plan plan(const DetVitality2DConfig& c){
     for(const auto& target:c.progress.actions.targets)if(target.path){const auto& path=*target.path;
         if(c.systemId>=path.preSystemId || c.systemId==path.postSystemId || c.validatorId==path.validatorId || c.logicProfileId==path.logicProfileId
             || (c.respawnRecovery && c.postSystemId<=path.postSystemId))invalid();
-        if(!paths.contains(path.policySchema)){reserve(path.stateSchema);reserve(path.policySchema);paths.emplace(path.policySchema,path.stateSchema);p.pathPolicies.push_back(pathPolicy(path));}
+        if(!paths.contains(path.policySchema)){reserve(path.stateSchema);reserve(path.policySchema);paths.emplace(path.policySchema,path.stateSchema);p.pathPolicies.push_back(detPathMotionPolicySchema2D(path));}
         else if(paths.at(path.policySchema)!=path.stateSchema)invalid();}
     if(c.respawnRecovery){const auto& r=c.respawnFlow->respawn;reserve(r.stateSchema);reserve(r.policySchema);reserve(r.character.stateSchema);reserve(r.character.policySchema);
         for(const auto& s:p.flowStates)reserve(s.id);for(const auto& s:p.flowPolicies)reserve(s.id);reserve(c.recoveryStateSchema);}
@@ -120,7 +114,7 @@ Plan plan(const DetVitality2DConfig& c){
 }
 void policiesMatch(DetTickContext& ctx,const Plan& p){for(const auto& s:p.policies)for(const auto& f:s.fields)std::visit([&]<class T>(const T& expected){
     if(encodeDetStateValue(ctx.readGlobal<T>(s.id,f.id))!=encodeDetStateValue(expected))invalid();},f.initial);}
-void descriptor(const detwire::ManifestLayout& m,const DetTypedStateSchema& s){if(m.schemaVersions.at(s.id)!=s.version || !m.globals.contains(s.id))invalid();
+void descriptor(const detwire::ManifestLayout& m,const DetTypedStateSchema& s,bool requireGlobal=true){if(m.schemaVersions.at(s.id)!=s.version || (requireGlobal && !m.globals.contains(s.id)))invalid();
     const auto& actual=m.schemas.at(s.id);if(actual.size()!=s.fields.size())invalid();for(std::size_t n=0;n<actual.size();++n)if(actual[n].id!=s.fields[n].id
         || actual[n].type!=detStateType(s.fields[n].initial) || actual[n].width!=encodeDetStateValue(s.fields[n].initial).size())invalid();}
 template<class Get>DetVitalityState2D readActor(Get&& get,std::size_t n){DetVitalityState2D r;
@@ -284,9 +278,10 @@ void validateCheckpoint(const DetSessionCheckpoint& cp,const DetVitality2DConfig
         if(cp.globals.at(s.id)!=defaults)invalid();for(const auto& [id,a]:cp.actors){(void)id;if(a.blocks.at(s.id)!=defaults)invalid();}}};
     matchPolicies(p.policies);matchPolicies(p.pathPolicies);matchPolicies(p.flowPolicies);
     const DetStateLayout l(p.state);const auto& words=cp.globals.at(c.stateSchema);if(!l.valid(words))invalid();for(const auto& [id,a]:cp.actors){(void)id;if(a.blocks.at(c.stateSchema)!=l.defaults())invalid();}
-    for(const auto& t:c.progress.actions.targets)if(t.path){const auto& path=*t.path;if(m.systems.at(path.preSystemId)!=path.collision.priority
-        || m.systems.at(path.postSystemId)!=path.collision.priority || m.validatorVersions.at(path.validatorId)!=1
-        || m.logicProfiles.at(path.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{1,UINT64_C(0x44504d3244503031)})invalid();}
+    for(const auto& t:c.progress.actions.targets)if(t.path){const auto& path=*t.path;const auto identity=detail::pathMotionIdentity2D(path);
+        descriptor(m,detPathMotionStateSchema2D(path),false);if(m.systems.at(path.preSystemId)!=path.collision.priority
+        || m.systems.at(path.postSystemId)!=path.collision.priority || m.validatorVersions.at(path.validatorId)!=identity.first
+        || m.logicProfiles.at(path.logicProfileId)!=identity)invalid();}
     if(c.respawnRecovery){descriptor(m,p.recovery);const DetStateLayout recovery(p.recovery);const auto& rw=cp.globals.at(p.recovery.id);
         if(!recovery.valid(rw) || m.systems.at(c.postSystemId)!=c.progress.actions.collision.priority)invalid();
         for(const auto& [id,a]:cp.actors){(void)id;if(a.blocks.at(p.recovery.id)!=recovery.defaults())invalid();}

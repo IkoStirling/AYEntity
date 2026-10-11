@@ -3,6 +3,7 @@
 
 namespace ayt::entity {
 inline constexpr std::uint32_t kDetPathMotion2DProfileVersion=1;
+inline constexpr std::uint32_t kDetPathMotion2DTriggerProfileVersion=2;
 enum class DetPathPlayback2D : std::uint32_t {Once=0,Loop=1,PingPong=2};
 /// Relative position and outgoing travel duration. Backward travel uses the lower point's duration.
 struct DetPathWaypoint2D {
@@ -29,6 +30,10 @@ struct DetPathMotion2DConfig {
     math::DetFloat32 tickPeriod=math::DetFloat32::fromInt(1)/math::DetFloat32::fromInt(60);
     DetPathPlayback2D playback=DetPathPlayback2D::PingPong;
     std::vector<DetPathWaypoint2D> waypoints;
+    /// Explicit profile2 role: bound bodies are non-one-way AABB MovingObstacle
+    /// triggers. False preserves every profile1 descriptor, policy and identity.
+    /// This changes neither collision masks nor real trigger event semantics.
+    bool movingTrigger=false;
 };
 enum DetPathMotionField2D : std::uint32_t {
     DetPathBound=10,DetPathEnabled=20,DetPathPaused=30,DetPathFinished=40,
@@ -45,11 +50,15 @@ struct DetPathMotionState2D {
 };
 struct DetPathMotionInput2D {bool enabled=true,paused=false,restart=false;};
 /** @brief Register velocity intent and post-collision progress, with no second pose writer.
- * @note Bound actors must be nontrigger MovingObstacle bodies. No application
+ * @note By default bound actors must be nontrigger MovingObstacle bodies. The
+ * explicit movingTrigger role instead requires MovingObstacle/AABB/trigger and
+ * rejects one-way or ignored-one-way state. No application
  * may overwrite their velocity after path pre, or their pose outside collision.
  * A travel opportunity advances only when collision reached the requested target;
  * otherwise blocked=true and the cursor stays, so an explicit policy can stop or
  * reverse a blocked platform. The next opportunity retries from its actual pose.
+ * A moving trigger receives no solid response or support/carry: blocked still
+ * describes a sampled-target mismatch, including software arithmetic rounding.
  * On arrival, the target point's dwell counts complete subsequent zero-motion
  * ticks. Once finishes at the final point; PingPong turns without an extra move.
  * @note All counters, controls and results are checkpoint authority. No wall clock,
@@ -60,9 +69,13 @@ struct DetPathMotionInput2D {bool enabled=true,paused=false,restart=false;};
 /// @note With matching collision.movingSlopes, bindings also permit translating
 /// ordinary wedge bodies. Path profile1 remains unchanged; collision owns shape motion.
 bool installDetPathMotion2D(DeterministicSession& session,DetPathMotion2DConfig config);
-/// @brief Read the canonical profile1 state descriptor for typed committed-boundary consumers.
+/// @brief Read the selected canonical path state descriptor for typed committed-boundary consumers.
 /// @note Returns the exact installed layout; it grants no path control or Session ownership.
 DetTypedStateSchema detPathMotionStateSchema2D(const DetPathMotion2DConfig& config);
+/// @brief Read the exact installed immutable policy descriptor, including every waypoint and the selected role.
+/// @note Profile1 retains its old fields/defaults; profile2 adds the true role field12.
+/// Consumers must bind this full descriptor, rather than copy a guessed profile1 layout or only its hash.
+DetTypedStateSchema detPathMotionPolicySchema2D(const DetPathMotion2DConfig& config);
 /// @brief Create canonical bound/unbound actor state at the first relative waypoint.
 std::vector<std::uint64_t> detPathMotionState2D(const DetPathMotion2DConfig& config,const DetPathMotionState2D& state={});
 /// @brief Copy a bound platform's registered controls, path phase and last accepted motion.

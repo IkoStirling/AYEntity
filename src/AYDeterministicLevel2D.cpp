@@ -1,4 +1,4 @@
-// design reference: AYEntity/design.md Stage32/36/42/46/48/49 bounded complete level content.
+// design reference: AYEntity/design.md Stage32/36/42/46/48/49/50 bounded complete level content.
 #include <AYEntity/DeterministicLevel2D.h>
 #include <algorithm>
 #include <charconv>
@@ -43,6 +43,7 @@ struct BinaryCodec {Writer w;
     template<class E>void enumeration(E value){w.u(static_cast<std::uint32_t>(value));}
 };
 Bytes canonical(const DetLevel2D& level){
+    if(level.formatVersion<7 && std::any_of(level.paths.begin(),level.paths.end(),[](const auto& p){return p.movingTrigger;}))invalid("Older level formats cannot author moving trigger paths");
     const bool periodicContent=level.periodicVitalityRegions || std::any_of(level.vitalityRegions.begin(),level.vitalityRegions.end(),[](const auto& r){return r.periodTicks!=0;});
     if(level.formatVersion<6 && periodicContent)invalid("Older level formats cannot author periodic vitality");
     for(const auto& region:level.vitalityRegions)if(region.periodTicks>65535 || (!level.periodicVitalityRegions && region.periodTicks))invalid("Level vitality interval policy");
@@ -60,7 +61,7 @@ Bytes canonical(const DetLevel2D& level){
         || level.respawnRegions.size()>kDetCharacterRespawnFlow2DMaxRegions
         || (level.character.collision.characterRespawn?level.respawnSpawns.empty() || level.respawnBindings.empty():respawnContent))invalid("Level respawn table budget or opt-in mismatch");
     if(level.paths.size()>8 || level.actors.empty() || level.actors.size()>64)invalid("Level body/path count limit");
-    if(level.formatVersion<1 || level.formatVersion>6)invalid("Unknown level format version");
+    if(level.formatVersion<1 || level.formatVersion>7)invalid("Unknown level format version");
     if(level.formatVersion==1 && (!level.actionTargets.empty() || !level.rules.empty() || level.maxActionsPerTick!=64))invalid("Format1 cannot author actions/rules");
     if(level.actionTargets.size()>8 || level.rules.size()>kDetInteraction2DMaxRules
         || !level.maxActionsPerTick || level.maxActionsPerTick>1024 || (level.actionTargets.empty() && !level.rules.empty()))invalid("Level action/rule budget");
@@ -73,14 +74,14 @@ Bytes canonical(const DetLevel2D& level){
     for(const auto& objective:level.objectives)if(objective.conditions.empty() || objective.conditions.size()>kDetProgress2DMaxConditions)invalid("Level objective condition budget");
     BinaryCodec io;const auto magic=level.formatVersion==1?std::string_view("AYDLV001"):
         level.formatVersion==2?std::string_view("AYDLV002"):level.formatVersion==3?std::string_view("AYDLV003"):
-        level.formatVersion==4?std::string_view("AYDLV004"):level.formatVersion==5?std::string_view("AYDLV005"):std::string_view("AYDLV006");
+        level.formatVersion==4?std::string_view("AYDLV004"):level.formatVersion==5?std::string_view("AYDLV005"):level.formatVersion==6?std::string_view("AYDLV006"):std::string_view("AYDLV007");
     for(auto ch:magic)io.w.u(static_cast<unsigned char>(ch),1);
     io.word(level.formatVersion);io.word(level.applicationVersion);io.word(level.inputVersion);
     io.word(level.stepNumerator);io.word(level.stepDenominator);
     auto policy=level.character;collision(io,policy.collision);if(level.formatVersion>=4)io.boolean(policy.collision.characterRespawn);character(io,policy);
     io.word(static_cast<std::uint32_t>(level.paths.size()));
     for(const auto& path:level.paths){if(path.waypoints.size()<2 || path.waypoints.size()>24)invalid("Level waypoint count limit");
-        io.word(path.id);io.enumeration(path.playback);io.word(static_cast<std::uint32_t>(path.waypoints.size()));
+        io.word(path.id);io.enumeration(path.playback);if(level.formatVersion>=7)io.boolean(path.movingTrigger);io.word(static_cast<std::uint32_t>(path.waypoints.size()));
         for(const auto& point:path.waypoints){io.w.vector(point.offset);io.word(point.travelTicks);io.word(point.dwellTicks);}}
     io.word(static_cast<std::uint32_t>(level.actors.size()));
     for(const auto& actor:level.actors){io.w.u(actor.id,8);io.enumeration(actor.body.mode);io.enumeration(actor.body.shape);
@@ -136,7 +137,7 @@ Prepared prepare(const DetLevel2D& level,const DetLevel2DOptions& options){
     unique(validators,options.identityValidatorId);unique(logic,options.identityLogicId);
     std::uint32_t previousPath=0;
     for(std::size_t n=0;n<level.paths.size();++n){const auto& source=level.paths[n];if(source.id<=previousPath)invalid("Path IDs must increase");previousPath=source.id;
-        DetPathMotion2DConfig p;p.collision=bc;p.playback=source.playback;p.waypoints=source.waypoints;
+        DetPathMotion2DConfig p;p.collision=bc;p.playback=source.playback;p.waypoints=source.waypoints;p.movingTrigger=source.movingTrigger;
         p.tickPeriod=D::fromUInt(level.stepNumerator)/D::fromUInt(level.stepDenominator);
         p.stateSchema=indexed(options.pathSchemaBase,2*n);p.policySchema=indexed(options.pathSchemaBase,2*n+1);
         p.preSystemId=indexed(options.pathPreSystemBase,n);p.postSystemId=indexed(options.pathPostSystemBase,n);
@@ -308,7 +309,8 @@ Prepared prepare(const DetLevel2D& level,const DetLevel2DOptions& options){
         state.blocks[bc.bodySchema]=detCollisionBodyState2D(bc,actor.body);
         if(actor.character){DetCharacterState2D initial;initial.enabled=true;state.blocks[cc.stateSchema]=detCharacterState2D(cc,initial);}
         if(actor.path){auto path=std::find_if(level.paths.begin(),level.paths.end(),[&](const auto& p){return p.id==actor.path;});
-            if(path==level.paths.end() || actor.character || actor.body.mode!=DetBodyMode2D::MovingObstacle || actor.body.trigger || actor.body.velocity!=V{})invalid("Invalid level path binding");
+            if(path==level.paths.end() || actor.character || actor.body.mode!=DetBodyMode2D::MovingObstacle || actor.body.velocity!=V{})invalid("Invalid level path binding");
+            if(path->movingTrigger?(actor.body.shape!=DetCollisionShape2D::Aabb || !actor.body.trigger || actor.body.oneWay):actor.body.trigger)invalid("Invalid level path trigger role");
             const auto index=static_cast<std::size_t>(path-level.paths.begin());DetPathMotionState2D initial;initial.bound=true;initial.origin=actor.position;
             state.blocks[result.paths[index].stateSchema]=detPathMotionState2D(result.paths[index],initial);usedPaths.insert(actor.path);}
         result.actors.emplace_back(actor.id,std::move(state));}
@@ -403,11 +405,11 @@ DetVitality2DConfig detLevelVitalityConfig2D(const DetLevel2D& level,const DetLe
 bool validateDetLevel2D(const DetLevel2D& level,std::string& error,const DetLevel2DOptions& options){try{(void)checked(level,options);error.clear();return true;}catch(const std::exception& e){error=e.what();return false;}}
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,const DetLevel2DOptions& options){std::size_t location=0;bool semantic=false;try{
     TokenReader r(text,location);DetLevel2D value;r.expect("AYDLEVEL");value.formatVersion=r.integer<std::uint32_t>();
-    if(value.formatVersion<1 || value.formatVersion>6)invalid("Unknown level format version");
+    if(value.formatVersion<1 || value.formatVersion>7)invalid("Unknown level format version");
     r.expect("session");r.word(value.applicationVersion);r.word(value.inputVersion);r.word(value.stepNumerator);r.word(value.stepDenominator);
     r.expect("collision");collision(r,value.character.collision);if(value.formatVersion>=4)r.boolean(value.character.collision.characterRespawn);r.expect("character");character(r,value.character);
     r.expect("paths");const auto paths=r.integer<std::uint32_t>();if(paths>8)invalid("Level path count limit");
-    for(std::uint32_t n=0;n<paths;++n){r.expect("path");DetLevelPath2D p;r.word(p.id);r.enumeration(p.playback);const auto count=r.integer<std::uint32_t>();
+    for(std::uint32_t n=0;n<paths;++n){r.expect("path");DetLevelPath2D p;r.word(p.id);r.enumeration(p.playback);if(value.formatVersion>=7)r.boolean(p.movingTrigger);const auto count=r.integer<std::uint32_t>();
         if(count<2 || count>24)invalid("Level waypoint count limit");for(std::uint32_t k=0;k<count;++k){r.expect("point");DetPathWaypoint2D point;r.vector(point.offset);r.word(point.travelTicks);r.word(point.dwellTicks);p.waypoints.push_back(point);}value.paths.push_back(std::move(p));}
     r.expect("actors");const auto actors=r.integer<std::uint32_t>();if(!actors || actors>64)invalid("Level actor count limit");
     for(std::uint32_t n=0;n<actors;++n){r.expect("actor");DetLevelActor2D actor;actor.id=r.integer<std::uint64_t>();r.enumeration(actor.body.mode);r.enumeration(actor.body.shape);
@@ -462,7 +464,7 @@ bool loadDetLevel2D(const std::filesystem::path& path,DetLevel2D& output,std::st
 std::string encodeDetLevel2D(const DetLevel2D& level,const DetLevel2DOptions& options){(void)checked(level,options);TextWriter w;w.stream<<"AYDLEVEL "<<level.formatVersion<<"\nsession";
     w.word(level.applicationVersion);w.word(level.inputVersion);w.word(level.stepNumerator);w.word(level.stepDenominator);
     auto policy=level.character;w.stream<<"\ncollision";collision(w,policy.collision);if(level.formatVersion>=4)w.boolean(policy.collision.characterRespawn);w.stream<<"\ncharacter";character(w,policy);
-    w.stream<<"\npaths";w.word(static_cast<std::uint32_t>(level.paths.size()));for(const auto& path:level.paths){w.stream<<"\npath";w.word(path.id);w.enumeration(path.playback);w.word(static_cast<std::uint32_t>(path.waypoints.size()));
+    w.stream<<"\npaths";w.word(static_cast<std::uint32_t>(level.paths.size()));for(const auto& path:level.paths){w.stream<<"\npath";w.word(path.id);w.enumeration(path.playback);if(level.formatVersion>=7)w.boolean(path.movingTrigger);w.word(static_cast<std::uint32_t>(path.waypoints.size()));
         for(const auto& point:path.waypoints){w.stream<<"\npoint";w.vector(point.offset);w.word(point.travelTicks);w.word(point.dwellTicks);}}
     w.stream<<"\nactors";w.word(static_cast<std::uint32_t>(level.actors.size()));for(const auto& actor:level.actors){w.stream<<"\nactor "<<actor.id;w.enumeration(actor.body.mode);w.enumeration(actor.body.shape);
         w.vector(actor.position);w.vector(actor.body.half);w.vector(actor.body.offset);w.vector(actor.body.velocity);w.word(actor.body.layer);w.word(actor.body.mask);

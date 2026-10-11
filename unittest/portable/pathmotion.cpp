@@ -30,11 +30,11 @@ DetCharacterController2DConfig characterPolicy(const DetPathMotion2DConfig& c){D
     character.collision=c.collision;character.gravity={};return character;}
 // Descriptors are test-local views of public stable fields, never a substitute
 // installer. Public factories author blocks; typed snapshots test restore rules.
-DetTypedStateSchema pathSchema(const DetPathMotion2DConfig& c){return {c.stateSchema,1,{
+DetTypedStateSchema pathSchema(const DetPathMotion2DConfig& c){if(c.movingTrigger)return detPathMotionStateSchema2D(c);return {c.stateSchema,1,{
     {10,false},{20,false},{30,false},{40,false},{50,V{}},{60,std::uint32_t{0}},
     {70,std::int32_t{1}},{80,std::uint32_t{0}},{90,std::uint32_t{0}},{100,V{}},
     {110,false},{120,false},{130,V{}},{140,false}}};}
-DetTypedStateSchema bodySchema(const DetPathMotion2DConfig& c){return {c.collision.bodySchema,2,{
+DetTypedStateSchema bodySchema(const DetPathMotion2DConfig& c){if(c.movingTrigger)return detCollisionBodySchema2D(c.collision);return {c.collision.bodySchema,2,{
     {DetBodyMode,std::uint32_t{0}},{DetBodyHalf,V{}},{DetBodyOffset,V{}},{DetBodyVelocity,V{}},
     {DetBodyLayer,std::uint32_t{1}},{DetBodyMask,std::uint32_t{UINT32_MAX}},{DetBodyTrigger,false}}};}
 DetTypedStateSchema characterSchema(const DetCharacterController2DConfig& c){return {c.stateSchema,1,{
@@ -208,16 +208,125 @@ void replayChecks(const fs::path& directory,const Evidence& evidence){const auto
     for(std::uint64_t tick:{2u,6u,12u}){require(reader.seek(playback,tick) && bytes(playback)==evidence.states[tick],"real seek paused/disabled/corner full checkpoint");
         while(!reader.atEnd()){require(reader.advance(playback),reader.error());require(bytes(playback)==evidence.states[playback.nextTick()],"real path seek full-byte continuation");}}
     std::cout<<"PASS actual sealed16-tick path .rpl replay and3 pause/disable/corner seeks\n";}
+// Stage50 role-specific checks. The old scene/golden and replay above remain
+// separate; this scene has no character facade and never gives a trigger carry.
+constexpr std::uint64_t triggerTicks=12;
+DetPathMotion2DConfig triggerPolicy(DetPathPlayback2D mode=DetPathPlayback2D::PingPong){auto c=policy(mode);
+    c.movingTrigger=true;c.collision.motionPolicy=DetCollisionMotionPolicy2D::StopPrescribedOnConflict;
+    c.waypoints={{{},4,0},{v(2,0),4,1}};return c;}
+Actors triggerScene(const DetPathMotion2DConfig& c){Actors result;
+    auto moving=actor(c,DetBodyMode2D::MovingObstacle,v(-1,0),{q(1,8),q(1)},{},false,true);
+    moving.blocks[c.collision.bodySchema]=detCollisionBodyState2D(c.collision,{DetBodyMode2D::MovingObstacle,{q(1,8),q(1)},{},{},4,3,true});
+    DetPathMotionState2D initial;initial.bound=true;initial.origin=v(-1,0);moving.blocks[c.stateSchema]=detPathMotionState2D(c,initial);
+    result.emplace_back(platform,std::move(moving));
+    auto stationary=actor(c,DetBodyMode2D::Kinematic,{},{q(1),q(1)});
+    stationary.blocks[c.collision.bodySchema]=detCollisionBodyState2D(c.collision,{DetBodyMode2D::Kinematic,{q(1),q(1)},{},{},1,4,false});
+    result.emplace_back(hero,std::move(stationary));
+    auto wall=actor(c,DetBodyMode2D::Static,{q(2),{}},{q(1,8),q(2)});
+    wall.blocks[c.collision.bodySchema]=detCollisionBodyState2D(c.collision,{DetBodyMode2D::Static,{q(1,8),q(2)},{},{},2,4,false});
+    result.emplace_back(30,std::move(wall));return result;
+}
+bool configureTrigger(DeterministicSession& s,const DetPathMotion2DConfig& c,Actors actors,bool reverse=false,
+    const DetCollision2DConfig* actualCollision=nullptr){auto input=[c](DetTickContext& ctx){for(const auto& command:ctx.input().commands){
+        if(command.source!=1)return false;
+        if(command.type==1){if(command.payload.size()!=3 || std::any_of(command.payload.begin(),command.payload.end(),[](auto b){return b>1;}))return false;
+            detPathMotionInput2D(ctx,platform,c,{bool(command.payload[0]),bool(command.payload[1]),bool(command.payload[2])});}
+        else if(command.type==2){if(command.payload.size()!=1 || command.payload[0]>1)return false;
+            ctx.write(platform,c.collision.bodySchema,DetBodyMask,command.payload[0]?3u:0u);}
+        else return false;}return true;};
+    if(!reverse && !s.registerSystem(10,c.collision.priority,input))return false;
+    if(!installDetCollision2D(s,actualCollision?*actualCollision:c.collision) || !installDetPathMotion2D(s,c))return false;
+    if(reverse && !s.registerSystem(10,c.collision.priority,input))return false;
+    if(reverse)std::reverse(actors.begin(),actors.end());for(auto& [id,a]:actors)if(!s.addEntity(id,std::move(a)))return false;return s.seal();
+}
+DetTickInput triggerInput(std::uint64_t tick){auto in=frame(tick,tick!=3,tick==1);
+    // Participation is an explicit application command, independent from path
+    // controls. The masked hazard continues travelling; there is no hidden retry.
+    in.commands.push_back({1,1,2,{std::uint8_t(tick<5 || tick>=7)}});return in;
+}
+void triggerRoleChecks(){const auto c=triggerPolicy();const auto selected=detPathMotionPolicySchema2D(c);
+    require(selected.version==2 && detPathMotionStateSchema2D(c).version==2
+        && readDetState<bool>(selected,detStateDefaults(selected),12),"explicit trigger policy/state2 and full true role");
+    const auto legacy=policy();const auto oldPolicy=detPathMotionPolicySchema2D(legacy);
+    require(oldPolicy.version==1 && detPathMotionStateSchema2D(legacy).version==1 && oldPolicy.fields.size()==11+3*legacy.waypoints.size()
+        && std::none_of(oldPolicy.fields.begin(),oldPolicy.fields.end(),[](const auto& f){return f.id==12;}),"default path1 has no added false role field");
+    for(auto mode:{DetPathPlayback2D::Once,DetPathPlayback2D::Loop,DetPathPlayback2D::PingPong}){auto basic=triggerPolicy(mode);basic.waypoints[1].dwellTicks=0;
+        DeterministicSession s({1,1,1,4,50});require(configureTrigger(s,basic,triggerScene(basic)),s.error());int old=-4;
+        for(int tick=0;tick<9;++tick){const int n=tick+1;const int x=n<=4?-4+2*n:(mode==DetPathPlayback2D::Once?4:(n<=8?12-2*n:-4+2*(n-8)));
+            advance(s);expect(s,basic,{q(x),{}},v(x-old,0),"trigger hand playback mode="+std::to_string(unsigned(mode))+" tick="+std::to_string(tick));old=x;}}
+    for(auto mode:{DetBodyMode2D::Disabled,DetBodyMode2D::Static,DetBodyMode2D::Kinematic,DetBodyMode2D::MovingObstacle}){auto actors=triggerScene(c);
+        const bool trigger=mode!=DetBodyMode2D::MovingObstacle;
+        actors[0].second.blocks[c.collision.bodySchema]=detCollisionBodyState2D(c.collision,{mode,{q(1,8),q(1)},{},{},4,3,trigger});
+        DeterministicSession s({1,1,1,4,50});require(!configureTrigger(s,c,std::move(actors)),"explicit trigger role rejects other mode/solid binding");}
+    {auto old=c;old.movingTrigger=false;DeterministicSession s({1,1,1,4,50});require(!configureTrigger(s,old,triggerScene(old)),"old solid role still rejects moving trigger");}
+    {auto wrong=c;wrong.tickPeriod=q(1,8);DeterministicSession s({1,1,1,4,50});require(!installDetPathMotion2D(s,wrong),"Path2 period mismatch is rejected before registration");}
+    for(bool priority:{false,true}){auto actual=c.collision;if(priority)actual.priority=1;else actual.maxBodies=7;
+        DeterministicSession s({1,1,1,4,50});require(!configureTrigger(s,c,triggerScene(c),false,&actual),"new role requires actual complete collision policy and priority");}
+    DeterministicSession s({1,1,1,4,50});require(configureTrigger(s,c,triggerScene(c)),s.error());advance(s);const auto cp=checkpoint(s);
+    {auto bad=cp;const auto bs=detCollisionBodySchema2D(c.collision);writeDetState(bs,bad.actors.at(platform).blocks.at(bs.id),DetBodyTrigger,false);
+        rejectRestore(s,bad,"moving trigger role cannot restore a solid bound actor");}
+    {auto bad=cp;setPath(bad,c,DetPathAttempted,true);rejectRestore(s,bad,"Path2 committed attempted flag must be cleared");}
+    require(!s.advance(frame(s.nextTick(),true,false,true)) && s.faulted(),"trigger restart away from origin remains rejected");
+    require(s.restore(cp) && bytes(s)==encodeDetCheckpoint(cp),"explicit restoration after rejected trigger restart");
+    {DeterministicSession origin({1,1,1,4,50});require(configureTrigger(origin,c,triggerScene(c)),origin.error());
+        require(origin.advance(frame(0,true,false,true)),origin.error());expect(origin,c,{-q(2),{}},v(2,0),"origin-only trigger restart resets phase without teleport");}
+    std::cout<<"PASS explicit trigger role, hand Once/Loop/PingPong, actual policy binding and atomic malformed restore/restart refusal\n";
+}
+struct TriggerEvidence {Evidence evidence;std::uint64_t rollbacks=0,replayed=0;};
+TriggerEvidence triggerClosureChecks(const fs::path& directory){const auto c=triggerPolicy();DeterministicSession a({1,1,1,4,50}),b({1,1,1,4,50});
+    require(configureTrigger(a,c,triggerScene(c)) && configureTrigger(b,c,triggerScene(c),true),"moving trigger closure seal");TriggerEvidence result;auto& evidence=result.evidence;
+    std::vector<DetSessionCheckpoint> cps{checkpoint(a)};evidence.states.push_back(bytes(a));evidence.hashes.push_back(detCheckpointHash(cps.back()));
+    require(bytes(a)==bytes(b),"trigger initial full checkpoint reverse registration");
+    constexpr std::array<int,triggerTicks> xs={-2,-2,0,0,2,4,4,2,0,-2,-4,-2};int old=-4;
+    const DetCollisionPair2D characterPair{hero,platform},wallPair{platform,30};
+    for(std::uint64_t tick=0;tick<triggerTicks;++tick){require(a.advance(triggerInput(tick)) && b.advance(triggerInput(tick)),"moving trigger scripted advance");
+        expect(a,c,{q(xs[tick]),{}},v(xs[tick]-old,0),"hand trigger pause/disable/dwell/mask tick="+std::to_string(tick));old=xs[tick];
+        const auto cp=checkpoint(a);require(cp.actors.at(hero).pose.position[0]==D{}.bits() && cp.actors.at(hero).pose.position[1]==D{}.bits()
+            && cp.actors.at(30).pose.position[0]==q(2).bits(),"hazard crosses mutually masked character/wall without solid displacement or carry");
+        require(body<std::uint32_t>(cp,c,DetBodyMotionResult)==0 && body<DetEntityRef>(cp,c,DetBodyMotionOther).value==0
+            && body<std::uint32_t>(cp,c,DetBodyMotionAxis)==0 && body<std::uint64_t>(cp,c,DetBodyMotionResultTick)==0,"moving trigger never reports Stop conflict/pinch");
+        std::vector<DetTriggerEvent2D> expected;
+        if(tick==2)expected.push_back({DetTriggerPhase2D::Enter,characterPair});if(tick==3)expected.push_back({DetTriggerPhase2D::Stay,characterPair});
+        if(tick==4)expected={{DetTriggerPhase2D::Exit,characterPair},{DetTriggerPhase2D::Enter,wallPair}};
+        if(tick==5)expected.push_back({DetTriggerPhase2D::Exit,wallPair});if(tick==7)expected.push_back({DetTriggerPhase2D::Enter,wallPair});
+        if(tick==8)expected={{DetTriggerPhase2D::Enter,characterPair},{DetTriggerPhase2D::Exit,wallPair}};
+        if(tick==9)expected.push_back({DetTriggerPhase2D::Exit,characterPair});
+        std::vector<DetTriggerEvent2D> actual;for(const auto& event:cp.pendingEvents){require(event.source==c.collision.systemId && event.type==c.collision.eventType,"real collision owns hazard events");
+            DetTriggerEvent2D decoded;require(decodeDetTriggerEvent2D(event.payload,decoded),"real hazard event payload");actual.push_back(decoded);evidence.events.push_back({1,tick,event});}
+        require(actual==expected,"hand trigger Enter/Stay/Exit and mask transitions tick="+std::to_string(tick));
+        require(bytes(a)==bytes(b),"trigger complete checkpoint reverse registration each boundary");cps.push_back(cp);evidence.states.push_back(encodeDetCheckpoint(cp));evidence.hashes.push_back(detCheckpointHash(cp));}
+    for(std::size_t start:{3u,6u}){require(a.restore(cps[start]) && bytes(a)==evidence.states[start],"restore active contact/masked dwell complete checkpoint");
+        for(auto tick=std::uint64_t(start);tick<triggerTicks;++tick){require(a.advance(triggerInput(tick)),a.error());require(bytes(a)==evidence.states[tick+1],"restored moving trigger full-byte continuation");}}
+    DeterministicSession late({1,1,1,4,50});require(configureTrigger(late,c,triggerScene(c),true),late.error());DetRollbackConfig rc;
+    rc.members={1};rc.historyTicks=24;rc.maxPredictionTicks=4;rc.prediction={{1,DetPredictionMode::Hold}};DeterministicRollback owner(late,rc);std::vector<DetConfirmedEvent> effects;
+    for(std::uint64_t tick=0;tick<triggerTicks;++tick){if(!tick)require(owner.submit(1,triggerInput(0)),owner.error());if(tick>=2)require(owner.submit(1,triggerInput(tick-2)),owner.error());require(owner.advance(),owner.error());
+        const auto cp=owner.checkpointAt(owner.confirmedNextTick());require(cp && encodeDetCheckpoint(*cp)==evidence.states[owner.confirmedNextTick()],"corrected trigger phase/mask confirmed full bytes");
+        const auto e=owner.takeConfirmedEvents();effects.insert(effects.end(),e.begin(),e.end());}
+    for(auto tick=triggerTicks-2;tick<triggerTicks;++tick)require(owner.submit(1,triggerInput(tick)),owner.error());const auto e=owner.takeConfirmedEvents();effects.insert(effects.end(),e.begin(),e.end());
+    require(owner.confirmedNextTick()==triggerTicks && bytes(late)==evidence.states.back() && effects==evidence.events && owner.takeConfirmedEvents().empty(),"trigger late correction full state and actual confirmed events released once");
+    result.rollbacks=owner.rollbackCount();result.replayed=owner.replayedTicks();require(result.rollbacks && result.replayed,"pause/disable/mask actually correct predictions");
+    DeterministicSession recording({1,1,1,4,50});require(configureTrigger(recording,c,triggerScene(c)),recording.error());DetReplayWriter writer;
+    require(writer.begin(recording,(directory/"path-trigger").string(),4),writer.error());for(std::uint64_t tick=0;tick<triggerTicks;++tick){require(writer.advance(triggerInput(tick)),writer.error());require(bytes(recording)==evidence.states[tick+1],"actual trigger rpl records full state");}
+    require(writer.finish() && fs::is_regular_file(writer.path()),"actual sealed trigger replay file");DeterministicSession replay({1,1,1,4,50});require(configureTrigger(replay,c,triggerScene(c),true),replay.error());DetReplayReader reader;
+    require(reader.open(writer.path()) && reader.restoreInitial(replay) && reader.tickCount()==triggerTicks,reader.error());
+    for(std::uint64_t seek:{0u,3u,6u}){require(reader.seek(replay,seek) && bytes(replay)==evidence.states[seek],"actual trigger replay seek initial/contact/masked dwell");
+        while(!reader.atEnd()){require(reader.advance(replay),reader.error());require(bytes(replay)==evidence.states[replay.nextTick()],"actual trigger seek complete-byte continuation");}}
+    std::cout<<"PASS short12-tick moving trigger hand geometry/events, full CP restore, late correction and actual sealed rpl/seek\n";return result;
+}
 void write(const fs::path& file,const std::string& text){std::ofstream out(file,std::ios::binary);out<<text;require(bool(out),"artifact write "+file.string());}
 std::string quote(const std::string& value){std::string result="\"";for(unsigned char b:value){if(b=='\\'||b=='\"'){result+='\\';result+=char(b);}else if(b<32){const char* hex="0123456789abcdef";result+="\\u00";result+=hex[b>>4];result+=hex[b&15];}else result+=char(b);}return result+'\"';}
 fs::path fresh(const fs::path& parent){require(fs::is_directory(parent),"--output must name an existing parent directory");const auto stamp=std::chrono::steady_clock::now().time_since_epoch().count();
     for(unsigned attempt=0;attempt<1024;++attempt){auto dir=parent/("pathmotion-"+std::to_string(stamp)+"-"+std::to_string(attempt));if(fs::create_directory(dir))return dir;}throw std::runtime_error("fresh path fixture directory unavailable");}
 } // namespace
 int main(int argc,char** argv){fs::path directory;try{fs::path parent=fs::temp_directory_path();if(argc==3 && std::string(argv[1])=="--output")parent=argv[2];else if(argc!=1){std::cerr<<"usage: [--output EXISTING_PARENT_DIRECTORY]\n";return 2;}directory=fresh(parent);
-    write(directory/"progress.json","{\"status\":\"running\",\"phase\":\"directed\"}\n");playbackChecks();dwellAndControlChecks();contractChecks();
+    write(directory/"progress.json","{\"status\":\"running\",\"phase\":\"directed\"}\n");playbackChecks();dwellAndControlChecks();contractChecks();triggerRoleChecks();
     write(directory/"progress.json","{\"status\":\"running\",\"phase\":\"closure\"}\n");const auto evidence=closureChecks();const auto [rollbacks,replayed]=rollbackChecks(evidence);replayChecks(directory,evidence);
+    const auto trigger=triggerClosureChecks(directory);
     std::ostringstream trace;for(std::size_t tick=0;tick<evidence.hashes.size();++tick)trace<<tick<<' '<<evidence.hashes[tick]<<'\n';write(directory/"tick-hashes.txt",trace.str());
     std::ostringstream summary;summary<<"{\"status\":\"passed\",\"ticks\":"<<closureTicks<<",\"checkpointRows\":"<<evidence.states.size()<<",\"confirmedEvents\":"<<evidence.events.size()
         <<",\"rollbacks\":"<<rollbacks<<",\"replayedTicks\":"<<replayed<<",\"replayFiles\":1,\"pathProfile\":1,\"collisionProfile\":2,\"finalHash\":\""<<evidence.hashes.back()<<"\",\"artifacts\":"<<quote(directory.string())<<"}\n";
-    write(directory/"summary.json",summary.str());write(directory/"progress.json","{\"status\":\"passed\",\"phase\":\"complete\"}\n");std::cout<<summary.str();return 0;
+    std::ostringstream triggerTrace;for(std::size_t tick=0;tick<trigger.evidence.hashes.size();++tick)triggerTrace<<tick<<' '<<trigger.evidence.hashes[tick]<<'\n';write(directory/"tick-hashes-trigger.txt",triggerTrace.str());
+    std::ostringstream triggerSummary;triggerSummary<<"{\"status\":\"passed\",\"ticks\":"<<triggerTicks<<",\"checkpointRows\":"<<trigger.evidence.states.size()<<",\"confirmedEvents\":"<<trigger.evidence.events.size()
+        <<",\"rollbacks\":"<<trigger.rollbacks<<",\"replayedTicks\":"<<trigger.replayed<<",\"replayFiles\":1,\"pathProfile\":2,\"collisionProfile\":5,\"finalHash\":\""<<trigger.evidence.hashes.back()<<"\",\"artifacts\":"<<quote(directory.string())<<"}\n";
+    write(directory/"summary-trigger.json",triggerSummary.str());write(directory/"summary.json",summary.str());write(directory/"progress.json","{\"status\":\"passed\",\"phase\":\"complete\"}\n");std::cout<<summary.str()<<triggerSummary.str();return 0;
 }catch(const std::exception& e){if(!directory.empty())try{write(directory/"summary.json","{\"status\":\"failed\",\"error\":"+quote(e.what())+"}\n");write(directory/"progress.json","{\"status\":\"failed\"}\n");}catch(...){}std::cerr<<e.what()<<'\n';return 1;}}

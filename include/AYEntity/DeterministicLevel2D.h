@@ -25,6 +25,8 @@ inline constexpr std::uint32_t kDetLevel2DRespawnProfileVersion=4;
 inline constexpr std::uint32_t kDetLevel2DVitalityProfileVersion=5;
 /// @brief Explicit bounded periodic regions; formats1..5 retain their literal bytes.
 inline constexpr std::uint32_t kDetLevel2DPeriodicVitalityProfileVersion=6;
+/// @brief Explicit moving AABB trigger paths; formats1..6 keep their bytes.
+inline constexpr std::uint32_t kDetLevel2DMovingTriggerProfileVersion=7;
 /// @brief Bound on original ASCII source bytes, before decoding.
 inline constexpr std::size_t kDetLevel2DMaxTextBytes=65536;
 /// @brief Bound on complete field-wise semantic bytes entering the manifest.
@@ -34,6 +36,8 @@ struct DetLevelPath2D {
     std::uint32_t id=0;
     DetPathPlayback2D playback=DetPathPlayback2D::PingPong;
     std::vector<DetPathWaypoint2D> waypoints;
+    /// Format7: explicit Path2 MovingObstacle/AABB/trigger role; false selects old Path1.
+    bool movingTrigger=false;
 };
 /// @brief Initial XY placement and explicit body/character/path binding, never a checkpoint import.
 struct DetLevelActor2D {
@@ -127,7 +131,7 @@ struct DetLevel2DOptions {
         vitalityRecoveryStateSchema=208;
     std::uint32_t vitalityRegionStateSchema=224;
 };
-/// @brief Strict ASCII AYDLEVEL1..6 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
+/// @brief Strict ASCII AYDLEVEL1..7 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
 /// @note Rejects unknown/trailing tokens, nonfinite values, invalid roles/policies and initial geometry.
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,
     const DetLevel2DOptions& options={});
@@ -144,7 +148,7 @@ DetSessionConfig detLevelSessionConfig(const DetLevel2D& level);
 /// @brief Resolve the registered path binding used by configure; unknown IDs/options throw.
 DetPathMotion2DConfig detLevelPathConfig2D(const DetLevel2D& level,std::uint32_t path,
     const DetLevel2DOptions& options={});
-/// @brief Resolve complete registered Actions authority from format2..5 content.
+/// @brief Resolve complete registered Actions authority from format2..7 content.
 /// @note Pure gameplay or HP counters may resolve a zero-target authority. Otherwise empty
 /// action content, invalid references/options or unsupported controls throw.
 DetActions2DConfig detLevelActionsConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
@@ -167,7 +171,7 @@ DetCharacterRespawnFlow2DConfig detLevelRespawnFlowConfig2D(const DetLevel2D& le
 /// @note HP counters have no claims/objectives and are writable only through Vitality.
 /// Empty vitality or invalid references/options throw; this does not install systems.
 DetProgress2DConfig detLevelVitalityProgressConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
-/// @brief Resolve complete Vitality1/2 policy, including selected Flow2 recovery authority.
+/// @brief Resolve complete Vitality1/2/3 policy, including selected Flow2 recovery authority.
 /// @note Empty vitality or invalid tables/options throw. Recovery adds no pose writer
 /// and only current matching Queued+Accepted restores; Manual requires its actor opt-in.
 DetVitality2DConfig detLevelVitalityConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
@@ -211,6 +215,12 @@ DetVitality2DConfig detLevelVitalityConfig2D(const DetLevel2D& level,const DetLe
  * Vitality3 region clocks are typed in the optional factory-selected schema224,
  * independent of HP recovery. No extra system or native overlap sampling occurs.
  * Formats1..5 reject new nondefault fields and keep all old bytes and profiles.
+ * Format7 appends each path's explicit movingTrigger flag. True permits only
+ * MovingObstacle AABB triggers with no one-way role; false keeps Path1 solid
+ * bindings. Actions selects3 only for an explicitly authorized Path2 target.
+ * Collision remains the sole XY writer and emits actual continuous trigger
+ * events; path pause and trigger mask disable remain separate controls.
+ * Formats1..6 reject this flag and retain their complete canonical bytes.
  * Entire tables and nested policies enter identity, not only a content hash.
  * Flow precedes Interaction and every path/character pre at collision.priority;
  * application Progress writes must precede Flow. Empty counters forbids objective,

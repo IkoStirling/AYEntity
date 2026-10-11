@@ -1,4 +1,6 @@
 #include <AYEntity/DeterministicPathMotion2D.h>
+#include <AYEntity/DeterministicCollisionQuery2D.h>
+#include "detail/DetSessionWire.h"
 #include <algorithm>
 #include <array>
 #include <set>
@@ -7,6 +9,8 @@
 namespace ayt::entity {
 namespace {
 using D=math::DetFloat32;using V=math::DetVec2;
+std::uint32_t version(const DetPathMotion2DConfig& c){return c.movingTrigger?kDetPathMotion2DTriggerProfileVersion:kDetPathMotion2DProfileVersion;}
+std::uint64_t fingerprint(const DetPathMotion2DConfig& c){return c.movingTrigger?UINT64_C(0x44504d3244503032):UINT64_C(0x44504d3244503031);}
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic path 2D: invalid policy, binding, phase or unrepresentable target");}
 bool equal(V a,V b){return a.x.bits()==b.x.bits() && a.y.bits()==b.y.bits();}
 bool zero(V v){return equal(v,V{});}
@@ -23,16 +27,17 @@ bool validConfig(const DetPathMotion2DConfig& c){
     for(const auto& p:c.waypoints)if(!p.offset.isFinite() || !p.travelTicks || p.travelTicks>65535 || p.dwellTicks>65535)return false;
     return true;
 }
-DetTypedStateSchema stateSchema(const DetPathMotion2DConfig& c){return {c.stateSchema,1,{
+DetTypedStateSchema stateSchema(const DetPathMotion2DConfig& c){return {c.stateSchema,version(c),{
     {DetPathBound,false},{DetPathEnabled,false},{DetPathPaused,false},{DetPathFinished,false},
     {DetPathOrigin,V{}},{DetPathWaypoint,std::uint32_t{0}},{DetPathDirection,std::int32_t{1}},
     {DetPathElapsedTicks,std::uint32_t{0}},{DetPathDwellRemaining,std::uint32_t{0}},
     {DetPathLastVelocity,V{}},{DetPathBlocked,false},{DetPathRestartRequested,false},
     {DetPathExpectedPosition,V{}},{DetPathAttempted,false}}};}
 DetTypedStateSchema policySchema(const DetPathMotion2DConfig& c){
-    DetTypedStateSchema s{c.policySchema,1,{{1,std::uint32_t{1}},{2,c.collision.bodySchema},{3,c.collision.historySchema},
+    DetTypedStateSchema s{c.policySchema,version(c),{{1,version(c)},{2,c.collision.bodySchema},{3,c.collision.historySchema},
         {4,c.collision.systemId},{5,c.preSystemId},{6,c.postSystemId},{7,c.validatorId},{8,c.logicProfileId},
         {9,c.tickPeriod},{10,static_cast<std::uint32_t>(c.playback)},{11,static_cast<std::uint32_t>(c.waypoints.size())}}};
+    if(c.movingTrigger)s.fields.push_back({12,true});
     for(std::size_t i=0;i<c.waypoints.size();++i){auto id=static_cast<std::uint32_t>(20+3*i);const auto& p=c.waypoints[i];
         s.fields.push_back({id,p.offset});s.fields.push_back({id+1,p.travelTicks});s.fields.push_back({id+2,p.dwellTicks});}
     return s;
@@ -88,7 +93,12 @@ void pre(DetTickContext& ctx,const DetPathMotion2DConfig& c){
     for(auto id:ctx.entities()){
         auto s=read(ctx,id,c);if(!s.bound)continue;
         if(ctx.read<std::uint32_t>(id,c.collision.bodySchema,DetBodyMode)!=static_cast<std::uint32_t>(DetBodyMode2D::MovingObstacle)
-            || ctx.read<bool>(id,c.collision.bodySchema,DetBodyTrigger))invalid();
+            || ctx.read<bool>(id,c.collision.bodySchema,DetBodyTrigger)!=c.movingTrigger
+            || (c.movingTrigger && c.collision.oneWayPlatforms
+                && (ctx.read<bool>(id,c.collision.bodySchema,DetBodyOneWay)
+                    || ctx.read<DetEntityRef>(id,c.collision.bodySchema,DetBodyIgnoredOneWay).value))
+            || (c.movingTrigger && c.collision.staticSlopes
+                && ctx.read<std::uint32_t>(id,c.collision.bodySchema,DetBodyShape)!=static_cast<std::uint32_t>(DetCollisionShape2D::Aabb)))invalid();
         s.blocked=false;s.lastVelocity={};V velocity{};
         if(ctx.read<bool>(id,c.stateSchema,DetPathRestartRequested)){
             if(!equal(position(ctx,id),s.origin))invalid();
@@ -132,6 +142,17 @@ void post(DetTickContext& ctx,const DetPathMotion2DConfig& c){
 }
 void validateCheckpoint(const DetSessionCheckpoint& cp,const DetPathMotion2DConfig& c,const DetStateLayout& states,
     const DetStateLayout& policies,const DetStateLayout& bodies){
+    if(c.movingTrigger){
+        // The new role binds actual installed collision policy and callback
+        // identity, including a valid empty/retired world. No engine wire changes.
+        const auto m=detwire::manifestLayout(cp.manifest);
+        const auto profile=detCollisionBodySchema2D(c.collision).version;
+        if(m.systems.at(c.collision.systemId)!=c.collision.priority
+            || m.systems.at(c.preSystemId)!=c.collision.priority || m.systems.at(c.postSystemId)!=c.collision.priority
+            || m.validatorVersions.at(c.collision.systemId)!=profile || m.validatorVersions.at(c.validatorId)!=version(c)
+            || m.logicProfiles.at(c.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{version(c),fingerprint(c)})invalid();
+        (void)DetCollisionQuery2D(cp,c.collision);
+    }
     if(cp.globals.at(c.policySchema)!=policies.defaults())invalid();
     for(const auto& [id,a]:cp.actors){
         if(a.blocks.at(c.policySchema)!=policies.defaults())invalid();const auto& block=a.blocks.at(c.stateSchema);
@@ -150,7 +171,12 @@ void validateCheckpoint(const DetSessionCheckpoint& cp,const DetPathMotion2DConf
             || !zero(get.operator()<V>(DetPathExpectedPosition)))invalid();
         if(s.bound){const auto& body=a.blocks.at(c.collision.bodySchema);
             if(std::get<std::uint32_t>(bodies.read(body,DetBodyMode))!=static_cast<std::uint32_t>(DetBodyMode2D::MovingObstacle)
-                || std::get<bool>(bodies.read(body,DetBodyTrigger)) || !equal(std::get<V>(bodies.read(body,DetBodyVelocity)),s.lastVelocity))invalid();
+                || std::get<bool>(bodies.read(body,DetBodyTrigger))!=c.movingTrigger
+                || !equal(std::get<V>(bodies.read(body,DetBodyVelocity)),s.lastVelocity)
+                || (c.movingTrigger && c.collision.oneWayPlatforms
+                    && (std::get<bool>(bodies.read(body,DetBodyOneWay)) || std::get<DetEntityRef>(bodies.read(body,DetBodyIgnoredOneWay)).value))
+                || (c.movingTrigger && c.collision.staticSlopes
+                    && std::get<std::uint32_t>(bodies.read(body,DetBodyShape))!=static_cast<std::uint32_t>(DetCollisionShape2D::Aabb)))invalid();
             if(s.finished || s.dwellRemaining){const auto point=s.origin+c.waypoints[s.waypoint].offset;
                 if(a.pose.position[0]!=point.x.bits() || a.pose.position[1]!=point.y.bits())invalid();}
             if(cp.nextTick==0 && (s.waypoint || s.elapsedTicks || s.direction!=1 || s.finished || s.blocked
@@ -163,13 +189,17 @@ void validateCheckpoint(const DetSessionCheckpoint& cp,const DetPathMotion2DConf
 } // namespace
 bool installDetPathMotion2D(DeterministicSession& session,DetPathMotion2DConfig c){
     if(!validConfig(c))return false;
+    // Preserve profile1 acquisition behavior. Profile2 rejects a mismatched
+    // period before any registration; both profiles still check real tick dt.
+    if(c.movingTrigger && (session.sealed() || session.faulted() || session.nextTick()
+        || session.fixedStep().bits()!=c.tickPeriod.bits()))return false;
     // The collision schema is shared; installation validates its canonical layout.
     DetTypedStateSchema body;
     try{body=detCollisionBodySchema2D(c.collision);}catch(const std::invalid_argument&){return false;}
     const auto state=stateSchema(c),policy=policySchema(c);const DetStateLayout states(state),policies(policy),bodies(body);
     if(!(session.registerTypedSchema(state) && session.registerTypedSchema(policy) && session.registerGlobalState(c.policySchema)
-        && session.registerLogicProfile(c.logicProfileId,1,0x44504d3244503031ull)
-        && session.registerValidator(c.validatorId,1,[c,states,policies,bodies](const DetSessionCheckpoint& cp,std::string& error){
+        && session.registerLogicProfile(c.logicProfileId,version(c),fingerprint(c))
+        && session.registerValidator(c.validatorId,version(c),[c,states,policies,bodies](const DetSessionCheckpoint& cp,std::string& error){
             try{validateCheckpoint(cp,c,states,policies,bodies);return true;}catch(...){error="deterministic path 2D: invalid registered boundary";return false;}})
         && session.registerSystem(c.preSystemId,c.collision.priority,[c](DetTickContext& ctx){pre(ctx,c);return true;})
         && session.registerSystem(c.postSystemId,c.collision.priority,[c](DetTickContext& ctx){post(ctx,c);return true;})))return false;
@@ -177,6 +207,9 @@ bool installDetPathMotion2D(DeterministicSession& session,DetPathMotion2DConfig 
 }
 DetTypedStateSchema detPathMotionStateSchema2D(const DetPathMotion2DConfig& c){
     if(!validConfig(c))invalid();return stateSchema(c);
+}
+DetTypedStateSchema detPathMotionPolicySchema2D(const DetPathMotion2DConfig& c){
+    if(!validConfig(c))invalid();(void)detCollisionBodySchema2D(c.collision);return policySchema(c);
 }
 std::vector<std::uint64_t> detPathMotionState2D(const DetPathMotion2DConfig& c,const DetPathMotionState2D& authored){
     if(!validConfig(c))invalid();auto s=authored;

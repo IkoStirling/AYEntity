@@ -58,7 +58,7 @@ void authoring(const fs::path& dir){auto l=scene();const auto text=encodeDetLeve
     require(encodeDetLevel2D(out)==text && text.find("vitality 32 0 1 1 0 1")!=std::string::npos
         && text.find("vitalityregion 1 20 10 1 2 3")!=std::string::npos,"exact Level6 fields");
     const auto refused=[&](const std::string& bad){require(!decodeDetLevel2D(bad,out,error) && !error.empty() && encodeDetLevel2D(out)==text,"atomic bounded parser rejection");++rejects;};
-    refused(replace(text,"AYDLEVEL 6","AYDLEVEL 7"));refused(replace(text,"vitality 32 0 1 1 0 1","vitality 32 0 2 1 0 1"));
+    refused(replace(text,"AYDLEVEL 6","AYDLEVEL 8"));refused(replace(text,"vitality 32 0 1 1 0 1","vitality 32 0 2 1 0 1"));
     refused(replace(text,"vitalityregion 1 20 10 1 2 3","vitalityregion 1 20 10 1 2 65536"));
     refused(replace(text,"vitality 32 0 1 1 0 1","vitality 32 0 0 1 0 1"));refused(text+"unknown");
     const auto invalid=[&](const DetLevel2D& bad,const DetLevel2DOptions& options=DetLevel2DOptions{}){require(!validateDetLevel2D(bad,error,options),"semantic periodic rejection");++rejects;};

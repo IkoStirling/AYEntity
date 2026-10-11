@@ -1053,3 +1053,37 @@ from full CP actual restore/late rollback/rpl/seek equality. Native final VM def
 Actual standard Host example includes Hurt2 period3, Heal2 period2, accepted death
 placement outside hazard and equalHP Manual recovery; six actual file/input paths
 agree. Full source/failure/commit receipt is acceptance-49.json.
+
+## Stage50: explicit moving trigger paths and Level7
+
+`DetPathMotion2DConfig::movingTrigger=false` keeps Path1 identity; true selects2
+for bound non-one-way AABB MovingObstacle triggers. Path still writes velocity only,
+collision is the sole pose owner and emits actual swept Enter/Stay/Exit. Triggers
+have no solid response or support/carry. Mask0 suppresses participation independently
+of enabled/paused phase controls. Exact sampled XY reachability and origin-only
+restart remain required. Use public `detPathMotionPolicySchema2D` and mutable factory
+instead of guessing Path1 fields/version. Mutable path state is actor-only; only
+immutable policy has a global alongside actor copies.
+
+Actions3 is selected only by an authorized target's explicit Path2. It binds actual
+version/role and full nested collision/path bytes, including mixed Path1 targets.
+Ordinary trigger collision gates do not select3; old Actions1/2 literals stay exact.
+Progress1, ProgressFlow1 and Vitality1/2/3 keep their algorithms/profiles while matching
+the actual nested Path/Actions descriptors, priorities, validator versions and logic.
+Internal selector headers are compatibility metadata, not additional gameplay APIs.
+
+AYDLEVEL7 adds `path <id> <playback> <moving-trigger> <waypoint-count>`;
+old1..6 reject nondefault roles and preserve complete writer/canonical/hash identity.
+Use normal Level acquisition/getters; author via `aydetlevel` and inspect explicit
+path flags. Full combined schema/chunk/semantic budgets still apply.
+The [moving-region example](examples/detmovingregion/README.md) uses real standard
+Host input→Actions/HP/Flow→Path/Character→Collision→Present, not a second tick owner.
+
+Initial fresh Release six affected core gates passed1.95s. Path2's actual12ticks,
+13fullCP/9events/11rollbacks/21replayed/one sealed rpl and seeks0/3/6 completed;
+hash5258465926788394780 is diagnostic, full bytes compare real execution paths.
+The subsequent combined Host/tool gate failed in Flow/Vitality because the new
+actor-only mutable Path descriptor was incorrectly required to have a global.
+The narrow fix retains all layout/version checks and every original global check.
+Failure materials remain at stage50-host2. Corrected actual Host/CLI gates passed in stage50-host3 (two gates, CTest3.19s), with unchanged source pins. The six16tick Host paths agree in full state/trace/load/seek/stdin saves; actual four actions independently pause/resume and disable/enable the moving hazard. Final necessary local gates passed: Level7 authoring0.753711s (3 cases/12 rejects/57 complete CP comparisons), old Level6/Flow/Vitality/Regions3, and Resource1.08742s/Cooked0.10974s. Exact Stage50 receipts preserve source fixes and failures; native final VM deferred.
+Native Deferred to Final VM; no new long-run, compiler matrix or remote CI claim.

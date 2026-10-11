@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "status": "copied-from-completed-material",
+  "source": "D:\\Aliyat\\AliyatEngine\\out\\detcharacter23-20261011\\portable-release\\level-vitality6-artifacts\\level-vitality6-140868922803300-0",
+  "contentHash": "15889101324626947613",
+  "sourceDltSha256": "f96d921b1db3dc3ea45ca069c793666fd5e35f4726b780bd85a9c759c6b69adf",
+  "sourceRplSha256": "3215775dbaaa498de57bccd4bb8172b2369317f37965691d4e6f83fe5744bf5a",
+  "sourceSummarySha256": "914b27dd6e3653ee59707df47b9c52685d143ef76919ec46f120a68f4e8da9d0",
+  "scope": "exact source copy and embedded manifest identity; no new engine execution/authentication"
+}

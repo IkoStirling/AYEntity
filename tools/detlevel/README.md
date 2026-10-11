@@ -150,3 +150,23 @@ Exit clears the episode, reentry starts afresh, normal denials consume the inter
 No independent polling or wall clock. Inspect exposes both boolean and intervals;
 canonicalize preserves complete identity. Old1..5 keep bytes/hash and reject new
 authority. Start with `examples/detperiodic/content.dlt`; actual short CLI passed.
+
+## Stage50: explicit moving-trigger Level7 paths
+
+Format7 adds one explicit field per path, before the count:
+
+```text
+path <id> <playback> <moving-trigger> <waypoint-count>
+```
+
+True requires a used AABB MovingObstacle trigger body, no one-way role.
+False retains ordinary Path1 bindings. Inspect exposes `movingTrigger` for every
+path; validation resolves actual Path1/2 and authorized Actions1/2/3. Canonicalize
+preserves version7/full fields and never silently upgrades1..6. Old formats reject
+nondefault flags and retain their canonical bytes/hash.
+
+See [moving-region source](../../examples/detmovingregion/content.dlt) and its
+[standard Host recipe](../../examples/detmovingregion/README.md). Initial validity
+does not execute effects or prove future sampled motion. The first actual combined
+CLI/Host attempt exposed an actor-only Path descriptor acquisition defect, now
+corrected. The actual corrected tool/Host pair passed (CTest3.19s); old1..6 canonical entries and explicit new role inspection remained valid. Additional authored/resource acceptance is separate. Native final VM deferred.

@@ -58,6 +58,14 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
             <<",\"trigger\":"<<(actor.body.trigger?"true":"false")<<",\"layer\":"<<actor.body.layer
             <<",\"mask\":"<<actor.body.mask<<",\"path\":"<<actor.path<<'}';
     }
+    std::cout<<"],\"paths\":[";first=true;
+    for(const auto& path:level.paths){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"id\":"<<path.id<<",\"playback\":"<<static_cast<std::uint32_t>(path.playback)
+            <<",\"movingTrigger\":"<<(path.movingTrigger?"true":"false")<<",\"waypoints\":[";bool pointFirst=true;
+        for(const auto& point:path.waypoints){if(!pointFirst)std::cout<<',';pointFirst=false;
+            std::cout<<"{\"offsetBits\":["<<json(bits(point.offset.x.bits()))<<','<<json(bits(point.offset.y.bits()))
+                <<"],\"travelTicks\":"<<point.travelTicks<<",\"dwellTicks\":"<<point.dwellTicks<<'}';}
+        std::cout<<"]}";}
     std::cout<<"],\"rules\":[";first=true;
     for(const auto& rule:level.rules) {
         if(!first)std::cout<<',';first=false;

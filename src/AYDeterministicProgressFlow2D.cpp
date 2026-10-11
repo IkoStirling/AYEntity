@@ -1,6 +1,7 @@
 // design reference: AYEntity/design.md Stage41 finite registered progress routing.
 #include <AYEntity/DeterministicProgressFlow2D.h>
 #include "detail/DetSessionWire.h"
+#include "detail/DetPathMotion2DIdentity.h"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -24,14 +25,6 @@ struct Writer {std::vector<std::uint8_t> bytes;
     void u32(std::uint32_t v){put(v,4);}void u64(std::uint64_t v){put(v,8);}};
 struct Plan {std::vector<std::uint8_t> bytes;DetTypedStateSchema collect,objective,actions;
     std::vector<DetTypedStateSchema> policies,pathPolicies;};
-// The existing public Path profile1 policy has no descriptor factory. Keep this
-// dependent read-only descriptor exact; no new Path state or algorithm is installed.
-DetTypedStateSchema pathPolicy(const DetPathMotion2DConfig& c){
-    DetTypedStateSchema s{c.policySchema,1,{{1,std::uint32_t{1}},{2,c.collision.bodySchema},{3,c.collision.historySchema},
-        {4,c.collision.systemId},{5,c.preSystemId},{6,c.postSystemId},{7,c.validatorId},{8,c.logicProfileId},
-        {9,c.tickPeriod},{10,static_cast<std::uint32_t>(c.playback)},{11,static_cast<std::uint32_t>(c.waypoints.size())}}};
-    for(std::size_t n=0;n<c.waypoints.size();++n){const auto id=static_cast<std::uint32_t>(20+3*n);const auto& row=c.waypoints[n];
-        s.fields.insert(s.fields.end(),{{id,row.offset},{id+1,row.travelTicks},{id+2,row.dwellTicks}});}return s;}
 Plan plan(const DetProgressFlow2DConfig& c){
     if(c.collectStateSchema<2 || c.collectStateSchema==UINT32_MAX || c.objectiveStateSchema<2 || c.objectiveStateSchema==UINT32_MAX
         || c.policySchemaBase<2 || c.policySchemaBase==UINT32_MAX || !c.systemId || !c.validatorId || !c.logicProfileId
@@ -73,7 +66,7 @@ Plan plan(const DetProgressFlow2DConfig& c){
         if(c.systemId>=path.preSystemId || c.systemId==path.postSystemId || c.validatorId==path.validatorId || c.logicProfileId==path.logicProfileId)invalid();
         // Multiple targets can bind the same installed named path.
         const auto existing=std::find_if(p.pathPolicies.begin(),p.pathPolicies.end(),[&](const auto& s){return s.id==path.policySchema;});
-        const auto expected=pathPolicy(path);
+        const auto expected=detPathMotionPolicySchema2D(path);
         if(existing==p.pathPolicies.end()){
             reserve(path.stateSchema);reserve(path.policySchema);pathStates.emplace(path.policySchema,path.stateSchema);p.pathPolicies.push_back(expected);}
         else if(pathStates.at(path.policySchema)!=path.stateSchema || detStateDefaults(*existing)!=detStateDefaults(expected))invalid();}
@@ -87,8 +80,8 @@ Plan plan(const DetProgressFlow2DConfig& c){
 }
 void policiesMatch(DetTickContext& ctx,const Plan& p){for(const auto& s:p.policies)for(const auto& f:s.fields)std::visit([&]<class T>(const T& expected){
     if(encodeDetStateValue(ctx.readGlobal<T>(s.id,f.id))!=encodeDetStateValue(expected))invalid();},f.initial);}
-void descriptor(const detwire::ManifestLayout& m,const DetTypedStateSchema& s){
-    if(m.schemaVersions.at(s.id)!=s.version || !m.globals.contains(s.id))invalid();const auto& actual=m.schemas.at(s.id);
+void descriptor(const detwire::ManifestLayout& m,const DetTypedStateSchema& s,bool requireGlobal=true){
+    if(m.schemaVersions.at(s.id)!=s.version || (requireGlobal && !m.globals.contains(s.id)))invalid();const auto& actual=m.schemas.at(s.id);
     if(actual.size()!=s.fields.size())invalid();for(std::size_t n=0;n<actual.size();++n)if(actual[n].id!=s.fields[n].id
         || actual[n].type!=detStateType(s.fields[n].initial) || actual[n].width!=encodeDetStateValue(s.fields[n].initial).size())invalid();}
 void policiesMatch(const DetSessionCheckpoint& cp,const detwire::ManifestLayout& m,const std::vector<DetTypedStateSchema>& policies){
@@ -143,8 +136,9 @@ void validateCheckpoint(const DetSessionCheckpoint& cp,const DetProgressFlow2DCo
         || m.logicProfiles.at(c.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{1,logicHash})invalid();
     descriptor(m,p.collect);descriptor(m,p.objective);policiesMatch(cp,m,p.policies);policiesMatch(cp,m,p.pathPolicies);
     for(const auto& target:c.progress.actions.targets)if(target.path){const auto& path=*target.path;
+        const auto identity=detail::pathMotionIdentity2D(path);descriptor(m,detPathMotionStateSchema2D(path),false);
         if(m.systems.at(path.preSystemId)!=path.collision.priority || m.systems.at(path.postSystemId)!=path.collision.priority
-            || m.validatorVersions.at(path.validatorId)!=1 || m.logicProfiles.at(path.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{1,0x44504d3244503031ull})invalid();}
+            || m.validatorVersions.at(path.validatorId)!=identity.first || m.logicProfiles.at(path.logicProfileId)!=identity)invalid();}
     const DetStateLayout collect(p.collect),objective(p.objective),actions(p.actions);
     const auto& cw=cp.globals.at(c.collectStateSchema);const auto& ow=cp.globals.at(c.objectiveStateSchema);
     if(!collect.valid(cw) || !objective.valid(ow) || std::get<std::uint64_t>(collect.read(cw,1)) || std::get<std::uint64_t>(objective.read(ow,1)))invalid();
