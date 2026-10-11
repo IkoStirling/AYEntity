@@ -3015,3 +3015,34 @@ or hand oracle changed. Raw excluded and accepted records are preserved.
 No simulation tick/current CP, browser-rendering acceptance, future reachability,
 independent full-CP golden or native/transport authentication is established.
 Physical flush/close fault injection was not run; final native VM Deferred.
+
+## Stage61: whole-content validation around a narrow initial edit (local checks passed; native Deferred)
+
+The CLI copies/decodes a complete Level into temporary authoring state and looks
+up a fully parsed nonzero UInt64 ID. place writes only position; resize-half
+writes only body.half after both software values compare strictly above0.
+It then invokes the existing whole-Level validation/seal and canonical writer,
+retaining every format/application/input/step/policy/table field not selected.
+
+Changing initial actor position naturally changes Path origin through the
+existing Level preparation; point offsets remain immutable. Respawn positions
+are separately absolute and stay unchanged. No implicit offset rewrite,
+center-to-foot recentering, shape migration or runtime relocation is performed.
+The new contentHash follows exact canonical bits and is not an input/Host recipe.
+
+Exclusive write occurs only after the changed full content is accepted and
+encoded. Normal failures never mutate source/destination; physical write-failure
+partial new files keep the existing disclosure. inspect adds authored half/offset
+bits, not Controller standing capture or CP observations.
+
+Actual local MSVC Release `AYEntity_LevelToolChecks` passed2.41834s, with
+production Tool build5.891s. Selected independent dyadic place(-1.25,0.5) and
+resize-half(0.5,0.5) inspect bits, changed content identity, retained unselected
+tables, full edited/canonical/no-change byte equality and four unknown-actor/
+nonfinite/nonpositive-half/existing-output refusals passed. The genuine evidence
+is `stage61-actual-freeze.json` / `stage61-tool1`; source/executable pins and
+before/after snapshots are bound there, without production behavior/oracle fix.
+This finite offline gate does not separately execute an edited bound path or
+absolute-spawn gameplay, Sim/current CP, physical I/O faults or browser rendering.
+No hot reload, save migration, runtime pose writer, new numeric/wire profile or
+historical authentication is added; final native VM Deferred.

@@ -4,6 +4,7 @@
 #include <AYMath/DetGeometry2D.h>
 #include <AYMath/DetSlopeGeometry2D.h>
 #include <algorithm>
+#include <charconv>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -201,6 +202,17 @@ PreviewSvg2D buildPreviewSvg2D(const DetLevel2D& level) {
     return result;
 }
 
+SimEntityId editActorId(std::string_view token) {
+    SimEntityId id=0;const auto parsed=std::from_chars(token.data(),token.data()+token.size(),id,10);
+    require(parsed.ec==std::errc{} && parsed.ptr==token.data()+token.size() && id!=0,
+        "Actor identity must be a nonzero decimal integer");return id;
+}
+ayt::math::DetFloat32 editDecimal(std::string_view token) {
+    ayt::math::DetFloat32 value;
+    require(ayt::math::parseDetFloat32Decimal(token,value),"Invalid, overflowing or over-budget finite decimal");
+    return value;
+}
+
 void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
     const auto config=detLevelSessionConfig(level);
     std::cout<<"{\"schema\":1,\"status\":\"passed\",\"source\":"<<json(source.generic_string())
@@ -230,6 +242,8 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         if(!first)std::cout<<',';first=false;
         std::cout<<"{\"id\":"<<json(std::to_string(actor.id))<<",\"positionBits\":["
             <<json(bits(actor.position.x.bits()))<<','<<json(bits(actor.position.y.bits()))
+            <<"],\"halfExtentBits\":["<<json(bits(actor.body.half.x.bits()))<<','<<json(bits(actor.body.half.y.bits()))
+            <<"],\"offsetBits\":["<<json(bits(actor.body.offset.x.bits()))<<','<<json(bits(actor.body.offset.y.bits()))
             <<"],\"mode\":"<<static_cast<std::uint32_t>(actor.body.mode)<<",\"shape\":"
             <<static_cast<std::uint32_t>(actor.body.shape)<<",\"character\":"<<(actor.character?"true":"false")
             <<",\"trigger\":"<<(actor.body.trigger?"true":"false")<<",\"layer\":"<<actor.body.layer
@@ -334,6 +348,8 @@ int run(int argc,char** argv) {
             "aydetlevel float-bits <eight-hex-digits>\n"
             "aydetlevel create <character|dash> <fresh.dlt>\n"
             "aydetlevel preview <level.dlt> <fresh.svg>\n"
+            "aydetlevel place <source.dlt> <actor-id> <x> <y> <fresh.dlt>\n"
+            "aydetlevel resize-half <source.dlt> <actor-id> <half-x> <half-y> <fresh.dlt>\n"
             "Validates the real initial Session pipeline. Canonicalize preserves exact Float32 bits.\n"
             "Starters use application/input1, fixed1/64 and require a matching application input recipe.\n"
             "Preview shows authored initial shapes/paths only; no simulation ticks or current CP.\n"
@@ -363,6 +379,22 @@ int run(int argc,char** argv) {
         bool first=true;for(auto value:preview.viewBox){if(!first)receipt<<',';first=false;receipt<<json(bits(value.bits()));}
         receipt<<"],\"browserPixelsAuthoritative\":false}\n";
         const auto record=receipt.str();writeFresh(destination,preview.svg);std::cout<<record;return 0;
+    }
+    if(command=="place" || command=="resize-half") {
+        require(argc==7,"place/resize-half requires source, actor ID, two finite decimals and fresh output");
+        const std::filesystem::path source=argv[2];ordinary(source);
+        DetLevel2D level;std::string error;require(loadDetLevel2D(source,level,error),error);
+        const auto id=editActorId(argv[3]);const auto x=editDecimal(argv[4]),y=editDecimal(argv[5]);
+        const auto found=std::find_if(level.actors.begin(),level.actors.end(),[id](const auto& actor){return actor.id==id;});
+        require(found!=level.actors.end(),"Actor identity is not authored in this level");
+        if(command=="place")found->position={x,y};
+        else {
+            require(x>ayt::math::DetFloat32{} && y>ayt::math::DetFloat32{},"Body half extents must be strictly positive");
+            found->body.half={x,y};
+        }
+        require(validateDetLevel2D(level,error),error);const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[6];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
     }
     if(command=="create") {
         require(argc==4,"create requires a starter name and a fresh output path");

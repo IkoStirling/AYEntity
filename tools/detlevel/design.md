@@ -168,3 +168,34 @@ or hand oracle changed. Raw excluded and accepted records are preserved.
 No simulation tick/current CP, browser-rendering acceptance, future reachability,
 independent full-CP golden or native/transport authentication is established.
 Physical flush/close fault injection was not run; final native VM Deferred.
+
+## §9 Stage61 finite property edit adapter (local checks passed; native Deferred)
+
+The private ID helper uses unsigned decimal from_chars with full-token/end and
+nonzero checks; numeric helpers call the unchanged finite FloatText parser.
+Argument indexing is fixed: source/actor/X/Y/destination, with no alternate
+locale syntax or native floating intermediate. Positive half checks use rounded
+software values, so signed0/subnormal underflow cannot evade the constraint.
+
+The source is decoded into a local complete Level. Only position or body.half
+is assigned, then full validate/fresh seal and encode precede fresh-only I/O.
+This preserves explicit format/application/input/step and all authority, and
+delegates geometry/role/joint budgets to existing actual factories. Path origin
+is derived from the changed actor position, while independent absolute spawn
+coordinates are untouched. Same exact assignments produce the same canonical
+bytes/content identity; a different exact value changes authored identity.
+
+Actor inspection gains halfExtentBits/offsetBits beside positionBits; no new
+standing-capture state or current-CP view is exposed.
+
+Actual local MSVC Release `AYEntity_LevelToolChecks` passed2.41834s, with
+production Tool build5.891s. Selected independent dyadic place(-1.25,0.5) and
+resize-half(0.5,0.5) inspect bits, changed content identity, retained unselected
+tables, full edited/canonical/no-change byte equality and four unknown-actor/
+nonfinite/nonpositive-half/existing-output refusals passed. The genuine evidence
+is `stage61-actual-freeze.json` / `stage61-tool1`; source/executable pins and
+before/after snapshots are bound there, without production behavior/oracle fix.
+This finite offline gate does not separately execute an edited bound path or
+absolute-spawn gameplay, Sim/current CP, physical I/O faults or browser rendering.
+No hot reload, save migration, runtime pose writer, new numeric/wire profile or
+historical authentication is added; final native VM Deferred.

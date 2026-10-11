@@ -1446,3 +1446,28 @@ No simulation tick/current CP, browser-rendering acceptance, future reachability
 independent full-CP golden or native/transport authentication is established.
 Physical flush/close fault injection was not run; final native VM Deferred.
 The accepted source is stage60-tool2; earlier old Stage59 CLI execution is excluded.
+
+## Stage61: finite initial placement editing (local checks passed; native Deferred)
+
+Use `aydetlevel place source.dlt actor x y fresh.dlt` or `resize-half`
+through the existing [tool](tools/detlevel/README.md). The input is checked
+software decimal; only the selected actor's initial poseXY or positive body
+half is changed. inspect exposes position/halfExtent/offset exact bits.
+
+The full public Level pipeline checks the edited content before fresh output.
+Explicit versions and other authority are retained; match the resulting content
+identity to the application recipe. Paths follow their actor's initial origin,
+while separately authored absolute spawn points are not moved. This is offline
+content editing without a runtime checkpoint writer.
+
+Actual local MSVC Release `AYEntity_LevelToolChecks` passed2.41834s, with
+production Tool build5.891s. Selected independent dyadic place(-1.25,0.5) and
+resize-half(0.5,0.5) inspect bits, changed content identity, retained unselected
+tables, full edited/canonical/no-change byte equality and four unknown-actor/
+nonfinite/nonpositive-half/existing-output refusals passed. The genuine evidence
+is `stage61-actual-freeze.json` / `stage61-tool1`; source/executable pins and
+before/after snapshots are bound there, without production behavior/oracle fix.
+This finite offline gate does not separately execute an edited bound path or
+absolute-spawn gameplay, Sim/current CP, physical I/O faults or browser rendering.
+No hot reload, save migration, runtime pose writer, new numeric/wire profile or
+historical authentication is added; final native VM Deferred.

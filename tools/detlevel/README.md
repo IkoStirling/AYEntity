@@ -380,3 +380,40 @@ or hand oracle changed. Raw excluded and accepted records are preserved.
 No simulation tick/current CP, browser-rendering acceptance, future reachability,
 independent full-CP golden or native/transport authentication is established.
 Physical flush/close fault injection was not run; final native VM Deferred.
+
+## Stage61: edit one initial actor (local checks passed; native Deferred)
+
+```text
+aydetlevel place source.dlt 10 -1.25 0.5 fresh-placed.dlt
+aydetlevel resize-half fresh-placed.dlt 10 0.5 0.5 fresh-resized.dlt
+aydetlevel inspect fresh-resized.dlt
+```
+
+The command accepts a complete nonzero decimal actor ID and two finite software
+decimal values. place changes initial XY only; resize-half changes half extents
+only and requires positive values after nearest-even rounding. Signed0 or a
+tiny value rounded to0 cannot become a half extent. No locale/native float is used.
+
+All formats supported by the actual decoder keep their explicit version and
+every unselected field. Existing actor IDs must be present; real role/geometry/
+budget validation can refuse the modified level. A path bound to the moved actor
+gets the new initial origin without changing its relative points; absolute
+respawn spawn positions do not move. Supply matching content/session/input code,
+including the newly reported contentHash; the tool does not invent a Host recipe.
+
+The entire temporary content validates/encodes before exclusive fresh output.
+Existing source/output is never replaced; normal rejection creates no file,
+while physical write/close failure may leave a partial fresh one. inspect actor
+rows add exact halfExtentBits/offsetBits.
+
+Actual local MSVC Release `AYEntity_LevelToolChecks` passed2.41834s, with
+production Tool build5.891s. Selected independent dyadic place(-1.25,0.5) and
+resize-half(0.5,0.5) inspect bits, changed content identity, retained unselected
+tables, full edited/canonical/no-change byte equality and four unknown-actor/
+nonfinite/nonpositive-half/existing-output refusals passed. The genuine evidence
+is `stage61-actual-freeze.json` / `stage61-tool1`; source/executable pins and
+before/after snapshots are bound there, without production behavior/oracle fix.
+This finite offline gate does not separately execute an edited bound path or
+absolute-spawn gameplay, Sim/current CP, physical I/O faults or browser rendering.
+No hot reload, save migration, runtime pose writer, new numeric/wire profile or
+historical authentication is added; final native VM Deferred.
