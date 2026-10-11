@@ -2342,3 +2342,24 @@ scenarios, not an independent full-byte oracle or general rigid-body correctness
 All seven necessary/affected local Release targets pass; native VM acceptance and
 resource/editor/cook integration remain outside this stage. See
 [the execution record](../../AYDocs/DETERMINISTIC-CONTENT-TEN-HOUR-20261011.md).
+
+## Stage41: registered progress routing
+
+Flow profile1 binds full Progress/Actions policy and increasing claim/rule tables.
+Collect/objective global schemas have maximum113/49fields; actor copies stay at
+defaults. Up to16 claim bindings and8 edge-action rules fit at most12288 policy
+bytes/13 immutable chunks. Event(source,sequence) precedes claim ID; each binding
+attempts once per tick at most. Every gate sees current counter values. Goal rules
+follow claims by rule ID, with explicitly false initial edge memory. Denial is an
+attempt and consumes once; non-once needs another edge. There is no hidden pending
+queue or timer. Getters copy count/stamp/result/consumption from typed authority.
+
+Pure validation checks full installed dependencies and ordering of authorized
+path pre callbacks. Application assembly still orders all other character/path
+pre and external Progress writes correctly. At a noninitial committed boundary,
+previousSatisfied must equal the current derived routed truth; late changes fault
+and require explicit restore. Counts, results, references, actor defaults and tick
+relationships are checked at all Session boundaries. Numeric, wire and previous
+facade profiles remain unchanged. The short test uses real events and complete
+production checkpoint equivalence across restore/rollback/replay, with bounded
+negative prospective/restore cases; no independent full-byte golden is claimed.

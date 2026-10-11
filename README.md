@@ -911,3 +911,26 @@ with actual feature observations and saved64-tick continuation. Native acceptanc
 remains deferred to the user's final VM environment. Actual evidence and the
 ongoing ten-hour task are tracked in
 [the execution plan](../../AYDocs/DETERMINISTIC-CONTENT-TEN-HOUR-20261011.md).
+
+## Automatic collection and objective actions (Stage41)
+
+`DeterministicProgressFlow2D.h` installs a bounded consumer after matching Actions
+and Progress, before actors. It processes only the actual collision producer/type
+Enter stream, in canonical event order then claim ID; optional current objectives
+gate each claim. Earlier successful claims can unlock later claims in the same
+tick. A closed gate, normal denial or Stay does not retry without a new Enter.
+All other application Progress writes must precede Flow at collision.priority.
+
+Up to8 objective rules execute fixed Actions on false-to-true edges, after claims
+and in rule ID order. Initial true fires at tick0; once consumes an actual attempt,
+including denial. Non-once requires a later false→true edge. Registered counts,
+results, edge memory and complete policy restore with the Session. The policy
+limit12288 bytes can require13 chunks plus two mutable schemas, within the total
+Session budget. A later write changing a routed objective's truth faults at the
+boundary. Level2 can install Progress/Flow through its beforeActors hook; file
+authored Progress/Flow is a separate forthcoming format3 capability.
+
+`AYEntity_ProgressFlow2DChecks` is LocalPassed in Windows Release (0.264903s),
+including actual Enter/gates/denials, objective reversal,8-tick complete checkpoint
+continuation, late rollback/confirmed drain and real sealed replay/two seeks.
+See [the ongoing execution record](../../AYDocs/DETERMINISTIC-CONTENT-TEN-HOUR-20261011.md).
