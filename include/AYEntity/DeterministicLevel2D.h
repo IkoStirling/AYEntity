@@ -5,6 +5,7 @@
 #include <AYEntity/DeterministicProgressFlow2D.h>
 #include <AYEntity/DeterministicCharacterRespawnFlow2D.h>
 #include <AYEntity/DeterministicVitality2D.h>
+#include <AYEntity/DeterministicAttack2D.h>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -27,6 +28,8 @@ inline constexpr std::uint32_t kDetLevel2DVitalityProfileVersion=5;
 inline constexpr std::uint32_t kDetLevel2DPeriodicVitalityProfileVersion=6;
 /// @brief Explicit moving AABB trigger paths; formats1..6 keep their bytes.
 inline constexpr std::uint32_t kDetLevel2DMovingTriggerProfileVersion=7;
+/// @brief Explicit fixed melee authority; formats1..7 keep their literal semantic bytes.
+inline constexpr std::uint32_t kDetLevel2DAttackProfileVersion=8;
 /// @brief Bound on original ASCII source bytes, before decoding.
 inline constexpr std::size_t kDetLevel2DMaxTextBytes=65536;
 /// @brief Bound on complete field-wise semantic bytes entering the manifest.
@@ -104,6 +107,12 @@ struct DetLevel2D {
     bool vitalityRespawnRecovery=false;
     /// Format6 selects actual Vitality3; false preserves Enter-only1/2 behavior.
     bool periodicVitalityRegions=false;
+    /// Format8: sorted finite melee owners and literal Hurt target permissions.
+    /// Owners and targets are ordinary solid Kinematic actors in this level's HP table.
+    std::vector<DetAttackOwner2D> attackOwners;
+    /// Format8: copied accepted-recovery generation cancels a still-open attack.
+    /// An empty owner table requires true; formats1..7 also require this default.
+    bool attackCancelOnRecovery=true;
 };
 /// @brief Application-owned registration ranges; adjust these before combining other schemas/systems.
 /// @note Defaults reserve schemas 8..23 for paths,32..47 for content; path pre 11..18/post 41..48.
@@ -130,8 +139,10 @@ struct DetLevel2DOptions {
         vitalitySystemId=6,vitalityPostSystemId=62,vitalityValidatorId=75,vitalityLogicProfileId=75,
         vitalityRecoveryStateSchema=208;
     std::uint32_t vitalityRegionStateSchema=224;
+    std::uint32_t attackStateSchema=240,attackLedgerSchema=241,attackPolicySchemaBase=242,
+        attackSystemId=5,attackValidatorId=77,attackLogicProfileId=77;
 };
-/// @brief Strict ASCII AYDLEVEL1..7 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
+/// @brief Strict ASCII AYDLEVEL1..8 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
 /// @note Rejects unknown/trailing tokens, nonfinite values, invalid roles/policies and initial geometry.
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,
     const DetLevel2DOptions& options={});
@@ -148,7 +159,7 @@ DetSessionConfig detLevelSessionConfig(const DetLevel2D& level);
 /// @brief Resolve the registered path binding used by configure; unknown IDs/options throw.
 DetPathMotion2DConfig detLevelPathConfig2D(const DetLevel2D& level,std::uint32_t path,
     const DetLevel2DOptions& options={});
-/// @brief Resolve complete registered Actions authority from format2..7 content.
+/// @brief Resolve complete registered Actions authority from format2..8 content.
 /// @note Pure gameplay or HP counters may resolve a zero-target authority. Otherwise empty
 /// action content, invalid references/options or unsupported controls throw.
 DetActions2DConfig detLevelActionsConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
@@ -175,6 +186,10 @@ DetProgress2DConfig detLevelVitalityProgressConfig2D(const DetLevel2D& level,con
 /// @note Empty vitality or invalid tables/options throw. Recovery adds no pose writer
 /// and only current matching Queued+Accepted restores; Manual requires its actor opt-in.
 DetVitality2DConfig detLevelVitalityConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
+/// @brief Resolve complete Attack1 policy over the level's exact dedicated HP/Vitality authority.
+/// @note Empty owners or invalid geometry, permissions, namespaces or scratch seal throw.
+/// Input is runtime-owned and precedes Attack; authored content never imports a held latch or hit ledger.
+DetAttack2DConfig detLevelAttackConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
 /** @details Configure initial level authority in a fresh Session; does not seal or own the tick loop.
  * @note Set Host recipe.config=detLevelSessionConfig(level), then call this from recipe.configure.
  * Install an earlier canonical input system separately. Collision remains the sole XY pose writer.
@@ -221,6 +236,20 @@ DetVitality2DConfig detLevelVitalityConfig2D(const DetLevel2D& level,const DetLe
  * Collision remains the sole XY writer and emits actual continuous trigger
  * events; path pause and trigger mask disable remain separate controls.
  * Formats1..6 reject this flag and retain their complete canonical bytes.
+ * Format8 appends finite Attack1 owner geometry, integer warmup/active/recovery
+ * windows and sorted literal Hurt target/permission/amount rows. Matching HP
+ * Progress and Vitality are installed first, then Attack, before beforeActors.
+ * Canonical input precedes Attack5, then Vitality6 and optional RespawnFlow7;
+ * destination input IDs may be changed only while preserving that actual order.
+ * A true cancelOnRecovery uses copied restoreCount generations, including an
+ * equal-HP Accepted restoration; no body/pose writer or implicit HP0 retry is
+ * added. Runtime held edges, facing, phases, masks and results remain registered
+ * defaults. A normal target denial consumes the attack-local target bit.
+ * Owner/target table limits8 do not enlarge the shared Vitality8-HP-actor bound.
+ * The real Attack state/policy factories reserve only their actual selected
+ * descriptors before the fresh complete install/seal; its16KiB nested policy
+ * bound is separate from this level's existing8KiB semantic/64KiB text bounds.
+ * Formats1..7 reject attack rows and cancelOnRecovery=false, preserving old bytes.
  * Entire tables and nested policies enter identity, not only a content hash.
  * Flow precedes Interaction and every path/character pre at collision.priority;
  * application Progress writes must precede Flow. Empty counters forbids objective,

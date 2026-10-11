@@ -170,3 +170,38 @@ See [moving-region source](../../examples/detmovingregion/content.dlt) and its
 does not execute effects or prove future sampled motion. The first actual combined
 CLI/Host attempt exposed an actor-only Path descriptor acquisition defect, now
 corrected. The actual corrected tool/Host pair passed (CTest3.19s); old1..6 canonical entries and explicit new role inspection remained valid. Additional authored/resource acceptance is separate. Native final VM deferred.
+
+
+## Stage52: Level8 finite attack content
+
+Format8 preserves every Level7 section and adds these rows after vitality and before end:
+
+```text
+attacks <cancelOnRecovery:0|1> <ownerCount:u32>
+attack <owner:u64> <halfX:bits8> <halfY:bits8> <offsetX:bits8> <offsetY:bits8> <warmup:u32> <active:u32> <recovery:u32> <targetCount:u32>
+attacktarget <target:u64> <hurtPermission:u32> <amount:u64>
+```
+
+Each owner is followed by exactly targetCount rows. IDs are strictly ordered nonzero;
+targets are not self, belong to the same bounded HP table and bind actual positive Hurt
+permission/amount. World attack offset mirrors only X by facing. Warmup/recovery0..65535,
+active1..65535; Float32 uses finite exact eight-hex bits. Max8 owners/8 listed targets
+still share at most8 HP actors, hence max7 other targets. Empty owners require default
+cancel=true. Old1..7 reject nondefault attacks and retain their canonical/text/hash.
+
+Inspect returns attackOwnerCount/attackCancelOnRecovery and full attacks rows with
+actor, halfExtentBits/offsetBits, three tick windows and target actor/permission/amount;
+UInt64 actors/amounts are JSON strings. Validate and canonicalize use public Level/
+Attack factories and actual fresh Session seal. Canonicalize preserves version8, full
+fields and content identity into a fresh output. Combined64KiB text/8KiB semantics,
+actual schema and nested policy capacities remain authoritative.
+
+Start with [attack content](../../examples/detattack/content.dlt) and its
+[standard Host](../../examples/detattack/README.md). Offline preflight does not run
+attacks, future movement or saves and does not certify historical gameplay. Existing
+cooked envelope1 carries the actual canonical Level8 text without a codec upgrade.
+Necessary actual Release CLI passed1.06216s with complete Level8 tables and old1..7
+canonical paths. Authoring0.463677s also exercised Level8 actual text/cooked roundtrip.
+Existing Resource loose/ProjectBuild-Pak/CookShip-Pak compatibility passed0.975352s
+(27CP/14rejects); the new attack content was not separately packaged/run through Pak.
+No runtime fix, first diagnostic-free build failure preserved, native final VM deferred.

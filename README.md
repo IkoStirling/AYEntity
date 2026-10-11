@@ -1117,3 +1117,31 @@ No new level-file grammar or interactive attack Host is included in this facade.
 The unchanged-source receipt is stage51core-diagnostic2/result.json. First existing
 Replay dependency build exit1 without diagnosis remains in stage51core-first; the
 same-source retry passed without changing production behavior.
+
+
+## Stage52: authored Level8 attacks and playable standard Host
+
+`AYDLEVEL 8` appends attacks/attack/attacktarget after vitality, preserving all earlier
+1..7 writer/semantic/hash branches and rejecting new nondefault attack authority in
+old versions. Acquire through load/decode, detLevelSessionConfig and configure;
+`detLevelAttackConfig2D` resolves the exact already-installed Attack/Vitality config.
+The Level installer owns these facades before application hook/actors; do not install
+another Attack. Source bits/windows/literal Hurt permissions/amounts bind full content
+identity. Combined existing text/semantic/schema budgets still apply.
+
+Enable `AY_ENTITY_BUILD_DET_ATTACK_EXAMPLE=ON` (default OFF) for standard target
+`AYEntity_DetAttackExample`. The [attack content example](examples/detattack/README.md)
+uses real EngineModuleRuntime/Entity runtime/Host with app52/input5,24tick script and
+canonical8-byte input. It demonstrates locked facing, short/long preparation, sampled
+jump miss and equal-HP accepted recovery cancellation, with Live-only persistent
+save/load and sealed Record/Replay/seek. Every effect remains registered; presentation
+reads committed values. aydetlevel inspect exposes complete Attack authoring tables.
+
+Necessary local Release Level8 passed0.463677s (3cases/29rejects/16handRows/29fullCP
+comparisons), old7/Cooked compatibility passed0.931608/0.180456s. Actual six24tick
+standard Host passed6.14051s and full CLI1.06216s, with complete state/trace/save4/
+load/seek suffix equality. Existing Resource compatibility passed0.975352s (27CP/
+14rejects); this does not claim separate Pak execution of the new attack content.
+First unchanged Actions TU build exit1 without diagnosis remains in stage52-host1;
+same-source retry passed without a runtime fix. Receipts stage52-levels1/host2. No new
+long campaign/matrix/CI/native result; final native VM deferred. See design for closure.

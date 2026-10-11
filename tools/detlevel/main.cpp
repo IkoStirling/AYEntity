@@ -47,6 +47,8 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         <<",\"vitalityRegionCount\":"<<level.vitalityRegions.size()<<",\"maxVitalityOperationsPerTick\":"<<level.maxVitalityOperationsPerTick
         <<",\"vitalityRespawnRecovery\":"<<(level.vitalityRespawnRecovery?"true":"false")
         <<",\"vitalityPeriodicRegions\":"<<(level.periodicVitalityRegions?"true":"false")
+        <<",\"attackOwnerCount\":"<<level.attackOwners.size()
+        <<",\"attackCancelOnRecovery\":"<<(level.attackCancelOnRecovery?"true":"false")
         <<",\"actors\":[";
     bool first=true;
     for(const auto& actor:level.actors) {
@@ -124,6 +126,17 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         std::cout<<"{\"id\":"<<region.id<<",\"trigger\":"<<json(std::to_string(region.trigger))<<",\"actor\":"<<json(std::to_string(region.actor))
             <<",\"kind\":"<<static_cast<std::uint32_t>(region.kind)<<",\"amount\":"<<json(std::to_string(region.amount))
             <<",\"periodTicks\":"<<region.periodTicks<<'}';}
+    std::cout<<"],\"attacks\":[";first=true;
+    for(const auto& owner:level.attackOwners){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"actor\":"<<json(std::to_string(owner.actor))<<",\"halfExtentBits\":["
+            <<json(bits(owner.halfExtent.x.bits()))<<','<<json(bits(owner.halfExtent.y.bits()))
+            <<"],\"offsetBits\":["<<json(bits(owner.offset.x.bits()))<<','<<json(bits(owner.offset.y.bits()))
+            <<"],\"warmupTicks\":"<<owner.warmupTicks<<",\"activeTicks\":"<<owner.activeTicks
+            <<",\"recoveryTicks\":"<<owner.recoveryTicks<<",\"targets\":[";bool targetFirst=true;
+        for(const auto& target:owner.targets){if(!targetFirst)std::cout<<',';targetFirst=false;
+            std::cout<<"{\"actor\":"<<json(std::to_string(target.actor))<<",\"permission\":"<<target.permission
+                <<",\"amount\":"<<json(std::to_string(target.amount))<<'}';}
+        std::cout<<"]}";}
     std::cout<<"]}\n";
 }
 int run(int argc,char** argv) {

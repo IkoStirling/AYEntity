@@ -2606,3 +2606,48 @@ compiled26.219s, with no new Host/Debug/ASan/native run. Receipt
 stage51core-diagnostic2/result.json binds unchanged runtime sources and executable;
 first existing Replay dependency build exit1 without diagnosis is retained, and
 the unchanged-source retry passed without a production behavior fix.
+
+
+## Stage52: Level8 attack identity and content lifecycle
+
+Format8 selects AYDLV008 and content identity profile8, appending cancelOnRecovery
+and complete field-wise owner geometry/window/target permission/quantity tables after
+Vitality. Older1..7 default branches encode no new field and reject nondefault new
+content. Empty owners mean no Attack installation and require cancel=true; getter
+fails instead of returning unusable empty authority. Ordinary solid Kinematic owners
+and targets resolve within the bounded dedicated HP table. Preflight reserves actual
+state/policy factories, compares namespaces and installs/seals a fresh complete Session;
+no fixed guessed policy chunk count, implicit version migration or source hash shortcut.
+
+Destination order installs shared actions/HP Progress/Vitality then Attack before the
+configuration-only application hook/content identity/actors. canonical input4 precedes
+Attack5/Vitals6/optional Flow7/ProgressFlow8/Rules9 and motion pre. Input mapping and
+all attack geometry edits precede the one owned capture; only actual Vitals6 flushes
+lethal authority. Full immutable config enters registered descriptors/manifest. Attack
+profile1, existing numeric/collision/control and checkpoint/replaywire identities remain
+separate. Generic cooked envelope1 resolves the new canonical text through actual Level,
+without a second parser or runtime file owner. Combined real budgets remain unchanged.
+
+The opt-in standard Host example has its own immutable input-mapping logic74/profile1,
+app52/input5 and eight-byte packet; it loads format8 rather than reconstructing content
+in a Unitfixture. Script samples absolute tick0/8/14 hero and0/12 foe held edges, jump5,
+manual10, with explicit release on other ticks. Boundary4 contains a real open attack
+and consumed target state. File save/load runs between Host frames, restores through
+controller lifecycle and reacquires copies; Record cannot rewind and Replay captures
+no live input. Interactive restore may repeat observed tick rows, which remain recorded
+rather than silently normalized. Complete output CP and tickhash suffixes compare actual
+paths, not an independent full-state golden. Selected feature assertions target short/
+long windows, jump miss and equal-HP restoration cancellation, not all combat behavior.
+
+Actual necessary Release LevelAttack8 passed0.463677s (3cases/29rejects/16ticks/
+16handRows/29wholeCP comparisons), old70.931608s/Cooked0.180456s. Authoring fixture
+performed actual cooked/text roundtrip. Standard Host6.14051s/CLI1.06216s and existing
+Resource0.975352s/27CP/14rejects passed. The bounded harness actually compared live+
+save4/freshload/record/replay/seek4/stdin paths, complete state/trace/suffix/savebytes.
+Script24 rows, load/seek20, interactive28 due to load4 and suffix starting rowindex8;
+Replay has0input calls. Hero18HP/3attacks/2attempts/1Recoveredcancel/1restore/0write,
+enemy14HP/2attacks/1attempt: selected miss/recovery facts actually passed. No dedicated
+new attack content Pak run is inferred from existing resource compatibility. Initial
+unchanged Actions TU compile exit1 without diagnostic remains, same-source retry
+passed without runtime behavior changes. No new long campaign,
+compiler/sanitizer matrix, transport authentication or nativeVM result is claimed.
