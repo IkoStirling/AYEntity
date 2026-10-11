@@ -103,6 +103,7 @@ add_library(ReplayArchiveKernel STATIC "${AYENTITY_ROOT}/src/AYDeterministicSess
     "${AYENTITY_ROOT}/src/AYDeterministicVitality2D.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicAttack2D.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicBrain2D.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicCharacterControl2D.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicLevelCooked2D.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRollback.cpp" "${AYENTITY_ROOT}/src/AYDeterministicRollbackNetwork.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRollbackReplay.cpp" "${AYMATH_ROOT}/src/DetFloat.cpp" "${AYMATH_ROOT}/src/DetMath.cpp"
@@ -172,6 +173,7 @@ include("${AYENTITY_ROOT}/unittest/LevelBrain9.cmake")
 include("${AYENTITY_ROOT}/unittest/VitalityRegions3.cmake")
 include("${AYENTITY_ROOT}/unittest/Attack2D.cmake")
 include("${AYENTITY_ROOT}/unittest/Brain2D.cmake")
+include("${AYENTITY_ROOT}/unittest/CharacterControl2D.cmake")
 include("${AYENTITY_ROOT}/unittest/LevelCooked2D.cmake")
 include("${AYENTITY_ROOT}/unittest/LevelTool.cmake")
 include("${AYENTITY_ROOT}/unittest/Actions2D.cmake")

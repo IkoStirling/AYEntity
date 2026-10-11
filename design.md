@@ -2753,3 +2753,55 @@ No OUT metadata/preflight is promoted to runtime proof. Final diagnostic
 hash9235648105896247954/content2553473865409833715 is not a state golden. No new
 independent whole-CP golden, recovery-combination, Host matrix, long-run or nativeVM
 result is claimed. Stage53 core and failures remain separate historical evidence.
+
+## Stage55: finite registered Character input ownership
+
+Control1 is an optional input facade, not a Character/Collision algorithm fork.
+Its literal policy contains the exact actual Character mutable/policy/body
+descriptors and selected fingerprint, optional complete matching Respawn policy,
+registration IDs and strictly sorted fixed owners. Install dependencies once,
+then Control before actors/seal. Advanced Character is intrinsic; no automatic
+existing facade adoption. Brain/Control owners must be disjoint and live owners
+stay enabled. Default callback15 runs at collision priority before Character pre;
+external complete samples come from an actual earlier system, not packet sourceId.
+
+Two registered global blocks contain15input+15timeline fields per owner plus one
+ProcessedTick: maximum120/121fields. Raw input, latch, emitted input, pre-Control
+presence/ground/Accepted observation, fixed windows/lock direction and counts are
+closed state; actor copies stay defaults. Full policy<=8KiB/9chunks with real
+joint64-schema budget. No mutable capture, RNG/timer, HP/pose/bodyvelocity authority
+or new tick owner. read-only descriptor factories expose exact layouts.
+
+All owner arithmetic/decisions are planned before the first Character write.
+Held dash edge starts [T,T+duration) only when present, uncanceled, no fresh actual
+Accepted, ready and (if required) previous-grounded. The edge is consumed for every
+denial. Facing locks on start; normal jump/crouch/drop propagate, target speed
+remains subject to real Character acceleration/gravity/carrier/wall response.
+Explicit cancel/previous Accepted/retirement ends active once and retains the
+original ready deadline. Missing input preserves every held sample, not one-shot
+requests. Death itself is outside this facade; application explicit cancel owns it.
+
+At nextTick N>0 captured decision/phase/output describe tick N-1; do not recompute
+from current support. Active may be the final emitted tick when N==endTick.
+Same-tick actual Accepted post can reset committed Character speed/crouch;
+validation grants this exact actual-result/stamp exception only. Next Control
+observes/cancels, while denied/Queued results do not. Pure closure binds installed
+systems/priorities/versions/logic, complete literals/layouts/default actorcopies,
+counts/window/stamps/output and retirement frontier. It is atomic restore
+consistency, not historical authentication or transient-overwrite certification.
+
+Actual necessary local MSVC Release single Control gate passed JUnit0.423906s,
+standard production Kernel compile passed14.062s only. Actual16ticks/17fullCP,
+41selected independent hand rows/121explicit advances/85CP comparisons,
+10negative restores/10negative configs,16confirmed events,1rollback/1replayed
+tick,1physical sealed RPL/2seeks. Selected finite decision/ground/physical-field
+expectations and complete actual execution equality across reverse registration,
+active restore, late-Hold correction and sealed replay/seek are distinct scopes,
+not a whole-byte independent golden. Candidate540 source snapshots/exe match
+before/after in `stage55core-integration-fix/result.json`; final actual freeze
+retains source identities and first portable omitted-TU eight-symbol LNK2019
+failure. The correction adds one source-registration line and nearby State Doxy
+brief, not production behavior or weakened oracle. Old successful gates did not
+repeat. No new numeric/Character/Collision/checkpoint/save/replay profile, Level
+grammar, Host Control scene, Debug/ASan/backend matrix or long-run/native result;
+final native VM deferred.

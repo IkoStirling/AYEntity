@@ -1224,3 +1224,53 @@ not a separate new9 Enemy Pak run. SourcesUnchanged receipts stage54-levels1/hos
 no production behavior fix. Stage53 core evidence stays separate, and this scene
 does not cover its unmatched recovery combination. Final native VM deferred;
 no new matrix or long campaign, independent full-CP golden or authentication.
+
+## Stage55: registered character input control and finite dash windows
+
+Use `DeterministicCharacterControl2D.h` over a separately installed exact advanced
+Character pipeline (`advanced=true`), or full explicit Respawn when its flag is
+enabled. Install Control before actors/seal. It does not acquire a second collision
+writer or install dependencies twice. One to eight sorted enabled ordinary solid
+Kinematic owners start with zero Character input and remain enabled while present;
+retirement is supported. Caller keeps Brain/Control owners disjoint and all other
+callbacks from overwriting these Character inputs. Failed assembly is discarded.
+
+An actual earlier registered input callback calls `detCharacterControlInput2D`;
+default Control15 precedes Character pre20 at collision priority. Persistent full
+held samples need explicit false release: missing input holds dash/cancel/jump/drop.
+A consumed denied edge is never buffered/repeated. Start T locks facing target
+speed on [T,T+duration), ready=T+duration+cooldown; cancel retains the deadline.
+groundOnly samples previous committed ground. Dash still uses Character's real
+acceleration/deceleration, gravity, carrier, jump and wall response; no exact
+distance, instant speed, invulnerability or direct pose/body-velocity/HP writes.
+HP death requires explicit application cancel.
+
+Previous-tick actual Accepted relocation cancels before the next Character input
+and denies a fresh edge; Queued/denied does not. A current Accepted post may reset
+committed speed/crouch after the captured decision; pure closure permits only that
+actual result/stamp and next Control observes it. Copied context/CP state describes
+the last Control decision, not later support. At nextTick N phase/output refer to
+N-1, including the last Active emitted tick at N==endTick. Retirement cancels once
+and holds the original ready deadline; counters do not prove physical distance.
+
+Profile1 defaults input304/state305/policy306+/system15/validator&logic79. Actual
+factories expose120 input/121 timeline fields at8owners and full nested literal
+policy<=8192bytes/9chunks. All real64-schema/Session limits still apply. Pure
+restore checks identity/defaults/counters/stamps/actual emitted input atomically;
+it does not authenticate history or imply ordinary Combat/Ability state closure.
+
+Necessary local MSVC Release single `AYEntity_CharacterControl2DChecks` passed
+JUnit0.423906s; standard production Kernel compiled14.062s (not a Host runtime).
+Actual16ticks/17fullCP,41selected independent hand rows/121explicit advances/
+85CP comparisons,10negative restores/10negative configs,16confirmed events,
+1rollback/1replayed tick,1physical sealed .rpl/2seeks. Selected finite edges/ground,
+actual acceleration/wall/jump/retirement/Accepted-vs-Occupied checks are separate
+from reverse-order/restore/late-Hold correction/replay-seek whole-CP execution
+equality; the latter is not an independent whole-CP golden or authentication.
+Receipts `stage55core-integration-fix/result.json` / `stage55-actual-freeze.json`
+bind540 unchanged candidate sources and unchanged executable. First portable
+build omitted Control.cpp and failed eight unresolved LNK2019 symbols before any
+gate ran. One CMake source line and nearby State Doxygen brief fixed integration;
+production behavior/assertions unchanged, first failure preserved. No old gate
+repeated or new Host/Level content, Debug/ASan/backend matrix/long/native result;
+final native VM deferred. See the [SDK contract](../../AYDocs/sdk/contracts/2d.md#2dsimulationdeterministic-character-control).
