@@ -2413,4 +2413,12 @@ payload is refused. The original full field-wise level identity still enters Ses
 checksums are damage detection/content identification, without authentication or migration.
 Runtime options/callbacks are selected only by later `configureDetLevel2D` and are not hidden
 authority in the buffer. The codec is pure memory and stays in DeterminismKernel. The optional
-Resource/import adapter must retain the separate dependency boundary and is not yet accepted.
+Resource/import adapter retains the separate dependency boundary through the optional
+`AYEntity::DeterministicLevelResources` target. The runtime loader stages full validation
+before publishing an immutable snapshot and keeps previous content on failure. Offline
+authoring dependencies are acquired only by Import/ProjectBuild/Cook targets. Complete
+cached canonical content, importer contract and sole logical output are checked against
+the current source; checksums alone do not establish cache identity. Necessary local
+Release import/loose/two-Pak paths and302-character staging/replacement/reuse passed.
+No concurrent reload, running Session replacement, filesystem transaction or native
+cross-platform acceptance is implied; see the resource example for acquisition order.

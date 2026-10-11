@@ -964,4 +964,16 @@ is required. See `DeterministicCharacterRespawn2D.h` for explicit timing and lim
 length/EOF, payload checksum, actual Level preflight, byte-identical canonical text
 and semantic identity; failure leaves output unchanged. FNV values do not authenticate
 content. This codec has no file/Resource owner or simulation tick ownership; the optional
-resource/import/Pak adapter is a separate integration under implementation.
+resource/import/Pak adapter is provided by the separate opt-in target below.
+
+`AY_ENTITY_LEVEL_RESOURCES=ON` adds `AYEntity::DeterministicLevelResources` with
+explicit startup loader registration and immutable validated `.dlc` snapshots.
+Authoring builds convert `.dlt` while preserving logical hierarchy; ProjectBuild
+checks complete source/cache identity, and CookShip validates final levels before
+publishing. Resource Core retains its metadata-only dependency boundary. Acquire
+content before configuring a new Session/Host; reload never changes running authority.
+See [the runnable resource example](examples/detlevel-resource/README.md).
+The necessary Windows Release gate is LocalPassed: three resource lanes,8ticks each,
+27 complete checkpoint comparisons,14 rejection checks and302-character cache
+staging/replacement/reuse. Deep-path copy has no separate coverage claim. Final
+native VM acceptance remains deferred.
