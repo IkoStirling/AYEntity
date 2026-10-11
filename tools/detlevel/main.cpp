@@ -43,6 +43,9 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         <<",\"characterRespawn\":"<<(level.character.collision.characterRespawn?"true":"false")
         <<",\"spawnCount\":"<<level.respawnSpawns.size()<<",\"respawnBindingCount\":"<<level.respawnBindings.size()
         <<",\"respawnRegionCount\":"<<level.respawnRegions.size()
+        <<",\"vitalityActorCount\":"<<level.vitalityActors.size()<<",\"vitalityPermissionCount\":"<<level.vitalityPermissions.size()
+        <<",\"vitalityRegionCount\":"<<level.vitalityRegions.size()<<",\"maxVitalityOperationsPerTick\":"<<level.maxVitalityOperationsPerTick
+        <<",\"vitalityRespawnRecovery\":"<<(level.vitalityRespawnRecovery?"true":"false")
         <<",\"actors\":[";
     bool first=true;
     for(const auto& actor:level.actors) {
@@ -97,6 +100,20 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         std::cout<<"{\"id\":"<<region.id<<",\"trigger\":"<<json(std::to_string(region.trigger))
             <<",\"actor\":"<<json(std::to_string(region.actor))<<",\"kind\":"<<static_cast<std::uint32_t>(region.kind)
             <<",\"spawn\":"<<region.spawn<<'}';}
+    std::cout<<"],\"vitalityActors\":[";first=true;
+    for(const auto& actor:level.vitalityActors){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"actor\":"<<json(std::to_string(actor.actor))<<",\"counter\":"<<actor.counter
+            <<",\"maximumHP\":"<<json(std::to_string(actor.maximumHP))<<",\"initialHP\":"<<json(std::to_string(actor.initialHP))
+            <<",\"invulnerabilityTicks\":"<<actor.invulnerabilityTicks<<",\"restoredHP\":"<<json(std::to_string(actor.restoredHP))
+            <<",\"recoverManual\":"<<(actor.recoverManual?"true":"false")<<'}';}
+    std::cout<<"],\"vitalityPermissions\":[";first=true;
+    for(const auto& permission:level.vitalityPermissions){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"id\":"<<permission.id<<",\"actor\":"<<json(std::to_string(permission.actor))<<",\"kind\":"<<static_cast<std::uint32_t>(permission.kind)
+            <<",\"maxAmount\":"<<json(std::to_string(permission.maxAmount))<<'}';}
+    std::cout<<"],\"vitalityRegions\":[";first=true;
+    for(const auto& region:level.vitalityRegions){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"id\":"<<region.id<<",\"trigger\":"<<json(std::to_string(region.trigger))<<",\"actor\":"<<json(std::to_string(region.actor))
+            <<",\"kind\":"<<static_cast<std::uint32_t>(region.kind)<<",\"amount\":"<<json(std::to_string(region.amount))<<'}';}
     std::cout<<"]}\n";
 }
 int run(int argc,char** argv) {

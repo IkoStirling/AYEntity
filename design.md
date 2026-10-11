@@ -2471,3 +2471,29 @@ binding attempt/tick; Stay/Exit and unrelated namespaces do nothing. Actor copie
 remain defaults. No pose/mask/controller/lifecycle/respawn mutation occurs; HP0
 does not freeze movement. Local Release8tick/9CP actual restore/late rollback/drain/
 sealed replay/two seeks passed; only this necessary short gate, no broad matrix.
+
+
+## Stage48: explicit source and recovery closure
+
+Flow2 external authority is an actual producer permission, distinct from input
+source. Its41-field schema168 closes pending/count/stamps; pending clears at commit.
+Checkpoint selection completes for all actors before RegionDeath > ExternalDeath >
+Manual actor-ID arbitration. Normal request denials never create retry authority.
+False/default remains exact Flow1. Complete nested policy remains4096/five chunks.
+
+Vitality2 holds full Flow2 and per-actor source/restoration policy. Direct input4
+may create a typed lethal flag; only actual Vitality6 flushes before Flow7. Post62
+follows motion post and uses same-tick Queued+bottomAccepted stamp/spawn once per
+actor. Persistent HP0/stale or unrelated acceptance never qualifies. RestoredHP1..max
+uses exact Add/Subtract; equal HP consumes no numerical Progress sequence. Restores,
+revivals and writes are separate counts; initialHP0 is handled explicitly. Historical
+normal result.hpAfter, protection deadline and latest attempt remain separate from
+current post-restoration HP, with registered write/attempt/hurt provenance. Full owned
+Progress sequence/last-write plus HP cycle/stamps close pure restore. No pose writer.
+Primary84 and recovery122 maximum fields;8192-byte/nine-chunk policy; profile1 unchanged.
+
+Level5 adds explicit health/direct effect/real Enter tables, UInt64 quantities and
+manual opt-in. Dedicated HP Progress has no objectives/claims and may share zero-target
+Actions. Getters use actual facade factories; scratch assembly checks joint8KiB,
+64schema,64KiB text and actual seal budgets. Earlier1..4 bytes/hash retained.
+Necessary local short core and six actual128tick Host paths passed; native deferred.

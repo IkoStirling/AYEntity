@@ -27,6 +27,8 @@ struct DetCollectibleClaim2D {
  * All immutable configuration, including complete Actions policy, enters typed
  * defaults/global/actor copies, in at most10 policy schemas. Mutable authority is
  * global only; actor copies remain defaults. Session schema capacity still applies.
+ * Vitality2's explicitly owned HP-only adapter may restore its dedicated counter
+ * after the motion pipeline; ordinary application Progress calls remain pre-path.
  */
 struct DetProgress2DConfig {
     DetActions2DConfig actions;

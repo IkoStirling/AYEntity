@@ -1,4 +1,4 @@
-# Stage47 dedicated bounded HP, actual Enter effects and recoverable death.
+# Stage47/48 bounded HP, actual Enter/death routing and accepted recovery closure.
 if(NOT DEFINED _det_character_library)
     set(_det_character_library AYEntityDeterminism)
 endif()
@@ -11,4 +11,4 @@ endif()
 set(_vitality2d_artifacts "${CMAKE_CURRENT_BINARY_DIR}/vitality2d-artifacts")
 file(MAKE_DIRECTORY "${_vitality2d_artifacts}")
 add_test(NAME AYEntity_Vitality2DChecks COMMAND AYEntity_Vitality2DChecks --output "${_vitality2d_artifacts}")
-set_tests_properties(AYEntity_Vitality2DChecks PROPERTIES TIMEOUT 120 LABELS "ayentity;determinism;vitality;2d;replay")
+set_tests_properties(AYEntity_Vitality2DChecks PROPERTIES TIMEOUT 120 LABELS "ayentity;determinism;vitality;respawn;2d;replay")

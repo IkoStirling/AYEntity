@@ -10,6 +10,9 @@ namespace ayt::entity {
 namespace {
 constexpr std::size_t chunkBytes=1000;
 constexpr std::uint64_t logicHash=0x4452463244503031ULL;
+constexpr std::uint64_t externalLogicHash=0x4452463244503032ULL;
+std::uint32_t profile(const DetCharacterRespawnFlow2DConfig& c){return c.externalDeaths?2u:1u;}
+std::uint64_t fingerprint(const DetCharacterRespawnFlow2DConfig& c){return c.externalDeaths?externalLogicHash:logicHash;}
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic respawn flow 2D: invalid configuration, permission, event, state or order");}
 std::uint64_t add(std::uint64_t a,std::uint64_t b){if(a>UINT64_MAX-b)invalid();return a+b;}
 std::uint64_t stamp(std::uint64_t tick){return add(tick,1);}
@@ -25,6 +28,10 @@ const DetRespawnFlowRegion2D* region(const DetCharacterRespawnFlow2DConfig& c,st
 bool authority(const DetCharacterRespawnFlow2DConfig& c,SimEntityId actor,std::uint32_t spawn){
     const auto* row=detail::respawnSpawn(c.respawn,spawn);return row && row->actor==actor;
 }
+const DetRespawnFlowExternalDeathPermission2D* externalPermission(const DetCharacterRespawnFlow2DConfig& c,std::uint32_t id){
+    const auto it=std::lower_bound(c.externalDeathPermissions.begin(),c.externalDeathPermissions.end(),id,[](const auto& row,auto value){return row.id<value;});
+    return it!=c.externalDeathPermissions.end() && it->id==id?&*it:nullptr;
+}
 struct Writer {
     std::vector<std::uint8_t> bytes;
     void put(std::uint64_t value,unsigned count){if(bytes.size()>kDetCharacterRespawnFlow2DMaxPolicyBytes-count)invalid();
@@ -32,7 +39,7 @@ struct Writer {
     void u32(std::uint32_t v){put(v,4);}void u64(std::uint64_t v){put(v,8);}
     void lanes(std::span<const std::uint64_t> value){u32(static_cast<std::uint32_t>(value.size()));for(auto lane:value)u64(lane);}
 };
-struct Plan {std::vector<std::uint8_t> bytes;DetTypedStateSchema state;std::vector<DetTypedStateSchema> policies;};
+struct Plan {std::vector<std::uint8_t> bytes;DetTypedStateSchema state;std::optional<DetTypedStateSchema> external;std::vector<DetTypedStateSchema> policies;};
 Plan plan(const DetCharacterRespawnFlow2DConfig& c){
     if(!detail::validRespawnConfig(c.respawn) || c.stateSchema<2 || c.stateSchema==UINT32_MAX
         || c.policySchemaBase<2 || c.policySchemaBase==UINT32_MAX || !c.systemId || !c.validatorId || !c.logicProfileId
@@ -41,8 +48,12 @@ Plan plan(const DetCharacterRespawnFlow2DConfig& c){
     if(c.systemId>=k.preSystemId || c.systemId==k.postSystemId || c.systemId==p.systemId
         || c.validatorId==r.validatorId || c.validatorId==k.validatorId || c.validatorId==p.systemId
         || c.logicProfileId==r.logicProfileId || c.logicProfileId==k.logicProfileId)invalid();
-    Plan out;out.state={c.stateSchema,1,{{1,std::uint64_t{}}}};
-    Writer w;w.u32(1);w.u32(c.stateSchema);w.u32(c.policySchemaBase);w.u32(c.systemId);w.u32(c.validatorId);w.u32(c.logicProfileId);
+    if(!c.externalDeaths && (c.externalStateSchema!=168 || !c.externalDeathPermissions.empty()))invalid();
+    if(c.externalDeaths && (c.externalStateSchema<2 || c.externalStateSchema==UINT32_MAX
+        || c.externalDeathPermissions.size()>kDetCharacterRespawnFlow2DMaxExternalPermissions))invalid();
+    Plan out;out.state={c.stateSchema,profile(c),{{1,std::uint64_t{}}}};
+    if(c.externalDeaths)out.external=DetTypedStateSchema{c.externalStateSchema,2,{{1,std::uint64_t{}}}};
+    Writer w;w.u32(profile(c));w.u32(c.stateSchema);w.u32(c.policySchemaBase);w.u32(c.systemId);w.u32(c.validatorId);w.u32(c.logicProfileId);
     const auto nested=detail::respawnPolicySchema(r);w.u32(nested.id);w.u32(nested.version);w.u32(static_cast<std::uint32_t>(nested.fields.size()));
     // Literal typed fields retain all nested policy bits, not only a digest.
     for(const auto& f:nested.fields){w.u32(f.id);w.u32(static_cast<std::uint32_t>(detStateType(f.initial)));w.lanes(encodeDetStateValue(f.initial));}
@@ -54,6 +65,8 @@ Plan plan(const DetCharacterRespawnFlow2DConfig& c){
             {field(n,60),std::uint64_t{}},{field(n,70),std::uint32_t{}},{field(n,80),std::uint64_t{}},
             {field(n,90),std::uint64_t{}},{field(n,100),std::uint64_t{}},{field(n,110),std::uint32_t{}},
             {field(n,120),std::uint32_t{}},{field(n,130),std::uint32_t{}},{field(n,140),false},{field(n,150),std::uint64_t{}}});
+        if(out.external)out.external->fields.insert(out.external->fields.end(),{{field(n,10),false},{field(n,20),std::uint32_t{}},
+            {field(n,30),std::uint64_t{}},{field(n,40),std::uint64_t{}},{field(n,50),std::uint32_t{}}});
     }
     w.u32(static_cast<std::uint32_t>(c.regions.size()));std::uint32_t previousRegion=0;
     for(const auto& row:c.regions){const auto kind=static_cast<std::uint32_t>(row.kind);
@@ -61,17 +74,21 @@ Plan plan(const DetCharacterRespawnFlow2DConfig& c){
         (void)bindingIndex(c,row.actor);if((kind==0 && !authority(c,row.actor,row.spawn)) || (kind==1 && row.spawn))invalid();
         previousRegion=row.id;w.u32(row.id);w.u64(row.trigger);w.u64(row.actor);w.u32(kind);w.u32(row.spawn);
     }
+    if(c.externalDeaths){w.u32(c.externalStateSchema);w.u32(static_cast<std::uint32_t>(c.externalDeathPermissions.size()));std::uint32_t previous=0;
+        for(const auto& row:c.externalDeathPermissions){if(!row.id || row.id<=previous || !row.producerSystem || row.producerSystem>=c.systemId)invalid();
+            (void)bindingIndex(c,row.actor);previous=row.id;w.u32(row.id);w.u64(row.actor);w.u32(row.producerSystem);}}
     out.bytes=std::move(w.bytes);const auto chunks=(out.bytes.size()+chunkBytes-1)/chunkBytes;
     if(!chunks || chunks>5 || c.policySchemaBase>UINT32_MAX-chunks)invalid();
     std::set<std::uint32_t> schemas;for(auto id:{p.bodySchema,p.historySchema,k.stateSchema,k.policySchema,r.stateSchema,r.policySchema,c.stateSchema})
         if(!schemas.insert(id).second)invalid();
+    if(out.external && !schemas.insert(out.external->id).second)invalid();
     for(std::size_t n=0;n<chunks;++n){const auto id=c.policySchemaBase+static_cast<std::uint32_t>(n);if(!schemas.insert(id).second)invalid();
-        DetTypedStateSchema s{id,1,{{1,static_cast<std::uint32_t>(n)},{2,static_cast<std::uint32_t>(chunks)},{3,static_cast<std::uint32_t>(out.bytes.size())}}};
+        DetTypedStateSchema s{id,profile(c),{{1,static_cast<std::uint32_t>(n)},{2,static_cast<std::uint32_t>(chunks)},{3,static_cast<std::uint32_t>(out.bytes.size())}}};
         const auto begin=n*chunkBytes,end=std::min(begin+chunkBytes,out.bytes.size());
         for(std::size_t offset=begin;offset<end;offset+=8){std::uint64_t word=0;for(std::size_t b=0;b<8 && offset+b<end;++b)word|=std::uint64_t{out.bytes[offset+b]}<<(8*b);
             s.fields.push_back({static_cast<std::uint32_t>(4+(offset-begin)/8),word});}out.policies.push_back(std::move(s));
     }
-    (void)detStateDefaults(out.state);return out;
+    (void)detStateDefaults(out.state);if(out.external)(void)detStateDefaults(*out.external);return out;
 }
 void policiesMatch(DetTickContext& ctx,const DetCharacterRespawnFlow2DConfig& c,const Plan& p){
     detail::respawnPolicyMatches(ctx,c.respawn);for(const auto& s:p.policies)for(const auto& f:s.fields)std::visit([&]<class T>(const T& value){
@@ -82,7 +99,8 @@ void descriptor(const detwire::ManifestLayout& m,const DetTypedStateSchema& s){
     if(actual.size()!=s.fields.size())invalid();for(std::size_t n=0;n<actual.size();++n)if(actual[n].id!=s.fields[n].id
         || actual[n].type!=detStateType(s.fields[n].initial) || actual[n].width!=encodeDetStateValue(s.fields[n].initial).size())invalid();
 }
-struct Record {DetCharacterRespawnFlowState2D state;std::uint64_t checkpointStamp=0,deathStamp=0,requestStamp=0,processed=0;bool manual=false;};
+struct Record {DetCharacterRespawnFlowState2D state;std::uint64_t checkpointStamp=0,deathStamp=0,requestStamp=0,processed=0,externalStamp=0;
+    bool manual=false,externalRequested=false;std::uint32_t pendingPermission=0;};
 template<class Getter>Record read(Getter&& get){Record r;auto& s=r.state;
     s.activeSpawn=get.template operator()<std::uint32_t>(10);s.checkpointCount=get.template operator()<std::uint64_t>(20);
     r.checkpointStamp=get.template operator()<std::uint64_t>(30);s.lastCheckpointRegion=get.template operator()<std::uint32_t>(40);
@@ -93,25 +111,41 @@ template<class Getter>Record read(Getter&& get){Record r;auto& s=r.state;
     r.manual=get.template operator()<bool>(140);r.processed=get.template operator()<std::uint64_t>(150);
     s.lastCheckpointTick=r.checkpointStamp?r.checkpointStamp-1:0;s.lastDeathTick=r.deathStamp?r.deathStamp-1:0;s.lastRequestTick=r.requestStamp?r.requestStamp-1:0;return r;
 }
-Record read(DetTickContext& ctx,const DetCharacterRespawnFlow2DConfig& c,std::size_t n){return read([&]<class T>(std::uint32_t f){return ctx.readGlobal<T>(c.stateSchema,field(n,f));});}
-Record read(const DetSessionCheckpoint& cp,const Plan& p,std::size_t n){const DetStateLayout l(p.state);return read([&]<class T>(std::uint32_t f){return std::get<T>(l.read(cp.globals.at(p.state.id),field(n,f)));});}
+template<class Getter>void readExternal(Record& r,Getter&& get){r.externalRequested=get.template operator()<bool>(10);r.pendingPermission=get.template operator()<std::uint32_t>(20);
+    r.state.externalDeathCount=get.template operator()<std::uint64_t>(30);r.externalStamp=get.template operator()<std::uint64_t>(40);
+    r.state.lastExternalDeathPermission=get.template operator()<std::uint32_t>(50);r.state.lastExternalDeathTick=r.externalStamp?r.externalStamp-1:0;}
+Record read(DetTickContext& ctx,const DetCharacterRespawnFlow2DConfig& c,std::size_t n){auto r=read([&]<class T>(std::uint32_t f){return ctx.readGlobal<T>(c.stateSchema,field(n,f));});
+    if(c.externalDeaths)readExternal(r,[&]<class T>(std::uint32_t f){return ctx.readGlobal<T>(c.externalStateSchema,field(n,f));});return r;}
+Record read(const DetSessionCheckpoint& cp,const Plan& p,std::size_t n){const DetStateLayout l(p.state);auto r=read([&]<class T>(std::uint32_t f){return std::get<T>(l.read(cp.globals.at(p.state.id),field(n,f)));});
+    if(p.external){const DetStateLayout e(*p.external);readExternal(r,[&]<class T>(std::uint32_t f){return std::get<T>(e.read(cp.globals.at(p.external->id),field(n,f)));});}return r;}
 void valid(const Record& r,const DetCharacterRespawnFlow2DConfig& c,std::size_t n,std::uint64_t maximum,std::uint64_t processed,bool committed){
     const auto& s=r.state;const auto actor=c.bindings[n].actor;
     if(!authority(c,actor,s.activeSpawn) || r.processed!=processed || (committed && r.manual)
         || s.checkpointCount>maximum || s.deathCount>maximum || s.manualCount>maximum || s.requestCount>maximum
         || add(s.deathCount,s.manualCount)!=s.requestCount)invalid();
+    if(c.externalDeaths){
+        if(r.externalRequested!=bool(r.pendingPermission) || (committed && (r.externalRequested || r.pendingPermission))
+            || s.externalDeathCount>s.deathCount || s.externalDeathCount>maximum)invalid();
+        if(r.pendingPermission){const auto* row=externalPermission(c,r.pendingPermission);if(!row || row->actor!=actor)invalid();}
+        if(!s.externalDeathCount){if(r.externalStamp || s.lastExternalDeathPermission)invalid();}
+        else {const auto* row=externalPermission(c,s.lastExternalDeathPermission);if(!row || row->actor!=actor || !r.externalStamp
+            || r.externalStamp>maximum || s.externalDeathCount>r.externalStamp || r.externalStamp>r.deathStamp)invalid();}
+    }
     if(!s.checkpointCount){if(r.checkpointStamp || s.lastCheckpointRegion || s.activeSpawn!=c.bindings[n].spawn)invalid();}
     else {const auto* row=region(c,s.lastCheckpointRegion);if(!r.checkpointStamp || r.checkpointStamp>maximum || s.checkpointCount>r.checkpointStamp || !row
         || row->kind!=DetRespawnFlowRegionKind2D::Checkpoint || row->actor!=actor || row->spawn!=s.activeSpawn)invalid();}
     if(!s.deathCount){if(r.deathStamp || s.lastDeathRegion)invalid();}
-    else {const auto* row=region(c,s.lastDeathRegion);if(!r.deathStamp || r.deathStamp>maximum || s.deathCount>r.deathStamp || !row
-        || row->kind!=DetRespawnFlowRegionKind2D::Death || row->actor!=actor)invalid();}
+    else {if(!r.deathStamp || r.deathStamp>maximum || s.deathCount>r.deathStamp)invalid();
+        if(c.externalDeaths && !s.lastDeathRegion){if(!s.externalDeathCount || r.externalStamp!=r.deathStamp)invalid();}
+        else {const auto* row=region(c,s.lastDeathRegion);if(!row || row->kind!=DetRespawnFlowRegionKind2D::Death || row->actor!=actor
+            || (s.externalDeathCount && (r.externalStamp>=r.deathStamp || s.externalDeathCount>=s.deathCount)))invalid();}}
     const auto code=static_cast<std::uint32_t>(s.lastRequestCode),kind=static_cast<std::uint32_t>(s.lastRequestKind);
     if(!s.requestCount){if(r.requestStamp || code || kind || s.lastRequestSpawn)invalid();}
-    else if(!r.requestStamp || r.requestStamp>maximum || s.requestCount>r.requestStamp || code>3 || code==2 || kind<1 || kind>2
+    else if(!r.requestStamp || r.requestStamp>maximum || s.requestCount>r.requestStamp || code>3 || code==2 || kind<1 || kind>(c.externalDeaths?3u:2u)
         || !authority(c,actor,s.lastRequestSpawn) || r.deathStamp>r.requestStamp
-        || (kind==1 && (!s.deathCount || r.requestStamp!=r.deathStamp))
+        || (kind==1 && (!s.deathCount || r.requestStamp!=r.deathStamp || (c.externalDeaths && !s.lastDeathRegion)))
         || (kind==2 && (!s.manualCount || (s.deathCount && r.deathStamp>=r.requestStamp)))
+        || (kind==3 && (!s.externalDeathCount || s.lastDeathRegion || r.requestStamp!=r.deathStamp || r.requestStamp!=r.externalStamp))
         || (r.requestStamp>=r.checkpointStamp && s.lastRequestSpawn!=s.activeSpawn))invalid();
 }
 void write(DetTickContext& ctx,const DetCharacterRespawnFlow2DConfig& c,std::size_t n,const Record& r){const auto id=c.stateSchema;const auto& s=r.state;
@@ -121,6 +155,9 @@ void write(DetTickContext& ctx,const DetCharacterRespawnFlow2DConfig& c,std::siz
     ctx.writeGlobal(id,field(n,100),r.requestStamp);ctx.writeGlobal(id,field(n,110),static_cast<std::uint32_t>(s.lastRequestCode));
     ctx.writeGlobal(id,field(n,120),static_cast<std::uint32_t>(s.lastRequestKind));ctx.writeGlobal(id,field(n,130),s.lastRequestSpawn);
     ctx.writeGlobal(id,field(n,140),r.manual);ctx.writeGlobal(id,field(n,150),r.processed);
+    if(c.externalDeaths){const auto external=c.externalStateSchema;ctx.writeGlobal(external,field(n,10),r.externalRequested);
+        ctx.writeGlobal(external,field(n,20),r.pendingPermission);ctx.writeGlobal(external,field(n,30),s.externalDeathCount);
+        ctx.writeGlobal(external,field(n,40),r.externalStamp);ctx.writeGlobal(external,field(n,50),s.lastExternalDeathPermission);}
 }
 void reference(const DetSessionCheckpoint& cp,const DetCharacterRespawnFlow2DConfig& c,SimEntityId id,bool trigger){
     const auto found=cp.actors.find(id);if(found==cp.actors.end()){
@@ -131,12 +168,16 @@ void reference(const DetSessionCheckpoint& cp,const DetCharacterRespawnFlow2DCon
 }
 void validateCheckpoint(const DetSessionCheckpoint& cp,const DetCharacterRespawnFlow2DConfig& c,const Plan& p){
     detail::validateRespawnCheckpoint(cp,c.respawn);const auto m=detwire::manifestLayout(cp.manifest);
-    if(m.systems.at(c.systemId)!=c.respawn.character.collision.priority || m.validatorVersions.at(c.validatorId)!=1
-        || m.logicProfiles.at(c.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{1,logicHash})invalid();descriptor(m,p.state);
+    if(m.systems.at(c.systemId)!=c.respawn.character.collision.priority || m.validatorVersions.at(c.validatorId)!=profile(c)
+        || m.logicProfiles.at(c.logicProfileId)!=std::pair<std::uint32_t,std::uint64_t>{profile(c),fingerprint(c)})invalid();descriptor(m,p.state);
     const DetStateLayout state(p.state);if(!state.valid(cp.globals.at(p.state.id)) || std::get<std::uint64_t>(state.read(cp.globals.at(p.state.id),1)))invalid();
     for(const auto& s:p.policies){descriptor(m,s);const auto expected=detStateDefaults(s);if(cp.globals.at(s.id)!=expected)invalid();
         for(const auto& [id,a]:cp.actors){(void)id;if(a.blocks.at(s.id)!=expected)invalid();}}
     for(const auto& [id,a]:cp.actors){(void)id;if(a.blocks.at(p.state.id)!=state.defaults())invalid();}
+    if(p.external){descriptor(m,*p.external);const DetStateLayout e(*p.external);const auto& words=cp.globals.at(p.external->id);
+        if(!e.valid(words) || std::get<std::uint64_t>(e.read(words,1)))invalid();
+        for(const auto& [id,a]:cp.actors){(void)id;if(a.blocks.at(p.external->id)!=e.defaults())invalid();}
+        for(const auto& row:c.externalDeathPermissions)if(m.systems.at(row.producerSystem)!=c.respawn.character.collision.priority)invalid();}
     for(std::size_t n=0;n<c.bindings.size();++n){reference(cp,c,c.bindings[n].actor,false);const auto r=read(cp,p,n);valid(r,c,n,cp.nextTick,cp.nextTick,true);
         if(r.state.requestCount && r.requestStamp==cp.nextTick && r.state.lastRequestCode==DetRespawnRequestCode2D::Queued
             && cp.actors.contains(c.bindings[n].actor)){
@@ -147,7 +188,8 @@ void validateCheckpoint(const DetSessionCheckpoint& cp,const DetCharacterRespawn
         DetTriggerEvent2D decoded;if(!decodeDetTriggerEvent2D(event.payload,decoded))invalid();}
 }
 bool run(DetTickContext& ctx,const DetCharacterRespawnFlow2DConfig& c,const Plan& p){
-    policiesMatch(ctx,c,p);if(ctx.readGlobal<std::uint64_t>(c.stateSchema,1))invalid();const auto next=stamp(ctx.tick());
+    policiesMatch(ctx,c,p);if(ctx.readGlobal<std::uint64_t>(c.stateSchema,1)
+        || (c.externalDeaths && ctx.readGlobal<std::uint64_t>(c.externalStateSchema,1)))invalid();const auto next=stamp(ctx.tick());
     std::vector<Record> records;for(std::size_t n=0;n<c.bindings.size();++n){auto r=read(ctx,c,n);valid(r,c,n,ctx.tick(),ctx.tick(),false);records.push_back(r);}
     std::vector<const DetTickCommand*> events;for(const auto& event:ctx.events())if(event.source==c.respawn.character.collision.systemId && event.type==c.respawn.character.collision.eventType)events.push_back(&event);
     std::sort(events.begin(),events.end(),[](const auto* a,const auto* b){return detwire::commandKey(*a)<detwire::commandKey(*b);});
@@ -159,25 +201,35 @@ bool run(DetTickContext& ctx,const DetCharacterRespawnFlow2DConfig& c,const Plan
     for(std::size_t n=0;n<records.size();++n)if(checkpoints[n]){auto& r=records[n];r.state.activeSpawn=checkpoints[n]->spawn;
         r.state.checkpointCount=add(r.state.checkpointCount,1);r.checkpointStamp=next;r.state.lastCheckpointRegion=checkpoints[n]->id;}
     for(std::size_t n=0;n<records.size();++n){auto& r=records[n];auto& s=r.state;
-        if(deaths[n] || r.manual){s.lastRequestKind=deaths[n]?DetRespawnFlowRequestKind2D::Death:DetRespawnFlowRequestKind2D::Manual;
-            if(deaths[n]){s.deathCount=add(s.deathCount,1);r.deathStamp=next;s.lastDeathRegion=deaths[n]->id;}else s.manualCount=add(s.manualCount,1);
+        if(deaths[n] || r.externalRequested || r.manual){s.lastRequestKind=deaths[n]?DetRespawnFlowRequestKind2D::Death:
+                r.externalRequested?DetRespawnFlowRequestKind2D::ExternalDeath:DetRespawnFlowRequestKind2D::Manual;
+            if(deaths[n] || r.externalRequested){s.deathCount=add(s.deathCount,1);r.deathStamp=next;s.lastDeathRegion=deaths[n]?deaths[n]->id:0;
+                if(!deaths[n]){s.externalDeathCount=add(s.externalDeathCount,1);r.externalStamp=next;s.lastExternalDeathPermission=r.pendingPermission;}}
+            else s.manualCount=add(s.manualCount,1);
             s.requestCount=add(s.requestCount,1);r.requestStamp=next;s.lastRequestSpawn=s.activeSpawn;
             s.lastRequestCode=detCharacterRespawnRequest2D(ctx,c.bindings[n].actor,c.respawn,s.activeSpawn);}
-        r.manual=false;r.processed=next;write(ctx,c,n,r);
+        r.manual=false;r.externalRequested=false;r.pendingPermission=0;r.processed=next;write(ctx,c,n,r);
     }return true;
 }
 } // namespace
 bool installDetCharacterRespawnFlow2D(DeterministicSession& session,DetCharacterRespawnFlow2DConfig c){Plan p;
     try{p=plan(c);if(session.sealed() || session.faulted() || session.nextTick())return false;}catch(const std::invalid_argument&){return false;}
     if(!(session.registerTypedSchema(p.state) && session.registerGlobalState(p.state.id)))return false;
+    if(p.external && !(session.registerTypedSchema(*p.external) && session.registerGlobalState(p.external->id)))return false;
     for(const auto& s:p.policies)if(!(session.registerTypedSchema(s) && session.registerGlobalState(s.id)))return false;
-    return session.registerLogicProfile(c.logicProfileId,1,logicHash) && session.registerValidator(c.validatorId,1,[c,p](const auto& cp,std::string& error){
+    return session.registerLogicProfile(c.logicProfileId,profile(c),fingerprint(c)) && session.registerValidator(c.validatorId,profile(c),[c,p](const auto& cp,std::string& error){
         try{validateCheckpoint(cp,c,p);return true;}catch(const std::exception& e){error=e.what();return false;}})
         && session.registerSystem(c.systemId,c.respawn.character.collision.priority,[c,p](DetTickContext& ctx){return run(ctx,c,p);});
 }
 void detCharacterRespawnFlowInput2D(DetTickContext& ctx,SimEntityId actor,const DetCharacterRespawnFlow2DConfig& c,bool manual){
     const auto p=plan(c);policiesMatch(ctx,c,p);const auto n=bindingIndex(c,actor);const auto r=read(ctx,c,n);valid(r,c,n,ctx.tick(),ctx.tick(),false);
     if(manual)ctx.writeGlobal(c.stateSchema,field(n,140),true);
+}
+void detCharacterRespawnFlowDeath2D(DetTickContext& ctx,const DetCharacterRespawnFlow2DConfig& c,std::uint32_t permissionId){
+    const auto p=plan(c);if(!c.externalDeaths)invalid();policiesMatch(ctx,c,p);const auto* permission=externalPermission(c,permissionId);
+    if(!permission || permission->producerSystem!=ctx.systemId())invalid();const auto n=bindingIndex(c,permission->actor);
+    const auto r=read(ctx,c,n);valid(r,c,n,ctx.tick(),ctx.tick(),false);
+    if(!r.externalRequested){ctx.writeGlobal(c.externalStateSchema,field(n,10),true);ctx.writeGlobal(c.externalStateSchema,field(n,20),permissionId);}
 }
 DetCharacterRespawnFlowState2D detCharacterRespawnFlowState2D(DetTickContext& ctx,SimEntityId actor,const DetCharacterRespawnFlow2DConfig& c){
     const auto p=plan(c);policiesMatch(ctx,c,p);const auto n=bindingIndex(c,actor);const auto r=read(ctx,c,n);
@@ -187,9 +239,15 @@ DetCharacterRespawnFlowState2D detCharacterRespawnFlowState2D(const DetSessionCh
     const auto p=plan(c);validateCheckpoint(cp,c,p);return read(cp,p,bindingIndex(c,actor)).state;
 }
 DetTypedStateSchema detCharacterRespawnFlowStateSchema2D(const DetCharacterRespawnFlow2DConfig& c){return plan(c).state;}
+std::vector<DetTypedStateSchema> detCharacterRespawnFlowStateSchemas2D(const DetCharacterRespawnFlow2DConfig& c){const auto p=plan(c);
+    std::vector<DetTypedStateSchema> schemas{p.state};if(p.external)schemas.push_back(*p.external);return schemas;}
 std::vector<DetTypedStateSchema> detCharacterRespawnFlowPolicySchemas2D(const DetCharacterRespawnFlow2DConfig& c){return plan(c).policies;}
 std::uint32_t detCharacterRespawnFlowField2D(const DetCharacterRespawnFlow2DConfig& c,SimEntityId actor,DetRespawnFlowField2D member){
     (void)plan(c);const auto value=static_cast<std::uint32_t>(member);if(value<10 || value>150 || value%10)invalid();return field(bindingIndex(c,actor),value);
+}
+std::uint32_t detCharacterRespawnFlowExternalField2D(const DetCharacterRespawnFlow2DConfig& c,SimEntityId actor,DetRespawnFlowExternalField2D member){
+    (void)plan(c);const auto value=static_cast<std::uint32_t>(member);if(!c.externalDeaths || value<10 || value>50 || value%10)invalid();
+    return field(bindingIndex(c,actor),value);
 }
 std::vector<std::uint8_t> encodeDetCharacterRespawnFlowConfig2D(const DetCharacterRespawnFlow2DConfig& c){return plan(c).bytes;}
 } // namespace ayt::entity

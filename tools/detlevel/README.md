@@ -101,6 +101,34 @@ and keep original canonical bytes/hash. Validate tests the actual combined Sessi
 budget. Start from [the checkpoint example](../../examples/detcheckpoint/content.dlt).
 `inspect` returns complete spawn/default/region tables plus their counts and opt-in.
 
+Format5 retains the format4 grammar and adds the following before `end`:
+
+```text
+vitality <max-operations> <respawn-recovery> <health-count> <permission-count> <region-count>
+health <actor> <counter> <maximum-hp> <initial-hp> <invulnerability-ticks> <restored-hp> <recover-manual>
+vitalitypermission <id> <actor> <kind> <max-amount>
+vitalityregion <id> <trigger> <actor> <kind> <amount>
+```
+
+Limits are8 health actors/16 direct permissions/16 region bindings, with sorted
+nonzero IDs, dedicated min0/max>0 HP counters and positive amounts. Kind1 is Hurt,
+kind2 Heal. Nonlethal Hurt protects[t,t+N); Heal does not revive dead HP. Recovery
+off requires restoredHP0 and recoverManualfalse. Recovery on requires an actor's
+authored Respawn binding and restoredHP in[1,max]; manual restoration is an explicit
+per-actor boolean. HP-only content can use the existing zero-target Actions policy.
+HP counters are a separate namespace from gameplay counters/objectives/claims.
+
+Recovery derives an actual Vitality-system external-death permission. A lethal
+transition is flushed once before RespawnFlow. Only a current selected queued
+route and matching actual Accepted tick/spawn can restore HP after motion; normal
+denial leaves HP0 and never retries automatically. Equal-HP recovery counts as a
+restoration without a numerical write. `inspect` returns all health/permission/
+region tables and policy flags, preserving full UInt64 values as JSON strings.
+Authoring validates the actual combined policy/schema budgets; table maxima do
+not guarantee that all features fit together. Formats1..4 keep their original
+canonical bytes/hash and reject nondefault health content. Start with the
+[vitality content](../../examples/detvitality/content.dlt); local Level5 CLI acceptance passed0.735695s; native final VM remains deferred.
+
 This tool does not import a Scene/Tilemap, use native float parsing, hot reload
 a running Session, migrate a save or cook/package an asset. Resource loading and
 authoring stay outside simulation ticks. See

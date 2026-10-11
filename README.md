@@ -1009,3 +1009,18 @@ outside Vitality. Normal denials preserve HP; pure checkpoint closure binds exac
 owned writes, mirrors, deadlines, counts and permissions. No body/respawn writer is
 added. The necessary Release core gate passed0.344201s with8ticks and actual short
 restore/rollback/replay/seek. See `DeterministicVitality2D.h`; native VM is deferred.
+
+
+## Stage48: explicit source, accepted HP recovery and authored life
+
+Prefer Level5 `configureDetLevel2D` and the matching vitality getters. It installs
+shared Actions, HP-only Progress/Vitality1 or explicit Vitality2 with full Flow2.
+Manual recovery is separately authored; canonical input4 precedes Vitality6/Flow7,
+then motion, recovery post62. External death authority checks actual callback ID,
+not command.source. Only fresh matching Queued+Accepted restores fixed HP; occupied,
+stale/manualfalse/persistent HP0 cannot restore/retry. Equal HP creates no Progress
+write. Read copied HP/normal-result/recovery facts. Collision remains sole pose owner.
+Old profiles1 and Level1..4 retain literal identity. Joint schema/policy budgets apply.
+See `examples/detvitality`: actual Hurt/Heal, checkpoint, lethal floor, manual recovery,
+collection, door and carrying platform. Short core/Level/tool and six real Host
+process paths passed; only necessary local gates, native VM deferred.

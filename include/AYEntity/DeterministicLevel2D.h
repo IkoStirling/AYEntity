@@ -4,6 +4,7 @@
 #include <AYEntity/DeterministicInteraction2D.h>
 #include <AYEntity/DeterministicProgressFlow2D.h>
 #include <AYEntity/DeterministicCharacterRespawnFlow2D.h>
+#include <AYEntity/DeterministicVitality2D.h>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -20,6 +21,8 @@ inline constexpr std::uint32_t kDetLevel2DInteractionProfileVersion=2;
 inline constexpr std::uint32_t kDetLevel2DProgressProfileVersion=3;
 /// @brief Checkpoint/death/manual respawn authoring; earlier semantic bytes are unchanged.
 inline constexpr std::uint32_t kDetLevel2DRespawnProfileVersion=4;
+/// @brief Bounded life/damage/accepted-respawn authoring; formats1..4 keep their bytes.
+inline constexpr std::uint32_t kDetLevel2DVitalityProfileVersion=5;
 /// @brief Bound on original ASCII source bytes, before decoding.
 inline constexpr std::size_t kDetLevel2DMaxTextBytes=65536;
 /// @brief Bound on complete field-wise semantic bytes entering the manifest.
@@ -46,6 +49,17 @@ struct DetLevelActionTarget2D {
     std::uint32_t collisionMask=UINT32_MAX;
     bool collisionControl=true;
     std::uint32_t path=0;
+};
+/// @brief One actor's dedicated UInt64 HP counter and explicit restoration policy.
+/// @note minimum is0; maximumHP>0 and initialHP<=maximumHP. Recovery off requires
+/// restoredHP0/recoverManualfalse; recovery on requires restoredHP in[1,maximumHP].
+struct DetLevelVitalityActor2D {
+    SimEntityId actor=0;
+    std::uint32_t counter=0;
+    std::uint64_t maximumHP=1,initialHP=1;
+    std::uint32_t invulnerabilityTicks=0;
+    std::uint64_t restoredHP=0;
+    bool recoverManual=false;
 };
 /// @brief Bounded initial level description; every authoritative float is a software binary32 value.
 /// @note At most 64 active bodies and 8 named paths. Character policy includes the sole collision owner.
@@ -74,6 +88,14 @@ struct DetLevel2D {
     std::vector<DetRespawnFlowBinding2D> respawnBindings;
     /// Format4:0..16 exact Enter permissions; empty allows manual-only routing.
     std::vector<DetRespawnFlowRegion2D> respawnRegions;
+    /// Format5:0..8 sorted solid Kinematic actors, each with one distinct HP counter.
+    std::vector<DetLevelVitalityActor2D> vitalityActors;
+    /// Format5: exact direct Hurt/Heal permissions and real Enter bindings, at most16 each.
+    std::vector<DetVitalityPermission2D> vitalityPermissions;
+    std::vector<DetVitalityRegion2D> vitalityRegions;
+    std::uint32_t maxVitalityOperationsPerTick=32;
+    /// Explicit Vitality2/RespawnFlow2 acquisition; no implicit Manual restoration.
+    bool vitalityRespawnRecovery=false;
 };
 /// @brief Application-owned registration ranges; adjust these before combining other schemas/systems.
 /// @note Defaults reserve schemas 8..23 for paths,32..47 for content; path pre 11..18/post 41..48.
@@ -93,8 +115,14 @@ struct DetLevel2DOptions {
         respawnValidatorId=72,respawnLogicProfileId=72;
     std::uint32_t respawnFlowStateSchema=144,respawnFlowPolicySchemaBase=145,
         respawnFlowSystemId=7,respawnFlowValidatorId=73,respawnFlowLogicProfileId=73;
+    std::uint32_t respawnFlowExternalStateSchema=168;
+    std::uint32_t vitalityProgressStateSchema=176,vitalityProgressPolicySchemaBase=177,
+        vitalityProgressValidatorId=76,vitalityProgressLogicProfileId=76;
+    std::uint32_t vitalityStateSchema=192,vitalityPolicySchemaBase=193,
+        vitalitySystemId=6,vitalityPostSystemId=62,vitalityValidatorId=75,vitalityLogicProfileId=75,
+        vitalityRecoveryStateSchema=208;
 };
-/// @brief Strict ASCII AYDLEVEL1/2/3/4 decode with 8-hex-digit Float32 bits; failure leaves output unchanged.
+/// @brief Strict ASCII AYDLEVEL1..5 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
 /// @note Rejects unknown/trailing tokens, nonfinite values, invalid roles/policies and initial geometry.
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,
     const DetLevel2DOptions& options={});
@@ -111,8 +139,8 @@ DetSessionConfig detLevelSessionConfig(const DetLevel2D& level);
 /// @brief Resolve the registered path binding used by configure; unknown IDs/options throw.
 DetPathMotion2DConfig detLevelPathConfig2D(const DetLevel2D& level,std::uint32_t path,
     const DetLevel2DOptions& options={});
-/// @brief Resolve complete registered Actions authority from format2/3/4 content.
-/// @note Format3 pure counters may resolve a zero-target authority. Otherwise empty
+/// @brief Resolve complete registered Actions authority from format2..5 content.
+/// @note Pure gameplay or HP counters may resolve a zero-target authority. Otherwise empty
 /// action content, invalid references/options or unsupported controls throw.
 DetActions2DConfig detLevelActionsConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
 /// @brief Resolve complete registered Interaction policy from format2 rules.
@@ -130,6 +158,14 @@ DetCharacterRespawn2DConfig detLevelRespawnConfig2D(const DetLevel2D& level,cons
 /// @brief Resolve full format4 checkpoint/death/manual routing, never a hidden retry queue.
 /// @note Regions may be empty for manual-only permissions; matching Respawn is installed by configure.
 DetCharacterRespawnFlow2DConfig detLevelRespawnFlowConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
+/// @brief Resolve dedicated profile1 HP Progress sharing the complete Level Actions authority.
+/// @note HP counters have no claims/objectives and are writable only through Vitality.
+/// Empty vitality or invalid references/options throw; this does not install systems.
+DetProgress2DConfig detLevelVitalityProgressConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
+/// @brief Resolve complete Vitality1/2 policy, including selected Flow2 recovery authority.
+/// @note Empty vitality or invalid tables/options throw. Recovery adds no pose writer
+/// and only current matching Queued+Accepted restores; Manual requires its actor opt-in.
+DetVitality2DConfig detLevelVitalityConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
 /** @details Configure initial level authority in a fresh Session; does not seal or own the tick loop.
  * @note Set Host recipe.config=detLevelSessionConfig(level), then call this from recipe.configure.
  * Install an earlier canonical input system separately. Collision remains the sole XY pose writer.
@@ -152,6 +188,18 @@ DetCharacterRespawnFlow2DConfig detLevelRespawnFlowConfig2D(const DetLevel2D& le
  * Put manual input before RespawnFlow, which precedes ProgressFlow/Interaction
  * and every path/character pre. Occupied/Unavailable/capacity denial has no hidden
  * retry; Stay never retries. The destination-only hook remains after all facades.
+ * Format5 retains all earlier content and installs dedicated HP Progress1 plus
+ * Vitality1, or explicit Vitality2/RespawnFlow2 recovery. One actual Vitality source
+ * permission per sorted HP actor is derived into the full Flow2 policy. Canonical
+ * input precedes Vitality, then RespawnFlow, then gameplay Flow/Interaction and pre.
+ * Lethal HP is external Death, never Manual. Accepted restoration runs after all
+ * character/path post systems, once per actor/tick; occupied/capacity denial keeps
+ * HP unchanged and has no retry. Manual restoration requires recoverManual=true.
+ * HP uses a separate Progress namespace, sharing Actions but no claims/objectives;
+ * external writes into dedicated HP Progress invalidate Vitality closure. Public
+ * Hurt/Heal budget and registered restoration counts remain distinct. Progress1
+ * has no per-tick operation budget. Runtime factories and scratch seal bound all
+ * optional schemas and nested complete policies; no simultaneous-maxima promise.
  * Entire tables and nested policies enter identity, not only a content hash.
  * Flow precedes Interaction and every path/character pre at collision.priority;
  * application Progress writes must precede Flow. Empty counters forbids objective,

@@ -152,11 +152,129 @@ void limits(){auto c=policy();for(unsigned n=0;n<11;++n){auto bad=c;switch(n){ca
     require(detVitalityStateSchema2D(c).fields.size()==84 && encodeDetVitalityConfig2D(c).size()<=4096,"8actor/16permission/16region state84 within128, full policy bounded");
     c.actors.push_back({9,9,0});c.progress.counters.push_back({9,0,1,1});DeterministicSession extra({47,1,1,1,47});require(!installDetVitality2D(extra,c),"9th actor bounded rejection");
     std::cout<<"PASS bounded descriptors, references and immutable namespace/authority policy\n";}
+DetVitality2DConfig recoveryPolicy(std::uint64_t initial=5,bool manual=true){auto c=policy();c.actors={{10,1,2}};c.permissions.resize(2);c.regions.clear();
+    c.progress.counters={{1,0,5,initial}};c.progress.actions.targets.clear();auto& collision=c.progress.actions.collision;
+    collision.oneWayPlatforms=true;collision.characterRespawn=true;
+    c.respawnRecovery=true;DetCharacterRespawnFlow2DConfig flow;flow.respawn=respawnPolicy(c);flow.respawn.spawns={{1,10,{D::fromInt(-2),D{}}},{2,10,{D::fromInt(-3),D{}}}};
+    flow.externalDeaths=true;flow.externalDeathPermissions={{1,10,c.systemId}};flow.bindings={{10,1}};c.respawnFlow=flow;c.recoveries={{10,1,5,manual}};return c;}
+enum class RecoveryMode {Normal,Occupied,Disabled,LateProgress};
+bool configureRecovery(DeterministicSession& s,const DetVitality2DConfig& c,RecoveryMode mode=RecoveryMode::Normal,bool reverse=false){
+    if(!installDetActions2D(s,c.progress.actions) || !installDetProgress2D(s,c.progress)
+        || !installDetCharacterRespawn2D(s,c.respawnFlow->respawn) || !installDetCharacterRespawnFlow2D(s,*c.respawnFlow)
+        || !installDetVitality2D(s,c))return false;
+    if(!s.registerSystem(4,0,[c](DetTickContext& ctx){for(const auto& cmd:ctx.input().commands){if(cmd.source!=1)return false;
+        if(cmd.type==1 && cmd.payload==Bytes{1})continue; // no movement input in the hand HP fixture
+        if(cmd.type==2 && cmd.payload.size()==9){std::uint64_t amount=0;for(unsigned n=0;n<8;++n)amount|=std::uint64_t{cmd.payload[n+1]}<<(8*n);
+            (void)executeDetVitality2D(ctx,c,cmd.payload[0],amount);}
+        else if(cmd.type==3 && cmd.payload.empty())detCharacterRespawnFlowInput2D(ctx,10,*c.respawnFlow,true);
+        else if(cmd.type==4 && cmd.payload.empty())(void)detCharacterRespawnRequest2D(ctx,10,c.respawnFlow->respawn,1);
+        else if(cmd.type==5 && cmd.payload.empty())detCharacterRespawnFlowDeath2D(ctx,*c.respawnFlow,1);
+        else return false;}return true;}))return false;
+    if(mode==RecoveryMode::LateProgress && !s.registerSystem(63,0,[c](DetTickContext& ctx){(void)executeDetProgress2D(ctx,c.progress,{DetProgressOperation2D::Add,1,0});return true;}))return false;
+    std::vector<std::pair<SimEntityId,DetActorState>> actors;auto hero=actor(c,10);DetSimTransformComponent pose;require(pose.setPosition({D{},D{},D{}}),"Recovery pose");hero.pose=pose.snapshot();
+    auto state=DetCharacterState2D{};state.enabled=mode!=RecoveryMode::Disabled;hero.blocks[c.respawnFlow->respawn.character.stateSchema]=detCharacterState2D(c.respawnFlow->respawn.character,state);
+    actors.emplace_back(10,std::move(hero));if(!c.regions.empty() || !c.respawnFlow->regions.empty())actors.emplace_back(20,actor(c,20));
+    if(mode==RecoveryMode::Occupied){DetActorState wall;require(pose.setPosition({D::fromInt(-2),D{},D{}}),"Occupied spawn pose");wall.pose=pose.snapshot();
+        wall.blocks[c.progress.actions.collision.bodySchema]=detCollisionBodyState2D(c.progress.actions.collision,{DetBodyMode2D::Static,{q(1),q(1)},{},{},2,1,false});actors.emplace_back(40,std::move(wall));}
+    if(reverse)std::reverse(actors.begin(),actors.end());for(auto& [id,a]:actors)if(!s.addEntity(id,std::move(a)))return false;return s.seal();}
+void manual(DetTickInput& input){input.commands.push_back({1,static_cast<std::uint32_t>(input.commands.size()),3,{}});}
+auto recovered(DeterministicSession& s,const DetVitality2DConfig& c){return detVitalityRecoveryState2D(checkpoint(s),c,10);}
+void recoveryIntegers(){auto c=recoveryPolicy();DeterministicSession s({48,1,1,64,48});require(configureRecovery(s,c),s.error());
+    auto lethal=operation(0,1,5);manual(lethal);advance(s,lethal);auto r=recovered(s,c);const auto flow=detCharacterRespawnFlowState2D(checkpoint(s),10,*c.respawnFlow);
+    require(state(s,c).hp==5 && r.restoreCount==1 && r.reviveCount==1 && r.restoreWriteCount==1 && r.lastRestoreKind==DetRespawnFlowRequestKind2D::ExternalDeath
+        && flow.externalDeathCount==1 && !flow.manualCount && result(s,c).hpAfter==0,"Actual source6 external death beats manual; only Accepted post revives; ordinary result remains historical");
+    advance(s,operation(1,1,2));require(state(s,c).hp==3 && state(s,c).invulnerableUntil==3,"Recovery clears prior protection and later successful Hurt has its own exact deadline");
+    auto protectedManual=operation(2,1,1);manual(protectedManual);advance(s,protectedManual);r=recovered(s,c);
+    require(result(s,c).code==DetVitalityCode2D::Invulnerable && result(s,c).hpAfter==3 && state(s,c).hp==5 && !state(s,c).invulnerableUntil
+        && r.restoreCount==2 && r.reviveCount==1 && r.restoreWriteCount==2,"Historical Invulnerable is validated while a fresh accepted manual resets HP/protection");
+    const auto seq=detProgressResult2D(checkpoint(s),c.progress).sequence;auto equal=frame(3);manual(equal);advance(s,equal);r=recovered(s,c);
+    require(r.restoreCount==3 && r.reviveCount==1 && r.restoreWriteCount==2 && detProgressResult2D(checkpoint(s),c.progress).sequence==seq,"Equal-HP Accepted counts without a Progress write");
+    advance(s,operation(4,1,5));r=recovered(s,c);require(state(s,c).hp==5 && state(s,c).deathCount==2 && r.restoreCount==4 && r.reviveCount==2,"Repeated lethal/accepted cycles preserve exact death/revive closure");
+    auto blocked=recoveryPolicy();DeterministicSession occupied({48,1,1,64,48});require(configureRecovery(occupied,blocked,RecoveryMode::Occupied),occupied.error());advance(occupied,operation(0,1,5));
+    require(state(occupied,blocked).dead && !recovered(occupied,blocked).restoreCount && detCharacterRespawnState2D(checkpoint(occupied),10,blocked.respawnFlow->respawn).result==DetRespawnResult2D::Occupied,"Occupied does not restore HP");
+    advance(occupied,frame(1));require(state(occupied,blocked).dead && detCharacterRespawnFlowState2D(checkpoint(occupied),10,*blocked.respawnFlow).requestCount==1,"Persistent HP0 is not an implicit death retry");
+    DeterministicSession disabled({48,1,1,64,48});require(configureRecovery(disabled,blocked,RecoveryMode::Disabled),disabled.error());advance(disabled,operation(0,1,5));
+    require(state(disabled,blocked).dead && !recovered(disabled,blocked).restoreCount && detCharacterRespawnFlowState2D(checkpoint(disabled),10,*blocked.respawnFlow).lastRequestCode==DetRespawnRequestCode2D::Unavailable,"Unavailable request does not recover");
+    DeterministicSession prior({48,1,1,64,48});require(configureRecovery(prior,c),prior.error());auto early=frame(0);early.commands.push_back({1,1,4,{}});request(early,1,5);advance(prior,early);
+    require(state(prior,c).dead && !recovered(prior,c).restoreCount && detCharacterRespawnState2D(checkpoint(prior),10,c.respawnFlow->respawn).result==DetRespawnResult2D::Accepted
+        && detCharacterRespawnFlowState2D(checkpoint(prior),10,*c.respawnFlow).lastRequestCode==DetRespawnRequestCode2D::AlreadyRequested,"Foreign early accepted request with Flow AlreadyRequested cannot restore HP");
+    for(bool manualAllowed:{false,true}){auto initialDead=recoveryPolicy(0,manualAllowed);DeterministicSession dead({48,1,1,64,48});require(configureRecovery(dead,initialDead),dead.error());advance(dead,frame(0));
+        require(state(dead,initialDead).dead && !detCharacterRespawnFlowState2D(checkpoint(dead),10,*initialDead.respawnFlow).requestCount,"Initial HP0 has no automatic request");
+        auto m=frame(1);manual(m);advance(dead,m);require(state(dead,initialDead).hp==(manualAllowed?5u:0u) && !state(dead,initialDead).deathCount
+            && recovered(dead,initialDead).reviveCount==(manualAllowed?1u:0u),"Initial dead cycle and explicit false/true manual recovery permission");}
+    auto region=recoveryPolicy();region.regions={{1,20,10,DetVitalityKind2D::Hurt,5}};region.respawnFlow->regions={{1,20,10,DetRespawnFlowRegionKind2D::Checkpoint,2}};
+    DeterministicSession real({48,1,1,64,48});require(configureRecovery(real,region),real.error());advance(real,frame(0));require(state(real,region).hp==5,"Region damage waits for actual Enter delivery");advance(real,frame(1));
+    require(recovered(real,region).lastRestoreSpawn==2 && recovered(real,region).reviveCount==1 && detCharacterRespawnFlowState2D(checkpoint(real),10,*region.respawnFlow).checkpointCount==1,"Real Enter selects checkpoint before external death and fresh accepted recovery");
+    region.respawnFlow->regions={{1,20,10,DetRespawnFlowRegionKind2D::Death,0}};DeterministicSession regionWins({48,1,1,64,48});require(configureRecovery(regionWins,region),regionWins.error());advance(regionWins,frame(0));advance(regionWins,frame(1));
+    require(recovered(regionWins,region).lastRestoreKind==DetRespawnFlowRequestKind2D::Death && !detCharacterRespawnFlowState2D(checkpoint(regionWins),10,*region.respawnFlow).externalDeathCount,"Real region Death wins over same-tick external flag and still recovers");
+    // Fresh manual normalization can subtract HP and counts numerical provenance.
+    auto lower=recoveryPolicy();lower.recoveries[0].restoredHP=3;DeterministicSession sub({48,1,1,64,48});require(configureRecovery(sub,lower),sub.error());auto m=frame(0);manual(m);advance(sub,m);
+    require(state(sub,lower).hp==3 && recovered(sub,lower).restoreWriteCount==1 && !recovered(sub,lower).reviveCount && detProgressResult2D(checkpoint(sub),lower.progress).operation==DetProgressOperation2D::Subtract,"Authored lower recovery value uses exact Subtract rather than an overflowing difference");
+    std::cout<<"PASS recovery2 actual accepted/denied/manual/initial0/checkpoint/region arbitration and integer cycle\n";}
+void recoveryClosure(const fs::path& output){auto c=recoveryPolicy();c.regions={{1,20,10,DetVitalityKind2D::Hurt,1}};
+    std::vector<DetTickInput> inputs;for(unsigned t=0;t<8;++t)inputs.push_back(frame(t));inputs[0]=operation(0,1,5);manual(inputs[0]);
+    inputs[1]=operation(1,1,2);inputs[2]=operation(2,1,1);manual(inputs[2]);manual(inputs[3]);inputs[4]=operation(4,1,5);manual(inputs[6]);inputs[7]=operation(7,1,1);
+    DeterministicSession base({48,1,1,64,48});require(configureRecovery(base,c),base.error());std::vector<DetSessionCheckpoint> cps{checkpoint(base)};std::vector<Bytes> states{bytes(base)};
+    std::vector<DetConfirmedEvent> events;for(const auto& input:inputs){advance(base,input);cps.push_back(checkpoint(base));states.push_back(bytes(base));for(const auto& e:cps.back().pendingEvents)events.push_back({1,input.tick,e});}
+    require(!events.empty() && recovered(base,c).restoreCount==5 && recovered(base,c).reviveCount==2 && state(base,c).hp==4,"Hand eight-tick recovery counts and actual trigger events");
+    DeterministicSession restored({48,1,1,64,48});require(configureRecovery(restored,c,RecoveryMode::Normal,true) && restored.restore(cps[1]),restored.error());
+    for(unsigned t=1;t<8;++t){advance(restored,inputs[t]);require(bytes(restored)==states[t+1],"Recovery CP restores pending real collision events and all recovery/numeric provenance");}
+    const auto before=bytes(restored);const auto schemas=detVitalityStateSchemas2D(c);const auto& primary=schemas[0];const auto& recovery=schemas[1];
+    for(unsigned n=0;n<14;++n){auto bad=cps[3];const auto field=[&](auto f){return detVitalityRecoveryField2D(c,10,f);};switch(n){
+        case 0:writeDetState(recovery,bad.globals.at(c.recoveryStateSchema),field(DetVitalityLethalPending),true);break;
+        case 1:writeDetState(recovery,bad.globals.at(c.recoveryStateSchema),DetVitalityPostProcessedTick,std::uint64_t{2});break;
+        case 2:writeDetState(recovery,bad.globals.at(c.recoveryStateSchema),field(DetVitalityRevives),std::uint64_t{2});break;
+        case 3:writeDetState(recovery,bad.globals.at(c.recoveryStateSchema),field(DetVitalityLastAttemptHP),std::uint64_t{4});break;
+        case 4:writeDetState(recovery,bad.globals.at(c.recoveryStateSchema),field(DetVitalityLastRestoreSpawn),std::uint32_t{99});break;
+        case 5:writeDetState(recovery,bad.globals.at(c.recoveryStateSchema),field(DetVitalityLastNumericRestoreSequence),std::uint64_t{1});break;
+        case 6:writeDetState(recovery,bad.globals.at(c.recoveryStateSchema),field(DetVitalityLastNumericRestoreBefore),std::uint64_t{5});break;
+        case 7:writeDetState(recovery,bad.globals.at(c.recoveryStateSchema),DetVitalityLastResultProtectionUntil,std::uint64_t{4});break;
+        case 8:writeDetState(recovery,bad.actors.at(10).blocks.at(c.recoveryStateSchema),field(DetVitalityRestores),std::uint64_t{1});break;
+        case 9:writeDetState(primary,bad.globals.at(c.stateSchema),DetVitalityOwnedProgressCount,std::uint64_t{1});break;
+        case 10:writeDetState(primary,bad.globals.at(c.stateSchema),detVitalityActorField2D(c,10,DetVitalityUntil),std::uint64_t{3});break;
+        case 11:writeDetState(recovery,bad.globals.at(c.recoveryStateSchema),field(DetVitalityRestores),std::uint64_t{4});break;
+        case 12:bad.globals.at(c.policySchemaBase).at(3)^=1;break;
+        case 13:writeDetState(recovery,bad.globals.at(c.recoveryStateSchema),field(DetVitalityLastRestoreKind),std::uint32_t{0});break;}
+        require(!restored.restore(bad) && bytes(restored)==before,"Recovery closure rejects forged CP atomically case="+std::to_string(n));}
+    auto foreign=c;foreign.recoveries[0].recoverManual=false;DeterministicSession other({48,1,1,64,48});require(configureRecovery(other,foreign),other.error());const auto otherBefore=bytes(other);
+    require(other.manifest()!=base.manifest() && !other.restore(cps[1]) && bytes(other)==otherBefore,"Literal manual recovery policy changes identity and incompatible restore is atomic");
+    DeterministicSession corrected({48,1,1,64,48});require(configureRecovery(corrected,c),corrected.error());DetRollbackConfig rc;rc.maxPredictionTicks=4;rc.prediction={{1,DetPredictionMode::Hold},{2,DetPredictionMode::Omit}};
+    DeterministicRollback rollback(corrected,rc);for(unsigned t=0;t<8;++t){if(t==4){require(rollback.advance(),rollback.error());require(rollback.submit(1,inputs[t]),rollback.error());}
+        else {require(rollback.submit(1,inputs[t]),rollback.error());require(rollback.advance(),rollback.error());}require(bytes(corrected)==states[t+1],"Actual late lethal input correction retains complete recovery2 CP");}
+    require(rollback.rollbackCount()>0 && rollback.replayedTicks()>0 && rollback.takeConfirmedEvents()==events && rollback.takeConfirmedEvents().empty(),"Recovery rollback has real replay and exactly-once real confirmed collision events");
+    DeterministicSession recording({48,1,1,64,48});require(configureRecovery(recording,c),recording.error());DetReplayWriter writer;const bool began=writer.begin(recording,(output/"vitality-recovery.rpl").string(),2);require(began,writer.error());
+    for(unsigned t=0;t<8;++t){const bool ok=writer.advance(inputs[t]);require(ok,writer.error());require(bytes(recording)==states[t+1],"Recovery actual writer entire CP");}const bool finished=writer.finish();require(finished,writer.error());
+    DeterministicSession playback({48,1,1,64,48});require(configureRecovery(playback,c),playback.error());DetReplayReader reader;const bool opened=reader.open(writer.path());require(opened,reader.error());require(reader.restoreInitial(playback),reader.error());
+    while(!reader.atEnd()){require(reader.advance(playback),reader.error());require(bytes(playback)==states[playback.nextTick()],"Recovery real playback entire CP");}
+    require(reader.seek(playback,3) && bytes(playback)==states[3],"Seek historical denial then fresh recovery");require(reader.seek(playback,8) && bytes(playback)==states[8],"Seek complete multi-cycle recovery closure");
+    std::ofstream out(output/"recovery-final.state",std::ios::binary);out.write(reinterpret_cast<const char*>(states.back().data()),static_cast<std::streamsize>(states.back().size()));out.close();require(bool(out),"Write actual recovery final CP");
+    std::cout<<"PASS recovery2 8ticks/9CP/14negative restores, late lethal rollback/drain and actual sealed .rpl/2seek\n";
+}
+void recoveryFaultsAndLimits(){auto c=recoveryPolicy();for(auto mode:{RecoveryMode::Normal,RecoveryMode::LateProgress}){DeterministicSession s({48,1,1,64,48});require(configureRecovery(s,c,mode),s.error());
+        const auto initial=checkpoint(s);const auto before=bytes(s);auto input=frame(0);if(mode==RecoveryMode::Normal)input.commands.push_back({1,1,5,{}});
+        require(!s.advance(input) && s.faulted(),"Wrong actual producer or outside post HP authority faults");require(s.restore(initial) && bytes(s)==before,"Explicit restore restores failed producer/post closure");}
+    for(unsigned n=0;n<9;++n){auto bad=c;switch(n){case 0:bad.recoveries[0].restoredHP=0;break;case 1:bad.recoveries[0].restoredHP=6;break;
+        case 2:bad.recoveries[0].externalDeathPermission=99;break;case 3:bad.respawnFlow->externalDeathPermissions[0].producerSystem=4;break;
+        case 4:bad.postSystemId=bad.respawnFlow->respawn.character.postSystemId;break;case 5:bad.recoveryStateSchema=bad.respawnFlow->externalStateSchema;break;
+        case 6:bad.respawnFlow->externalDeaths=false;break;case 7:bad.recoveries.clear();break;case 8:bad.respawnFlow->respawn.character.collision.eventType+=1;break;}
+        DeterministicSession s({48,1,1,64,48});require(!installDetVitality2D(s,bad) && !s.faulted(),"Malformed recovery authority rejected before destination registration case="+std::to_string(n));}
+    auto legacy=policy();const auto oldBytes=encodeDetVitalityConfig2D(legacy);const auto oldSchema=detVitalityStateSchemas2D(legacy);require(oldSchema.size()==1 && oldSchema[0].version==1,"Default uses only exact old primary1 descriptor");
+    auto explicitFalse=legacy;explicitFalse.respawnRecovery=false;require(encodeDetVitalityConfig2D(explicitFalse)==oldBytes,"Explicit false preserves existing profile1 complete encoded bytes");
+    legacy.recoveries={{10,1,5,false}};DeterministicSession refused({48,1,1,64,48});require(!installDetVitality2D(refused,legacy),"Profile1 rejects unbound new-only recovery authority");
+    auto maximum=recoveryPolicy();maximum.actors.clear();maximum.progress.counters.clear();maximum.recoveries.clear();maximum.respawnFlow->bindings.clear();
+    maximum.respawnFlow->externalDeathPermissions.clear();maximum.respawnFlow->respawn.spawns.clear();
+    for(unsigned n=0;n<8;++n){const auto id=SimEntityId{10+n};maximum.actors.push_back({id,n+1,65535});maximum.progress.counters.push_back({n+1,0,UINT64_MAX,1});
+        maximum.recoveries.push_back({id,n+1,1,false});maximum.respawnFlow->bindings.push_back({id,n+1});maximum.respawnFlow->externalDeathPermissions.push_back({n+1,id,6});
+        maximum.respawnFlow->respawn.spawns.push_back({n+1,id,{D::fromInt(static_cast<int>(n)),D{}}});}
+    const auto mutableSchemas=detVitalityStateSchemas2D(maximum);require(mutableSchemas.size()==2 && mutableSchemas[0].fields.size()==84
+        && mutableSchemas[1].fields.size()==122 && encodeDetVitalityConfig2D(maximum).size()<=8192 && detVitalityPolicySchemas2D(maximum).size()<=9,"Eight actors use84+122 fields and bounded complete recovery identity");
+    std::cout<<"PASS source-bound death and recovery namespace/identity/authority limits\n";
+}
 fs::path fresh(const fs::path& parent){require(fs::is_directory(parent),"--output must name existing parent");const auto t=std::chrono::steady_clock::now().time_since_epoch().count();
     for(unsigned n=0;n<1024;++n){auto path=parent/("vitality2d-"+std::to_string(t)+"-"+std::to_string(n));if(fs::create_directory(path))return path;}throw std::runtime_error("No fresh output directory");}
 } // namespace
 int main(int argc,char** argv){try{fs::path parent;for(int n=1;n<argc;++n){const std::string arg=argv[n];if(arg=="--output" && n+1<argc)parent=argv[++n];else throw std::invalid_argument("Usage: AYEntity_Vitality2DChecks --output EXISTING_PARENT");}
-    const auto output=fresh(parent);integers();windowsAndBudget();enters();faults();action2();closure(output);limits();std::ofstream summary(output/"summary.json",std::ios::binary);
-    summary<<"{\"status\":\"passed\",\"profile\":1,\"closureTicks\":8,\"closureCpRows\":9,\"rplFiles\":1,\"seeks\":2,\"negativeRestores\":12,\"oracleScope\":\"selected hand integer/protection/region/death behavior; entire CP actual path equivalence\"}\n";
+    const auto output=fresh(parent);integers();windowsAndBudget();enters();faults();action2();closure(output);limits();recoveryIntegers();recoveryClosure(output);recoveryFaultsAndLimits();std::ofstream summary(output/"summary.json",std::ios::binary);
+    summary<<"{\"status\":\"passed\",\"profile\":1,\"recoveryProfile\":2,\"closureTicks\":8,\"closureCpRows\":9,\"rplFiles\":2,\"seeks\":4,\"negativeRestores\":26,\"recoveryClosureTicks\":8,\"recoveryClosureCpRows\":9,\"oracleScope\":\"selected hand integer/protection/region/death/recovery behavior; entire CP actual path equivalence\"}\n";
     summary.close();require(bool(summary),"Write summary");std::cout<<"PASS Stage47 vitality; output="<<output.string()<<'\n';return 0;
 }catch(const std::exception& e){std::cerr<<"FAIL Stage47 vitality: "<<e.what()<<'\n';return 1;}}

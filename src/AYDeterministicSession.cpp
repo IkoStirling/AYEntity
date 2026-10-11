@@ -307,6 +307,7 @@ Entity* DeterministicSession::presentationEntity(SimEntityId id) const {
 }
 DetTickContext::DetTickContext(DeterministicSession& session,std::uint32_t system):_session(session),_system(system) {}
 std::uint64_t DetTickContext::tick() const {return _session._impl->state.nextTick;}
+std::uint32_t DetTickContext::systemId() const {return _system;}
 math::DetFloat32 DetTickContext::dt() const {return _session._impl->dt;}
 const DetTickInput& DetTickContext::input() const {return _session._impl->input;}
 std::span<const DetTickCommand> DetTickContext::events() const {return _session._impl->state.pendingEvents;}

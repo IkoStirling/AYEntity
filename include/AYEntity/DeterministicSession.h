@@ -84,6 +84,9 @@ struct DetCharacterRespawn2DConfig;
 class DetTickContext {
 public:
     std::uint64_t tick() const;
+    /// @brief Actual registered system running this callback, not input.source.
+    /// @note Read-only producer identity; adds no state, sequence or wire field.
+    std::uint32_t systemId() const;
     math::DetFloat32 dt() const;
     const DetTickInput& input() const;
     std::span<const DetTickCommand> events() const;
