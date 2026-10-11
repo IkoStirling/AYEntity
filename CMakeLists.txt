@@ -114,6 +114,7 @@ if(TARGET AYReplay)
         src/AYDeterministicCharacterRespawn2D.cpp
         src/AYDeterministicCharacterRespawnFlow2D.cpp
         src/AYDeterministicVitality2D.cpp
+        src/AYDeterministicAttack2D.cpp
         src/AYDeterministicLevelCooked2D.cpp
         src/AYDeterministicLockstepProtocol.cpp src/AYDeterministicLockstep.cpp
         src/AYDeterministicRollback.cpp src/AYDeterministicRollbackNetwork.cpp src/AYDeterministicTransport.cpp)
@@ -191,6 +192,7 @@ if(TARGET AYReplay)
         include(unittest/LevelVitality6.cmake)
         include(unittest/LevelMovingTrigger7.cmake)
         include(unittest/VitalityRegions3.cmake)
+        include(unittest/Attack2D.cmake)
         include(unittest/LevelCooked2D.cmake)
         include(unittest/LevelTool.cmake)
         include(unittest/ContentHost.cmake)

@@ -2560,3 +2560,49 @@ actor-only mutable Path descriptor was incorrectly required to have a global.
 The narrow fix retains all layout/version checks and every original global check.
 Failure materials remain at stage50-host2. Corrected actual Host/CLI gates passed in stage50-host3 (two gates, CTest3.19s), with unchanged source pins. The six16tick Host paths agree in full state/trace/load/seek/stdin saves; actual four actions independently pause/resume and disable/enable the moving hazard. Final necessary local gates passed: Level7 authoring0.753711s (3 cases/12 rejects/57 complete CP comparisons), old Level6/Flow/Vitality/Regions3, and Resource1.08742s/Cooked0.10974s. Exact Stage50 receipts preserve source fixes and failures; native final VM deferred.
 Native Deferred to Final VM; no new long-run, compiler matrix or remote CI claim.
+
+
+## Stage51: registered finite attack policy and damage ledger
+
+Attack profile1 is separate from numeric/collision/character/HP mathematical profiles.
+A complete nested Vitality policy and finite per-owner shape/window/target rows enter
+literal typed defaults. Registered globals contain processed-tick input/phase/latch,
+locked facing, checked tick+1 stamps, consumed target mask, cumulative counts,
+recovery generation and last HP ledger. All actor copies stay defaults. Exact installed
+system priority/validator1/logic1 fingerprint, nested policies and schema layouts are
+validated at seal/commit/restore. Default240/241/242+ namespaces and121/97 field
+maxima reserve finite state; up to16384 policy bytes/17 chunks still share the actual
+64-schema Session capacity with all dependency policies. Installer failure discards
+partial assembly. No hidden mutable capture, query cache, RNG or external side effect.
+
+Attack samples all owner/target geometry and alive flags before any damage. Owner ID
+then target ID order gives deterministic simultaneous trade: initial alive participants
+complete their prepared hits even when an earlier hit kills them. Reciprocal body
+filters and literal Hurt permission select strict interior overlap. A target's normal
+Applied/Dead/Invulnerable/BudgetExceeded consumes one cycle bit. Missing geometry may
+be reconsidered on later active ticks, but an attempt never retries merely because
+protection/budget changed. All local box/count prechecks precede HP writes; a later HP
+fault is explicit Session failure, not a transaction that undoes earlier legitimate writes.
+
+Start T windows are W[T,T+W), A[T+W,T+W+A), R[T+W+A,T+W+A+R). Copied phase
+at CP.nextTickN describes N-1. Registered latches consume busy/dead/cancellation edges;
+zero windows skip. Recovery generation snapshots `restoreCount`, including equal-HP
+normalization. A same-tick post may be exactly one accepted restore ahead; the next
+Attack cancels an open cycle by default. Death and retirement always cancel. Historical
+attempt HP remains historical after later damage/heal/recovery. Latest shared sequence
+requires exact current result identity, cumulative sum and cycleAttemptBase+popcount
+bind the attack-local ledger. Pure consistency does not authenticate earlier execution.
+
+Necessary MSVC Release Attack2DChecks passed1/1, JUnit3.51278s. Its selected hand W2/A2/R2,
+mirror/touch/mask/whitelist, normal denial, initial-alive trade and accepted generation
+assertions are distinct from complete actual16tick/17CP execution equivalence via reverse
+registration/input order, active restore, real late correction/effect drain and one sealed
+rpl/two seeks. Invalid config/restore/late input retain specific failure witnesses. No
+new matrix/long campaign, native VM result, full-byte independent golden, ordinary Combat
+migration, level authoring grammar or standard Host attack content is claimed.
+Actual summary has56 hand rows/130 explicit advance calls/10 restore and11 config
+negatives/16confirmed events/1rollback/1replayed tick. Standard production Kernel
+compiled26.219s, with no new Host/Debug/ASan/native run. Receipt
+stage51core-diagnostic2/result.json binds unchanged runtime sources and executable;
+first existing Replay dependency build exit1 without diagnosis is retained, and
+the unchanged-source retry passed without a production behavior fix.

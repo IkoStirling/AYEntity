@@ -1087,3 +1087,33 @@ actor-only mutable Path descriptor was incorrectly required to have a global.
 The narrow fix retains all layout/version checks and every original global check.
 Failure materials remain at stage50-host2. Corrected actual Host/CLI gates passed in stage50-host3 (two gates, CTest3.19s), with unchanged source pins. The six16tick Host paths agree in full state/trace/load/seek/stdin saves; actual four actions independently pause/resume and disable/enable the moving hazard. Final necessary local gates passed: Level7 authoring0.753711s (3 cases/12 rejects/57 complete CP comparisons), old Level6/Flow/Vitality/Regions3, and Resource1.08742s/Cooked0.10974s. Exact Stage50 receipts preserve source fixes and failures; native final VM deferred.
 Native Deferred to Final VM; no new long-run, compiler matrix or remote CI claim.
+
+
+## Stage51: finite deterministic melee attacks
+
+Use `AYEntity/DeterministicAttack2D.h` with `AYEntity::DeterminismKernel` (or the
+standard Host target). Separately install matching collision/Actions, dedicated HP
+Progress and Vitality, then `installDetAttack2D` before actors/seal. The Attack config
+copies that complete Vitality policy; dependencies are not installed twice. Default
+canonical input4 calls `detSetAttackInput2D` before Attack5/Vitals6 and motion pre.
+Held samples need explicit false release; an accepted start locks facing and gives
+finite warmup/active/recovery windows. Copied state/result and public descriptor
+factories expose registered phase, consumed target bits and historical HP attempts.
+
+Only strict frozen-geometry overlap against authored Hurt targets causes an attempt.
+Initial-alive snapshots permit same-tick trades; normal denials consume the target
+bit. A new accepted recovery generation or dead/retired owner cancels an open attack
+on its next callback. There is no repeat/buffer, weapon sweep, wall occlusion or
+second pose writer. Existing ordinary Combat/Ability APIs have separate contracts.
+
+The short `AYEntity_Attack2DChecks` target is registered in standard and portable
+builds. Necessary MSVC Release passed1/1 (JUnit3.51278s):16tick/17CP,56 selected
+hand rows,10 restore/11 config negatives,16 confirmed effects,1 rollback/1 replayed
+tick and one sealed rpl/two seeks. Standard production Kernel compiled26.219s; no
+Host/Debug/ASan/native run. Native final VM deferred. See
+[design](design.md) and the [SDK contract](../../AYDocs/sdk/contracts/2d.md#2dsimulationdeterministic-attack)
+for ordering, capacity, rollback/restore closure and the precise evidence boundary.
+No new level-file grammar or interactive attack Host is included in this facade.
+The unchanged-source receipt is stage51core-diagnostic2/result.json. First existing
+Replay dependency build exit1 without diagnosis remains in stage51core-first; the
+same-source retry passed without changing production behavior.
