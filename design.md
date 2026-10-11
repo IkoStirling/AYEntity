@@ -2066,8 +2066,63 @@ Recorded startup CMake identity
 remains historical; final ASan-budget registration SHA is
 `7172956d6d24c6d8bca15d869ff648e585ec5f6a3f8e3abcf3bf5b2c4c1ef506`.
 Stage23 applicable short/boundary/standard gates are **LocalPassed**; the sustained
-lane is **UserRequestedStop**. Final SDK doctor actually exited0 (94 capabilities/53 modules/51 search cases/300 entry symbols, baseline28, 0 errors/0 warnings; completion observed2026-10-11T09:53:56Z); it checks catalog structure/references/symbols, not simulation execution. Commits remain pending under root ownership;
+lane is **UserRequestedStop**. Final SDK doctor actually exited0 (94 capabilities/53 modules/51 search cases/300 entry symbols, baseline28, 0 errors/0 warnings; completion observed2026-10-11T09:53:56Z); it checks catalog structure/references/symbols, not simulation execution. Stage23 verified local commits are AYEntity `6c02dc0ef222b143967aa4d27d7a50e2e6d6770d` and root `1f6ed71320e710ad7fb228084b17db39538b6b0c`; historical source pins remain unchanged;
 native execution is deferred to final VM by user instruction, with no GitHub CI
 or push. Actual logs, versions, failures, duration and final counts belong in
 [Stage23](../../AYDocs/DETERMINISTIC-CHARACTER-CAMPAIGN-STAGE23.md); source existence,
 doctor structure checks and Stage22 history do not establish remaining runtime passes.
+
+
+## Stage26: static step-up / collision4 / controller3
+
+This opt-in motion content keeps the existing XY sole-owner pipeline.
+`advanced + collision.oneWayPlatforms + collision.stepUp` with finite positive
+`maxStepHeight<=1000` selects new controller state/policy/validator/logic profile3
+and collision body/history/validator profile4. Old profiles and default bytes are
+unchanged; stepUp=false requires canonical zero height. Public collision-only
+installation rejects stepUp before registration; a private character binding
+installs the transient request/result protocol. The history height pin is field9
+and limits current+transient pairs to59 (`9+2*59<=128`).
+
+Pre requests only supported ordinary-Static horizontal walking without actual
+jump/drop/rise or an active ignored platform. The full-world baseline is solved
+and trigger-budget checked first. Each request's first horizontal ordinary-Static
+contact supplies its height-eligible target. Candidate actors are sorted by stable
+ID and one `tick%count` actor is attempted; fairness holds only for a fixed set.
+The trial runs the complete world through dt/4 upward, dt/2 horizontal and dt/4
+downward phases; it never treats frozen query targets as relative solver authority.
+Quarter/half time sums must preserve original dt bits, and upward/final foot-top
+height is exact bits rather than tolerance. Strict target X overlap and improved
+signed horizontal progress against baseline are mandatory.
+
+Phase2 uses twice requested X speed and commits its actual solvedVX/2 with Y0,
+including ordinary wall clipping. Earliest simultaneous nonStatic/one-way solid
+response involving the stepper rejects the trial even if another pair sorts first.
+Geometry/representation, phase contact-pass or trial trigger budget failure
+discards all trial poses/traces and commits the already valid baseline. Unknown
+exceptions and allocation failures propagate; illegal baseline remains an
+execution fault with explicit restore required. Accepted continuous trigger paths
+use all actual physical segments, not the endpoint chord. Each phase has contact
+budget I (1..256), baseline+trial<=4I and accepted trace<=3I; maxBodies<=64.
+
+Body Bool100 Requested and Bool110 Stepped are private intra-tick authority and
+false at every committed boundary. Controller Bool280 stepped is copied by post
+and cleared on the following pre, with initialization/spawn false. A true result
+requires grounded ordinaryStatic support, zero carrier and bodyY; restore validates
+these relations, including the explicit fresh-retired-support transition. All
+persistent policy/state is typed and registered, with immutable manifest identity
+and no mutable callback cache. Invalid restore remains atomic.
+
+The standard Host example's separate `steps` scenario uses public headers,
+canonical command input, module-owned Host lifecycle and registered observations.
+Actor10 stops on the third quarter-height stair after96 ticks; actual success
+counts and committed position are layout checks, not an independent full-CP golden.
+Default Stage22 configuration/scene/script/output remain compatible. New directed
+and one standard Host Release integration gates are **LocalPassed** (Steps0.15571s, Host0.393514s/128ticks/3actual steps), native
+**Deferred to Final VM**. No new campaign/long-stability matrix is added.
+Static AABB stairs only: slopes, moving/one-way stairs and airborne climbing remain
+outside scope. See
+[Stage26](../../AYDocs/DETERMINISTIC-CHARACTER-STEP-UP-STAGE26.md) for contract and
+[example](examples/detcharacter/README.md) for the explicit CLI.
+
+Actual Stage26 source/outputs and the preserved localized-LastTest evidence-reader failure are recorded in [acceptance.json](../../out/detstep26-20261011/acceptance.json) and Stage26. The reader correction did not rerun products; before/after12 source/example SHA checks and SDK doctor exit0 passed. Full CP compares actual production paths, not an independent full-byte golden. No new default Host, Debug/ASan or native acceptance is inferred.

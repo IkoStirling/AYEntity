@@ -4,6 +4,7 @@
 namespace ayt::entity {
 inline constexpr std::uint32_t kDetCharacterController2DProfileVersion=1;
 inline constexpr std::uint32_t kDetCharacterController2DAdvancedProfileVersion=2;
+inline constexpr std::uint32_t kDetCharacterController2DStepProfileVersion=3;
 /// Applied once on release/jump with policy caps; direct support changes do not inherit the old carrier.
 enum class DetCharacterLeaveVelocity2D : std::uint32_t {Discard=0,Inherit=1};
 /// Stable fields; internal intent/carry fields are zero at every committed boundary.
@@ -19,10 +20,14 @@ enum DetCharacterField2D : std::uint32_t {
     DetCharacterDropStarted=180,DetCharacterCrouched=190,DetCharacterStandingCaptured=200,
     DetCharacterStandingHalf=210,DetCharacterStandingOffset=220,DetCharacterDropRemaining=230,
     DetCharacterCoyoteSupportY=240,DetCharacterJumpLatch=250,DetCharacterDropLatch=260,
-    DetCharacterDropTick=270
+    DetCharacterDropTick=270,
+    /// Step profile3 only: result of the last committed tick, cleared by next pre.
+    /// True requires enabled/grounded with zero carrier and body Y velocity.
+    DetCharacterStepped=280
 };
 /** @brief Immutable software-binary32 policy for registered axis-aligned XY character motion.
- * @note The facade installs profile2 (legacy) or profile3 (advanced) collision and
+ * @note The facade installs profile2 (legacy), profile3 (advanced), or explicit
+ * profile4 (static step-up) collision and
  * two callbacks in the same priority,
  * ordered preSystemId < collision.systemId < postSystemId. All schema/system/validator/
  * logic IDs and capacities are checked before registration; install before actors/seal.
@@ -35,6 +40,8 @@ enum DetCharacterField2D : std::uint32_t {
  * [0,1,000,000], platform speed positive and <=1,000,000; distances <=1,000.
  * contactTolerance <= groundProbeDistance <= snapDistance. Snap distance zero disables
  * adhesion; all three distances must then be zero. No implicit epsilon is used.
+ * With advanced=true, collision.stepUp=true and a positive collision.maxStepHeight
+ * explicitly select controller3/collision4. Default profiles and bytes are unchanged.
  */
 /// @brief Immutable registered motion and support policy, including the owned collision configuration.
 struct DetCharacterController2DConfig {
@@ -105,6 +112,9 @@ struct DetCharacterState2D {
     bool jumpHeld=false,dropHeld=false,crouchHeld=false,jumpLatch=false,dropLatch=false;
     math::DetFloat32 coyoteSupportY{};
     std::uint64_t dropTick=0;
+    /// Profile3 output only: this tick accepted a static step and settled support.
+    /// Actor initialization/spawn must leave this false. Read committed copies for presentation.
+    bool stepped=false;
 };
 /** @brief Install the registered controller, immutable policy/validator and relative collision as one motion pipeline.
  * @note Link AYEntity::DeterminismKernel, Determinism or DeterminismHost. No second pose
@@ -124,8 +134,17 @@ struct DetCharacterState2D {
  * All persistent authority lives in typed state. Invalid restore is rejected atomically;
  * executing errors fault the Session and require explicit restore. An allocation failure
  * during registration can leave partial configuration: abandon a failed installation.
- * Bounds remain collision maxBodies<=64; no stairs, slopes, dynamic mass/friction,
- * rotated/capsule shapes or 3D.
+ * Bounds remain collision maxBodies<=64; no slopes, dynamic mass/friction,
+ * rotated/capsule shapes or 3D. Legacy/advanced profiles do not step up.
+ * Explicit collision.stepUp selects controller3/collision4 and allows supported
+ * walking to try ordinary solid Static AABB steps up to collision.maxStepHeight.
+ * No jump/drop/rising or MovingObstacle/one-way support requests a step. The sole
+ * collision owner tries an entire bounded world path in scratch; blocked clearance,
+ * no improved forward motion, absent exact landing or dynamic solid response keeps
+ * the ordinary solved path. Trigger paths follow the selected physical segments.
+ * At most one candidate is tried per tick, selected from stable-ID order using the
+ * registered tick. Other bodies continue their relative motion during all segments.
+ * Step profile requires maxTriggerPairs<=59; old profiles retain their capacities.
  * Advanced profile2 adds tick-counted coyote/buffer windows, held-button edge latches,
  * single ignored one-way support and foot-preserving crouch. Coyote jumping inherits
  * no second carrier X kick; Inherit adds the recorded carrier Y to jumpSpeed.
@@ -147,6 +166,8 @@ struct DetCharacterState2D {
  * Legacy mode rejects advanced options and crouch/drop input; its 12 state/24 policy
  * fields, profile1 identity and bytes remain unchanged. Advanced schema/validator/
  * logic profile2 and collision profile3 are explicitly incompatible identities.
+ * Step profile3 adds a committed stepped result and immutable step policy; collision4
+ * request/result fields are internal and zero at every committed boundary.
  */
 /// @brief Install registered character intent/support systems and the sole relative XY collision motion owner.
 bool installDetCharacterController2D(DeterministicSession& session,DetCharacterController2DConfig config={});

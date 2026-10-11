@@ -138,3 +138,4 @@ include("${AYENTITY_ROOT}/unittest/CharacterController.cmake")
 include("${AYENTITY_ROOT}/unittest/CharacterAdvanced.cmake")
 
 include("${AYENTITY_ROOT}/unittest/CharacterCampaign.cmake")
+include("${AYENTITY_ROOT}/unittest/CharacterSteps.cmake")

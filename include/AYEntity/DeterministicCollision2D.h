@@ -1,4 +1,5 @@
 #pragma once
+// design reference: AYEntity/design.md Stage26 static step-up / collision profile4.
 #include <AYEntity/DeterministicSession.h>
 #include <AYMath/DetGeometry2D.h>
 
@@ -6,11 +7,14 @@ namespace ayt::entity {
 inline constexpr std::uint32_t kDetCollision2DProfileVersion=1;
 inline constexpr std::uint32_t kDetCollision2DExtendedProfileVersion=2;
 inline constexpr std::uint32_t kDetCollision2DOneWayProfileVersion=3;
+inline constexpr std::uint32_t kDetCollision2DStepProfileVersion=4;
 enum class DetBodyMode2D : std::uint32_t {Disabled=0,Static=1,Kinematic=2,MovingObstacle=3};
 /// Stable field IDs in the adapter's typed body schema; callers write velocity in earlier systems.
 enum DetBodyField2D : std::uint32_t {DetBodyMode=10,DetBodyHalf=20,DetBodyOffset=30,
     DetBodyVelocity=40,DetBodyLayer=50,DetBodyMask=60,DetBodyTrigger=70,
-    DetBodyOneWay=80,DetBodyIgnoredOneWay=90};
+    DetBodyOneWay=80,DetBodyIgnoredOneWay=90,
+    /// Profile4 facade-owned protocol; both fields are false at every committed boundary.
+    DetBodyStepRequested=100,DetBodyStepped=110};
 struct DetCollisionBody2D {
     DetBodyMode2D mode=DetBodyMode2D::Disabled;
     math::DetVec2 half{},offset{},velocity{};
@@ -44,6 +48,16 @@ struct DetCollision2DConfig {
     /// From-below, side and already-inside motion is allowed; no penetration repair.
     /// Queries remain geometric AABB queries, independent of directional response.
     bool oneWayPlatforms=false;
+    /// Profile4 static step-up policy, installed only by the character facade.
+    /// Requires extended/oneWayPlatforms, finite 0<maxStepHeight<=1000 and <=59 pairs.
+    /// Default false/zero preserves profiles1..3. No slopes or moving steps.
+    /// One eligible candidate per tick, stable-ID sorted and selected by tick%count.
+    /// Whole-world up/across/down trials use dt/4,dt/2,dt/4; each phase retains
+    /// the ordinary contact-pass budget (baseline plus trial <=4*maxContactIterations).
+    /// Other bodies move during each phase. Non-static/one-way solid responses
+    /// involving the stepping actor reject the trial; triggers use the chosen path.
+    bool stepUp=false;
+    math::DetFloat32 maxStepHeight{};
 };
 struct DetCollisionProxy2D {
     SimEntityId id=0;
@@ -62,6 +76,8 @@ std::vector<DetCollisionPair2D> detCollisionPairs2D(std::span<const DetCollision
 /// Active shapes require positive represented area; static velocity must be zero.
 /// MovingObstacle needs extended=true and follows prescribed velocity without mass.
 /// oneWay/ignoredOneWay require oneWayPlatforms=true; only supported body modes may set them.
+/// Profile4 body defaults include facade-only request/result fields, both false;
+/// this helper does not expose authoring of transient step protocol state.
 std::vector<std::uint64_t> detCollisionBodyState2D(const DetCollision2DConfig& config,const DetCollisionBody2D& body);
 /** @brief Install one stateless collision tick callback and its typed schemas/globals.
  * @note Configure before actors/seal; check false and abandon failed configuration.
@@ -80,6 +96,10 @@ std::vector<std::uint64_t> detCollisionBodyState2D(const DetCollision2DConfig& c
  * still require explicit restore on fault; no automatic rollback.
  * @pre Follow DeterministicSession World/Core ownership; one XY motion owner.
  * XY only; pose Z/rotation/scale do not affect shapes. No dynamic rigid-body solver.
+ * @note stepUp=true is rejected before registration by this public installer.
+ * The deterministic character facade owns profile4's transient request/result
+ * protocol and clears both fields before the committed boundary. Profile4
+ * queries still inspect full geometry and do not predict the step trajectory.
  */
 bool installDetCollision2D(DeterministicSession& session,DetCollision2DConfig config={});
 enum class DetTriggerPhase2D : std::uint32_t {Enter=1,Stay=2,Exit=3};

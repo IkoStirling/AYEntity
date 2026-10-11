@@ -1,8 +1,9 @@
 # Deterministic character: standard Host example
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 **Date:** 2026-10-11
-**Status:** Local execution passed; native acceptance deferred to final VM
+**Status:** Active
+**Acceptance:** Default Stage22 historical local pass; Stage26 Release steps LocalPassed; native deferred to final VM
 **Owner:** AYEntity
 
 This executable builds a real `EngineModuleRuntime` graph with
@@ -13,6 +14,8 @@ test fixtures or manually advance a portable Session.
 
 See [Stage22](../../../../AYDocs/DETERMINISTIC-CHARACTER-CONTROLLER-STAGE22.md)
 and the [SDK contract](../../../../AYDocs/sdk/contracts/2d.md#2dphysicsdeterministic-character-controller).
+The explicit static-stair option is documented in
+[Stage26](../../../../AYDocs/DETERMINISTIC-CHARACTER-STEP-UP-STAGE26.md).
 
 ## Build
 
@@ -127,3 +130,69 @@ successful runs and `--help` return0. Partial trace/state files from a failed
 run are preserved: use another fresh prefix for a new attempt. This file-adapter
 example supports printable ASCII paths; complete Unicode path plumbing is not
 claimed. It does not install real device input, a renderer or network transport.
+
+## Static stairs: explicit `--scenario steps`
+
+The default and `--scenario advanced` retain the original Stage22 configuration,
+registered fields, scene, script and output layout. `--scenario steps` selects an
+independent application26/content/logic identity and controller3/collision4:
+advanced and one-way support remain explicitly enabled, with
+`collision.stepUp=true`, `maxStepHeight=1/2` and pair capacity59. Use the same
+scenario for recording and replay; manifests reject an incompatible scene recipe.
+
+```powershell
+AYEntity_DetCharacterExample --scenario steps --ticks 512 --frame-divisor 128 --output fresh/steps
+AYEntity_DetCharacterExample --scenario steps --record fresh/steps.rpl --ticks 512 --output fresh/step-record
+AYEntity_DetCharacterExample --scenario steps --replay fresh/steps_000.rpl --ticks 512 --output fresh/step-replay
+```
+
+These are recipes, not execution evidence. The new directed gate
+`AYEntity_CharacterStepsChecks` and standard Host gate
+`AYEntity_CharacterStepsHostExample` passed the necessary Release checks;
+there is no new sustained campaign, cross-configuration matrix or native VM result.
+
+All five characters begin at centerY3/4, half(1/4,1/2), on a floor with top1/4.
+The step size is1/64 and all geometry is dyadic:
+
+| Actor | Ordinary static scene / sampled input | Expected application observation |
+|---|---|---|
+| 10 | Three adjoining width1 stairs at X1/2..7/2, tops1/2,3/4,1; speed2 at ticks0..95, then0 | Three committed steps and a stop at center(3,3/2) on the third stair |
+| 11 | A wall top1, rise3/4 beyond the1/2 policy; speed2 at ticks0..127 | Ordinary horizontal blocking; no automatic step |
+| 12 | A1/4-rise stair with a roof bottom11/8; same walking input | Upward clearance fails and the complete ordinary path remains |
+| 13 | Flat reference floor; speed1 at ticks0..127 | Ordinary flat walking |
+| 14 | Flat reference floor; neutral input | Ordinary support without a step |
+
+The application does not request a teleport or author per-tick pose changes.
+Controller pre owns the request and collision owns the entire baseline or accepted
+up/across/down world path. Other bodies advance during the trial. Observer50
+copies the public committed result and increments typed per-actor counts only
+when `movement.stepped` is true; no unregistered mutable gameplay counter is used.
+
+For `steps`, the trace appends a Boolean stepped value after each actor's ignored
+ID. Presentation prints this copied flag and its registered cumulative count.
+The existing seven Stage22 feature keys remain present but are unused/zero in
+this scene. Summary additionally contains:
+
+- `scenario: "steps"`, `controllerProfile:3`, `collisionProfile:4`.
+- `steppedTicks`: total successful actor-ticks, not a unique obstacle count.
+- `characterStepCounts`: actual typed counts keyed by character ID10..14.
+- `builtInStepChecks`: true only for Live/Record built-in input ending at128 or later.
+
+Those built-in checks require actor10's count at least3 and its final centerY bits
+equal software3/2. The character stops after96 movement ticks so a512tick run
+does not walk off the final platform. Custom scripts and Replay do not infer a
+default-input history; their built-in check is false, while recorded typed counts
+remain in the checkpoint. These observations are layout checks rather than an
+independent full-checkpoint golden or proof for all Float32 policies.
+
+The actual Stage26 Host gate ran Live once with `--scenario steps --ticks 128
+--frame-divisor 128`: 128 committed trace rows/input callbacks, actual counts
+actor10=3 and actors11..14=0, final centerY3/2 checked, finalHash string
+`18097501496580734548`. JUnit testcase time0.393514s, CTest total0.51s; actual
+configure/build/CTest all exited0. The executable is in the standard build root,
+not a module subdirectory. No new default Stage22 Host, steps Record/Replay,
+512tick, Debug/ASan or final VM execution is inferred from this one gate.
+The directed Steps gate separately passed0.15571s with8ticks/9CProws/2events/
+2rollbacks/4replayedTicks/1sealed rpl/3seeks; full CP bytes compare actual paths,
+not an independent full-byte golden. See
+[Stage26 actual evidence](../../../../AYDocs/DETERMINISTIC-CHARACTER-STEP-UP-STAGE26.md).

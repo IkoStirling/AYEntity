@@ -52,6 +52,7 @@ std::string quoted(std::string_view value) {
 }
 struct Options {
     DetHostMode mode=DetHostMode::Live;
+    bool steps=false;
     std::string replayPath,output,commands;
     std::uint64_t ticks=512,seek=0;
     unsigned frameDivisor=64;
@@ -68,6 +69,9 @@ Options options(int argc,char** argv) {
             require(!modeSet,"Record and replay are mutually exclusive");modeSet=true;
             result.mode=key=="--record"?DetHostMode::Record:DetHostMode::Replay;
             asciiPath(value);result.replayPath=value;
+        }else if(key=="--scenario") {
+            require(value=="advanced" || value=="steps","Scenario must be advanced or steps");
+            result.steps=value=="steps";
         }else if(key=="--ticks")result.ticks=integer(value);
         else if(key=="--seek"){result.seek=integer(value);result.seekSet=true;}
         else if(key=="--frame-divisor") {
@@ -87,7 +91,7 @@ struct Sample {int speed=0;bool jump=false,crouch=false,drop=false;};
 using Samples=std::array<Sample,characters.size()>;
 class InputScript {
 public:
-    explicit InputScript(const Options& opts):custom_(!opts.commands.empty()) {
+    explicit InputScript(const Options& opts):custom_(!opts.commands.empty()),steps_(opts.steps) {
         if(!custom_)return;
         require(std::filesystem::file_size(opts.commands)<=1048576,"Command script exceeds1MiB");
         std::ifstream file(opts.commands);
@@ -120,6 +124,12 @@ public:
                 if(const auto found=rows_.find({tick,characters[index]});found!=rows_.end())result[index]=found->second;
             return result; // Every absent row explicitly samples neutral, including released buttons.
         }
+        if(steps_) {
+            result[0].speed=tick<96?2:0;
+            result[1].speed=result[2].speed=tick<128?2:0;
+            result[3].speed=tick<128?1:0;
+            return result;
+        }
         result[0].drop=tick>=32 && tick<=40;
         result[1].speed=tick<80?2:0;result[1].jump=tick>=42 && tick<=48;
         result[2].jump=tick>=18 && tick<=24;
@@ -127,7 +137,7 @@ public:
         return result;
     }
 private:
-    bool custom_;
+    bool custom_,steps_;
     std::map<std::pair<std::uint64_t,SimEntityId>,Sample> rows_;
 };
 struct InputBoundary {std::uint64_t tick=0,calls=0;Samples samples{};};
@@ -140,10 +150,18 @@ DetCharacterController2DConfig policy() {
     config.coyoteTicks=8;config.jumpBufferTicks=8;config.dropThroughTicks=8;config.crouchEnabled=true;
     return config;
 }
-DetTypedStateSchema observations() {
-    return {viewSchema,1,{{10,false},{20,D{}},{30,std::uint32_t{0}},{40,std::uint32_t{0}},
+DetCharacterController2DConfig stepPolicy() {
+    auto config=policy();
+    config.collision.stepUp=true;config.collision.maxStepHeight=ratio(1,2);
+    config.collision.maxTriggerPairs=59;
+    return config;
+}
+DetTypedStateSchema observations(bool steps=false) {
+    DetTypedStateSchema schema{viewSchema,1,{{10,false},{20,D{}},{30,std::uint32_t{0}},{40,std::uint32_t{0}},
         {50,false},{60,false},{70,DetEntityRef{}},{80,DetEntityRef{}},
         {90,std::uint32_t{0}},{100,std::uint32_t{0}},{110,std::uint32_t{0}}}};
+    if(steps){schema.version=2;schema.fields.push_back({120,false});schema.fields.push_back({130,std::uint64_t{0}});}
+    return schema;
 }
 DetActorState actor(const DetCharacterController2DConfig& config,DetBodyMode2D mode,V position,V half,
         V velocity={},bool character=false,bool oneWay=false) {
@@ -214,6 +232,62 @@ bool configure(DeterministicSession& session) {
         && session.addEntity(131,actor(config,DetBodyMode2D::Static,{D::fromInt(32),ratio(9,8)},
             {D::fromInt(1),quarter})) && add(140,40,0,2,false,{half,{}});
 }
+bool configureSteps(DeterministicSession& session) {
+    const auto config=stepPolicy();
+    DetTypedStateSchema stats{statsSchema,2,{}};
+    for(std::uint32_t field=10;field<=80;field+=10)stats.fields.push_back({field,std::uint64_t{0}});
+    if(!session.registerTypedSchema(stats) || !session.registerGlobalState(statsSchema)
+        || !session.registerTypedSchema(observations(true))
+        || !session.registerLogicProfile(60,2,0x4443535445503031ULL))return false;
+    if(!session.registerSystem(10,0,[config](DetTickContext& context) {
+        if(context.input().commands.size()!=characters.size())return false;
+        for(std::size_t index=0;index<characters.size();++index) {
+            const auto& command=context.input().commands[index];
+            if(command.source!=characters[index] || command.sequence!=0 || command.type!=inputType
+                || command.payload.size()!=4 || command.payload[0]>4 || command.payload[1]>1
+                || command.payload[2]>1 || command.payload[3]>1)return false;
+            detCharacterInput2D(context,characters[index],config,{D::fromInt(static_cast<int>(command.payload[0])-2),
+                command.payload[1]!=0,command.payload[2]!=0,command.payload[3]!=0});
+        }
+        return true;
+    }) || !installDetCharacterController2D(session,config)
+        || !session.registerSystem(50,0,[config](DetTickContext& context) {
+            for(const auto id:characters) {
+                const auto movement=detCharacterState2D(context,id,config);
+                if(movement.stepped) {
+                    context.writeGlobal(statsSchema,80,context.readGlobal<std::uint64_t>(statsSchema,80)+1);
+                    context.write(id,viewSchema,130,context.read<std::uint64_t>(id,viewSchema,130)+1);
+                }
+                context.write(id,viewSchema,50,movement.grounded);
+                context.write(id,viewSchema,60,movement.crouched);
+                context.write(id,viewSchema,70,movement.support);
+                context.write(id,viewSchema,80,context.read<DetEntityRef>(id,config.collision.bodySchema,DetBodyIgnoredOneWay));
+                context.write(id,viewSchema,120,movement.stepped);
+            }
+            return true;
+        }))return false;
+    const auto quarter=ratio(1,4),half=ratio(1,2);
+    for(std::size_t index=0;index<characters.size();++index) {
+        const auto x=D::fromInt(static_cast<int>(index)*10);
+        if(!session.addEntity(characters[index],actor(config,DetBodyMode2D::Kinematic,
+            {x,ratio(3,4)},{quarter,half},{},true)))return false;
+        if(!session.addEntity(100+index*10,actor(config,DetBodyMode2D::Static,
+            {x,D{}},{D::fromInt(4),quarter})))return false;
+    }
+    // All dimensions are dyadic. These bodies are ordinary solid static boxes;
+    // authoring positions is initialization only, never a second tick motion writer.
+    for(int level=1;level<=3;++level) {
+        const auto top=quarter+D::fromInt(level)*quarter;
+        if(!session.addEntity(101+level,actor(config,DetBodyMode2D::Static,
+            {D::fromInt(level),(top-quarter)*half},{half,(top+quarter)*half})))return false;
+    }
+    return session.addEntity(111,actor(config,DetBodyMode2D::Static,{D::fromInt(11),ratio(3,8)},
+            {half,ratio(5,8)}))
+        && session.addEntity(121,actor(config,DetBodyMode2D::Static,{D::fromInt(21),ratio(1,8)},
+            {half,ratio(3,8)}))
+        && session.addEntity(122,actor(config,DetBodyMode2D::Static,{D::fromInt(21),ratio(3,2)},
+            {D::fromInt(2),ratio(1,8)}));
+}
 class StandardHost {
 public:
     StandardHost(const Options& opts,InputBoundary& boundary):host(ayt::app::defaultEngineHost()),
@@ -224,11 +298,11 @@ public:
             auto& modules=runtime.modules();
             require(modules.emplace<EntityComponentModule>().succeeded(),"Add component module");
             require(modules.emplace<EntityRuntimeModule>().succeeded(),"Add Entity runtime module");
-            DetHostedSceneRecipe recipe;recipe.config.applicationVersion=22;
+            DetHostedSceneRecipe recipe;recipe.config.applicationVersion=opts.steps?26:22;
             recipe.config.stepNumerator=1;recipe.config.stepDenominator=64;
-            recipe.config.contentHash=0x444343324c564c31ULL;
+            recipe.config.contentHash=opts.steps?0x4443535445503031ULL:0x444343324c564c31ULL;
             recipe.mode=opts.mode;recipe.replayPath=opts.replayPath;recipe.checkpointInterval=64;
-            recipe.configure=configure;
+            recipe.configure=opts.steps?configureSteps:configure;
             recipe.input=[&boundary](const auto& request,auto& packet) {
                 if(request.tick!=boundary.tick)return false;++boundary.calls;
                 packet={request.tick,request.version,{}};
@@ -268,30 +342,33 @@ private:
     ayt::app::EngineRuntimeScope scope;
     std::unique_ptr<ayt::scene::Scene> scene;
 };
-std::array<std::uint64_t,7> features(const DetSessionCheckpoint& checkpoint) {
+std::array<std::uint64_t,7> features(const DetSessionCheckpoint& checkpoint,bool steps=false) {
     std::array<std::uint64_t,7> result{};
     const auto& words=checkpoint.globals.at(statsSchema);
-    require(words.size()==result.size(),"Unexpected application stats shape");
-    std::copy(words.begin(),words.end(),result.begin());return result;
+    require(words.size()==result.size()+(steps?1:0),"Unexpected application stats shape");
+    std::copy_n(words.begin(),result.size(),result.begin());return result;
 }
-void trace(std::ostream& stream,const DetSessionCheckpoint& checkpoint) {
+void trace(std::ostream& stream,const DetSessionCheckpoint& checkpoint,bool steps=false) {
     stream<<checkpoint.nextTick<<' '<<detCheckpointHash(checkpoint);
-    const auto schema=observations();
+    const auto schema=observations(steps);
     for(const auto id:characters) {
         const auto& actor=checkpoint.actors.at(id);const auto& view=actor.blocks.at(viewSchema);
         stream<<' '<<id<<' '<<std::hex<<actor.pose.position[0]<<' '<<actor.pose.position[1]<<std::dec
             <<' '<<readDetState<bool>(schema,view,50)<<' '<<readDetState<bool>(schema,view,60)
             <<' '<<readDetState<DetEntityRef>(schema,view,70).value
             <<' '<<readDetState<DetEntityRef>(schema,view,80).value;
+        if(steps)stream<<' '<<readDetState<bool>(schema,view,120);
     }
     stream<<'\n';
 }
-void presentation(const DetSessionCheckpoint& checkpoint) {
+void presentation(const DetSessionCheckpoint& checkpoint,bool steps=false) {
     // Copies from a const committed checkpoint. Native floats and stdout are presentation only.
     std::cout<<"present tick="<<checkpoint.nextTick;
     for(const auto id:characters) {
         const auto& position=checkpoint.actors.at(id).pose.position;
         std::cout<<" actor="<<id<<" xy="<<D::fromBits(position[0]).toFloat()<<','<<D::fromBits(position[1]).toFloat();
+        if(steps)std::cout<<" stepped="<<readDetState<bool>(observations(true),checkpoint.actors.at(id).blocks.at(viewSchema),120)
+            <<" stepCount="<<readDetState<std::uint64_t>(observations(true),checkpoint.actors.at(id).blocks.at(viewSchema),130);
     }
     std::cout<<'\n';
 }
@@ -325,16 +402,24 @@ int run(const Options& opts) {
         if(after==before){require(controller.state()!=DetHostState::Completed,"Replay ended before requested ticks");continue;}
         require(after==before+1,"Host advanced more than one tick per frame");
         const auto checkpoint=controller.checkpoint();require(checkpoint.has_value(),controller.error());
-        if(traceFile.is_open())trace(traceFile,*checkpoint);++traceRows;
-        if(after%64==0)presentation(*checkpoint);
+        if(traceFile.is_open())trace(traceFile,*checkpoint,opts.steps);++traceRows;
+        if(after%64==0)presentation(*checkpoint,opts.steps);
     }
     const auto checkpoint=controller.checkpoint();require(checkpoint && checkpoint->nextTick==opts.ticks,"Final tick mismatch");
     if(opts.mode==DetHostMode::Replay)require(controller.state()==DetHostState::Completed,"Requested ticks do not reach replay completion");
-    const auto counts=features(*checkpoint);
+    const auto counts=features(*checkpoint,opts.steps);
     // Replay may have been recorded with a custom script; it must not assume built-in inputs.
-    const bool featureCheck=opts.mode!=DetHostMode::Replay && opts.commands.empty() && opts.ticks>=512;
+    const bool featureCheck=!opts.steps && opts.mode!=DetHostMode::Replay && opts.commands.empty() && opts.ticks>=512;
     if(featureCheck)for(std::size_t index=0;index<counts.size();++index)
         require(counts[index]>0,std::string("Built-in feature was not observed: ")+featureNames[index]);
+    const auto stepCount=opts.steps?checkpoint->globals.at(statsSchema).at(7):0;
+    const bool stepCheck=opts.steps && opts.mode!=DetHostMode::Replay && opts.commands.empty() && opts.ticks>=128;
+    if(stepCheck) {
+        require(readDetState<std::uint64_t>(observations(true),checkpoint->actors.at(characters[0]).blocks.at(viewSchema),130)>=3,
+            "Built-in stairs did not observe three committed character10 steps");
+        require(checkpoint->actors.at(characters[0]).pose.position[1]==ratio(3,2).bits(),
+            "Built-in stairs did not settle on the third static top");
+    }
     if(opts.mode==DetHostMode::Replay)require(boundary.calls==0,"Replay invoked live input acquisition");
     if(opts.mode==DetHostMode::Record)require(controller.stop(),controller.error());
     const auto hash=detCheckpointHash(*checkpoint);
@@ -345,7 +430,18 @@ int run(const Options& opts) {
         <<",\"inputCallbacks\":"<<boundary.calls<<",\"finalHash\":"<<quoted(std::to_string(hash))
         <<",\"recordingPath\":"<<quoted(recording)<<",\"builtInFeatureChecks\":"<<(featureCheck?"true":"false")<<",\"features\":{";
     for(std::size_t index=0;index<counts.size();++index){if(index)summary<<',';summary<<quoted(featureNames[index])<<':'<<counts[index];}
-    summary<<"}}\n";
+    summary<<'}';
+    if(opts.steps) {
+        summary<<",\"scenario\":\"steps\",\"controllerProfile\":3,\"collisionProfile\":4,\"steppedTicks\":"
+            <<stepCount<<",\"builtInStepChecks\":"<<(stepCheck?"true":"false")<<",\"characterStepCounts\":{";
+        for(std::size_t index=0;index<characters.size();++index) {
+            if(index)summary<<',';
+            summary<<quoted(std::to_string(characters[index]))<<':'
+                <<readDetState<std::uint64_t>(observations(true),checkpoint->actors.at(characters[index]).blocks.at(viewSchema),130);
+        }
+        summary<<'}';
+    }
+    summary<<"}\n";
     if(!opts.output.empty()) {
         const auto bytes=encodeDetCheckpoint(*checkpoint);
         state.write(reinterpret_cast<const char*>(bytes.data()),static_cast<std::streamsize>(bytes.size()));
@@ -358,7 +454,7 @@ int run(const Options& opts) {
 int main(int argc,char** argv) {
     if(argc==2 && std::string_view(argv[1])=="--help") {
         std::cout<<"AYEntity_DetCharacterExample [--record fresh.rpl | --replay recorded_000.rpl] [--seek tick]"
-            " [--ticks 512] [--frame-divisor 64|128] [--commands file] [--output freshPrefix]\n";return 0;
+            " [--scenario advanced|steps] [--ticks 512] [--frame-divisor 64|128] [--commands file] [--output freshPrefix]\n";return 0;
     }
     Options opts;
     try{opts=options(argc,argv);}catch(const std::exception& error){std::cerr<<error.what()<<'\n';return 2;}

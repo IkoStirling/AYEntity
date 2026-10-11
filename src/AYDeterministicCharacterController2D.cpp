@@ -1,4 +1,5 @@
 #include <AYEntity/DeterministicCharacterController2D.h>
+#include "detail/DetCharacterCollision2D.h"
 #include <algorithm>
 #include <array>
 #include <set>
@@ -8,8 +9,10 @@ namespace ayt::entity {
 namespace {
 using D=math::DetFloat32;
 using V=math::DetVec2;
-constexpr std::uint64_t logicHash=0x4443433244503031ull,advancedLogicHash=0x4443433244503032ull;
-std::uint32_t profile(const DetCharacterController2DConfig& c){return c.advanced?kDetCharacterController2DAdvancedProfileVersion:kDetCharacterController2DProfileVersion;}
+constexpr std::uint64_t logicHash=0x4443433244503031ull,advancedLogicHash=0x4443433244503032ull,
+    stepLogicHash=0x4443433244503033ull;
+std::uint32_t profile(const DetCharacterController2DConfig& c){return c.collision.stepUp?kDetCharacterController2DStepProfileVersion:
+    (c.advanced?kDetCharacterController2DAdvancedProfileVersion:kDetCharacterController2DProfileVersion);}
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic character 2D: invalid policy, character or support state");}
 D abs(D value){return value<D{}?-value:value;}
 bool zero(V value){return value.x.bits()==0 && value.y.bits()==0;}
@@ -39,6 +42,8 @@ bool validConfig(const DetCharacterController2DConfig& c) {
         || p.maxContactIterations<1 || p.maxContactIterations>256
         || static_cast<std::uint32_t>(c.leaveVelocity)>1)return false;
     const auto maximum=D::fromInt(1000000),length=D::fromInt(1000);
+    if(p.stepUp?(!c.advanced || p.maxTriggerPairs>59 || !bounded(p.maxStepHeight,length) || !(p.maxStepHeight>D{})):
+        p.maxStepHeight.bits()!=0)return false;
     if(!bounded(c.maxHorizontalSpeed,maximum) || !bounded(c.acceleration,maximum)
         || !bounded(c.deceleration,maximum) || !bounded(c.gravity,maximum)
         || !bounded(c.jumpSpeed,maximum) || !bounded(c.maxFallSpeed,maximum)
@@ -64,6 +69,7 @@ DetTypedStateSchema stateSchema(const DetCharacterController2DConfig& c) {
             {DetCharacterDropTick,std::uint64_t{0}}}};
         result.fields.insert(result.fields.end(),fields.begin(),fields.end());
     }
+    if(c.collision.stepUp)result.fields.push_back({DetCharacterStepped,false});
     return result;
 }
 DetTypedStateSchema policySchema(const DetCharacterController2DConfig& c) {
@@ -81,19 +87,26 @@ DetTypedStateSchema policySchema(const DetCharacterController2DConfig& c) {
             {28,c.dropThroughTicks},{29,c.crouchEnabled},{30,c.crouchHeightScale},{31,true}}};
         result.fields.insert(result.fields.end(),fields.begin(),fields.end());
     }
+    if(p.stepUp){result.fields.push_back({32,true});result.fields.push_back({33,p.maxStepHeight});}
     return result;
 }
 DetTypedStateSchema bodySchema(const DetCharacterController2DConfig& c) {
-    DetTypedStateSchema result{c.collision.bodySchema,c.collision.oneWayPlatforms?kDetCollision2DOneWayProfileVersion:kDetCollision2DExtendedProfileVersion,{
+    DetTypedStateSchema result{c.collision.bodySchema,c.collision.stepUp?kDetCollision2DStepProfileVersion:
+        (c.collision.oneWayPlatforms?kDetCollision2DOneWayProfileVersion:kDetCollision2DExtendedProfileVersion),{
         {DetBodyMode,std::uint32_t{0}},{DetBodyHalf,V{}},{DetBodyOffset,V{}},{DetBodyVelocity,V{}},
         {DetBodyLayer,std::uint32_t{1}},{DetBodyMask,UINT32_MAX},{DetBodyTrigger,false}}};
     if(c.collision.oneWayPlatforms) {
         result.fields.push_back({DetBodyOneWay,false});
         result.fields.push_back({DetBodyIgnoredOneWay,DetEntityRef{}});
     }
+    if(c.collision.stepUp){result.fields.push_back({DetBodyStepRequested,false});result.fields.push_back({DetBodyStepped,false});}
     return result;
 }
 void validateState(const DetCharacterState2D& s,const DetCharacterController2DConfig& c) {
+    // A static step never carries momentum, including the fresh retired-support
+    // boundary. Preserve the existing allowance for represented signed zero.
+    if(s.stepped && (!c.collision.stepUp || !s.enabled || !s.grounded
+        || !s.supportVelocity.x.isZero() || !s.supportVelocity.y.isZero()))invalid();
     if(!s.velocity.isFinite() || !s.supportVelocity.isFinite()
         || abs(s.velocity.x)>c.maxHorizontalSpeed+c.maxPlatformSpeed
         || abs(s.velocity.y)>c.jumpSpeed+c.maxFallSpeed+c.maxPlatformSpeed
@@ -183,9 +196,17 @@ void clearInternal(DetTickContext& context,SimEntityId id,const DetCharacterCont
     context.write(id,c.stateSchema,DetCharacterJumped,false);
     context.write(id,c.stateSchema,DetCharacterSnapped,false);
     if(c.advanced)context.write(id,c.stateSchema,DetCharacterDropStarted,false);
+    if(c.collision.stepUp){
+        context.write(id,c.collision.bodySchema,DetBodyStepRequested,false);
+        context.write(id,c.collision.bodySchema,DetBodyStepped,false);
+    }
 }
 void clearDisabled(DetTickContext& context,SimEntityId id,const DetCharacterController2DConfig& c) {
     for(const auto& field:stateSchema(c).fields)std::visit([&]<class T>(const T& value){context.write(id,c.stateSchema,field.id,value);},field.initial);
+    if(c.collision.stepUp){
+        context.write(id,c.collision.bodySchema,DetBodyStepRequested,false);
+        context.write(id,c.collision.bodySchema,DetBodyStepped,false);
+    }
 }
 D approach(D value,D target,D acceleration,D deceleration,D dt) {
     const bool same=value.isZero() || target.isZero() || (value<D{})==(target<D{});
@@ -256,6 +277,11 @@ void preAdvanced(DetTickContext& context,const DetCharacterController2DConfig& c
     for(auto id:context.entities()) {
         auto state=detCharacterState2D(context,id,c);
         if(!state.enabled){clearDisabled(context,id,c);context.write(id,c.collision.bodySchema,DetBodyIgnoredOneWay,DetEntityRef{});continue;}
+        if(c.collision.stepUp){
+            context.write(id,c.stateSchema,DetCharacterStepped,false);
+            context.write(id,c.collision.bodySchema,DetBodyStepRequested,false);
+            context.write(id,c.collision.bodySchema,DetBodyStepped,false);
+        }
         auto* actor=locate(scene,id);if(!actor || actor->body.mode!=DetBodyMode2D::Kinematic || actor->body.trigger)invalid();
         shape(context,*actor,scene,c,state);
         auto ignored=actor->body.ignoredOneWay;
@@ -332,6 +358,11 @@ void preAdvanced(DetTickContext& context,const DetCharacterController2DConfig& c
         context.write(id,c.stateSchema,DetCharacterJumpBufferRemaining,buffer);
         context.write(id,c.stateSchema,DetCharacterDropRemaining,dropRemaining);
         context.write(id,c.collision.bodySchema,DetBodyVelocity,world);
+        if(c.collision.stepUp) {
+            const bool eligible=contact && contact->body.mode==DetBodyMode2D::Static && !contact->body.oneWay
+                && !jumped && !dropped && !ignored.value && own.y<=D{} && !own.x.isZero();
+            context.write(id,c.collision.bodySchema,DetBodyStepRequested,eligible);
+        }
     }
 }
 void postAdvanced(DetTickContext& context,const DetCharacterController2DConfig& c) {
@@ -346,6 +377,11 @@ void postAdvanced(DetTickContext& context,const DetCharacterController2DConfig& 
         const auto dropped=context.read<bool>(id,c.stateSchema,DetCharacterDropStarted);
         const auto snapped=context.read<bool>(id,c.stateSchema,DetCharacterSnapped);
         const auto* grounded=jumped || dropped?nullptr:support(*actor,scene,c,actor->body.velocity,true);
+        if(c.collision.stepUp) {
+            const bool stepped=context.read<bool>(id,c.collision.bodySchema,DetBodyStepped);
+            if(stepped && (!grounded || grounded->body.mode!=DetBodyMode2D::Static || grounded->body.oneWay))invalid();
+            context.write(id,c.stateSchema,DetCharacterStepped,stepped);
+        }
         V own=actor->body.velocity-carry;if(!own.isFinite())invalid();
         own.x=std::clamp(own.x,std::min(D{},intent.x),std::max(D{},intent.x));
         if(grounded)own.y=D{};
@@ -471,6 +507,7 @@ void validateCheckpoint(const DetSessionCheckpoint& checkpoint,const DetCharacte
             body.oneWay=read.operator()<bool>(DetBodyOneWay);
             body.ignoredOneWay=read.operator()<DetEntityRef>(DetBodyIgnoredOneWay);
         }
+        if(c.collision.stepUp && (read.operator()<bool>(DetBodyStepRequested) || read.operator()<bool>(DetBodyStepped)))invalid();
         if(body.mode==DetBodyMode2D::Disabled)continue;
         const V position{D::fromBits(actor.pose.position[0]),D::fromBits(actor.pose.position[1])};
         auto box=math::DetAabb2::fromCenterHalf(position+body.offset,body.half);
@@ -497,12 +534,15 @@ void validateCheckpoint(const DetSessionCheckpoint& checkpoint,const DetCharacte
             value.coyoteSupportY=read.operator()<D>(DetCharacterCoyoteSupportY);
             value.dropTick=read.operator()<std::uint64_t>(DetCharacterDropTick);
         }
+        if(c.collision.stepUp)value.stepped=read.operator()<bool>(DetCharacterStepped);
         validateState(value,c);
+        if(value.stepped && checkpoint.nextTick==0)invalid();
         if(!value.enabled){
             if(words!=states.defaults() || (c.advanced && std::get<DetEntityRef>(bodyLayout.read(actor.blocks.at(c.collision.bodySchema),DetBodyIgnoredOneWay)).value))invalid();
             continue;
         }
         const auto* self=locate(scene,id);if(!self || self->body.mode!=DetBodyMode2D::Kinematic || self->body.trigger)invalid();
+        if(value.stepped && !self->body.velocity.y.isZero())invalid();
         const auto target=read.operator()<D>(DetCharacterTargetSpeed);
         if(abs(target)>c.maxHorizontalSpeed || read.operator()<bool>(DetCharacterJumpRequested)
             || !zero(read.operator()<V>(DetCharacterAppliedCarry)) || !zero(read.operator()<V>(DetCharacterIntentVelocity))
@@ -546,13 +586,14 @@ void validateCheckpoint(const DetSessionCheckpoint& checkpoint,const DetCharacte
             continue;
         }
         validatePlatform(*floor,c);
+        if(value.stepped && (floor->body.mode!=DetBodyMode2D::Static || floor->body.oneWay))invalid();
         if(!overTop(*self,*floor,c.groundContactTolerance) || !equal(value.supportVelocity,floor->body.velocity)
             || (checkpoint.nextTick && self->body.velocity.y-floor->body.velocity.y>D{}))invalid();
     }
 }
 }
 std::vector<std::uint64_t> detCharacterState2D(const DetCharacterController2DConfig& config,const DetCharacterState2D& state) {
-    if(!validConfig(config))invalid();validateState(state,config);const auto schema=stateSchema(config);
+    if(!validConfig(config) || state.stepped)invalid();validateState(state,config);const auto schema=stateSchema(config);
     auto words=detStateDefaults(schema);
     writeDetState(schema,words,DetCharacterEnabled,state.enabled);
     writeDetState(schema,words,DetCharacterGrounded,state.grounded);
@@ -598,6 +639,7 @@ DetCharacterState2D detCharacterState2D(DetTickContext& context,SimEntityId acto
         result.coyoteSupportY=context.read<D>(actor,s,DetCharacterCoyoteSupportY);
         result.dropTick=context.read<std::uint64_t>(actor,s,DetCharacterDropTick);
     }
+    if(config.collision.stepUp)result.stepped=context.read<bool>(actor,s,DetCharacterStepped);
     return result;
 }
 void detCharacterInput2D(DetTickContext& context,SimEntityId actor,const DetCharacterController2DConfig& config,DetCharacterInput2D input) {
@@ -623,8 +665,8 @@ bool installDetCharacterController2D(DeterministicSession& session,DetCharacterC
     const DetStateLayout stateLayout(state),policyLayout(policy),bodyLayout(bodySchema(config));
     if(!(session.registerTypedSchema(state) && session.registerTypedSchema(policy)
         && session.registerGlobalState(config.policySchema)
-        && installDetCollision2D(session,config.collision)
-        && session.registerLogicProfile(config.logicProfileId,profile(config),config.advanced?advancedLogicHash:logicHash)
+        && detail::installDetCharacterCollision2D(session,config.collision)
+        && session.registerLogicProfile(config.logicProfileId,profile(config),config.collision.stepUp?stepLogicHash:(config.advanced?advancedLogicHash:logicHash))
         && session.registerValidator(config.validatorId,profile(config),
             [config,stateLayout,policyLayout,bodyLayout](const auto& checkpoint,std::string& error){
                 try {validateCheckpoint(checkpoint,config,stateLayout,policyLayout,bodyLayout);return true;}

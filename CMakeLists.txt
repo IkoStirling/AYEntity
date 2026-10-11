@@ -125,6 +125,7 @@ if(TARGET AYReplay)
         include(unittest/CharacterController.cmake)
         include(unittest/CharacterAdvanced.cmake)
         include(unittest/CharacterCampaign.cmake)
+        include(unittest/CharacterSteps.cmake)
     endif()
 endif()
 
@@ -150,6 +151,7 @@ function(ay_entity_add_determinism_host_integration)
         endif()
     endif()
       if(BUILD_TESTING)
+        ay_entity_add_character_steps_host_check()
         add_test(NAME AYEntity_CharacterAdvancedHostExample
             COMMAND ${CMAKE_COMMAND} -DEXAMPLE=$<TARGET_FILE:AYEntity_DetCharacterExample>
                 -DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/character-advanced-host-example

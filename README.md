@@ -714,7 +714,45 @@ remains historical; the final ASan-budget registration is
 `7172956d6d24c6d8bca15d869ff648e585ec5f6a3f8e3abcf3bf5b2c4c1ef506`.
 Stage23 applicable short/boundary/standard acceptance is **LocalPassed**; sustained
 acceptance is **UserRequestedStop**, with **NativeDeferred to Final VM**.
-Final SDK doctor actually exited0 (94 capabilities/53 modules/51 search cases/300 entry symbols, baseline28, 0 errors/0 warnings; completion observed2026-10-11T09:53:56Z). It checks catalog structure/references/symbols, not simulation or native execution. Commits remain root-owned pending steps.
+Final SDK doctor actually exited0 (94 capabilities/53 modules/51 search cases/300 entry symbols, baseline28, 0 errors/0 warnings; completion observed2026-10-11T09:53:56Z). It checks catalog structure/references/symbols, not simulation or native execution. Stage23 verified commits are local AYEntity `6c02dc0ef222b143967aa4d27d7a50e2e6d6770d` and root `1f6ed71320e710ad7fb228084b17db39538b6b0c`; historical evidence source pins remain unchanged.
 See
 [Stage23](../../AYDocs/DETERMINISTIC-CHARACTER-CAMPAIGN-STAGE23.md) for exact CLI,
 budgets, witness scope, completed evidence and remaining acceptance items.
+
+
+## Stage26: explicit static step-up (Release locally passed)
+
+The character facade can explicitly select controller3/collision4 with
+`advanced=true`, `collision.oneWayPlatforms=true`, `collision.stepUp=true` and a
+finite software `0 < collision.maxStepHeight <= 1000`. Profile4 allows at most59
+current+transient trigger pairs; profiles1..3 retain their previous fields/bytes
+and capacities. The public collision-only installer refuses this facade-owned
+protocol before registration. Actor initialization leaves `state.stepped=false`.
+
+Grounded ordinary-Static walking may try one eligible static step per tick,
+selected from stable actor-ID order by `tick % candidateCount`. The sole solver
+first verifies the full ordinary world path, then tries whole-world up/across/down
+in dt/4,dt/2,dt/4 scratch phases. Other bodies keep advancing. Exact represented
+foot/top contact, positive target X overlap and better horizontal progress are
+required; low clearance, no improvement, dynamic/one-way response or trial
+geometry/contact/trigger budget failure retains the entire ordinary path.
+Allocation or unknown faults still propagate. No partial pose jump or second
+motion owner is installed. Trigger detection uses the complete selected path.
+
+Read the committed `DetCharacterState2D::stepped` output (typed Bool280); it is
+not an authoring switch. Body Requested100/Stepped110 are internal and both zero
+at committed boundaries. The profile4 history adds a ninth height policy field;
+its pair bound59 keeps the128-field limit. Policy/code/schema identity is explicit;
+no numeric, geometry, event, input/checkpoint envelope or replay wire is upgraded.
+
+The standard Host executable adds `--scenario steps`, including three1/4 static
+stairs, over-height and low-roof obstacles, registered actual step counters and
+committed-state presentation. Default/`--scenario advanced` retains the Stage22
+scene and output. Steps uses its own application/content identity. Necessary
+`AYEntity_CharacterStepsChecks` and `AYEntity_CharacterStepsHostExample` gates
+are **LocalPassed** in Release (Steps0.15571s, Host128ticks0.393514s; actor10 actual3 steps, other actors0, final centerY3/2). Old controller/advanced gates also passed with legacy hash9155686912840316892 unchanged. Final native VM remains deferred. No new long campaign or
+cross-configuration matrix is requested. See
+[Stage26](../../AYDocs/DETERMINISTIC-CHARACTER-STEP-UP-STAGE26.md) and
+[example instructions](examples/detcharacter/README.md).
+
+Actual Stage26 source/outputs and the preserved localized-LastTest evidence-reader failure are recorded in [acceptance.json](../../out/detstep26-20261011/acceptance.json) and Stage26. The reader correction did not rerun products; before/after12 source/example SHA checks and SDK doctor exit0 passed. Full CP compares actual production paths, not an independent full-byte golden. No new default Host, Debug/ASan or native acceptance is inferred.
