@@ -54,3 +54,32 @@ and none is an independent whole-state golden or history authentication.
 Native final VM remains Deferred; no broad matrix or long campaign is implied.
 Update this document/README/SDK when grammar, prepared policy, file protections,
 typed output, runtime acquisition or evidence scope changes.
+
+## §5 Stage56 complete Control authoring boundary
+
+Level10 tools remain adapters over the public parser/preparation, not a parallel
+Control implementation. Full controls table follows brains and uses exact software
+Float32 bits and finite windows/Booleans. Initial roles require advanced enabled
+ordinary Kinematic Character and owner disjointness with Brain; optional Respawn
+is the exact prepared complete policy, not a hash or inferred HP-recovery option.
+Actual factories reserve used namespaces and real fresh Session seal enforces
+aggregate limits. Old1..9 branches/default bytes stay unchanged, new nonempty
+rows refuse old formats rather than upgrade their identity.
+
+Inspect shows all controls fields/UInt64 actor strings/exact bits; canonicalize
+preserves explicit version/complete content to fresh output. No command executes
+the finite window, polls future geometry, mutates inputs, owns a tick, decodes
+future CP history or creates a save. Actual Level10/CLI/standard Host runtime is
+actualLocalPassed: CLI1.37562s/newLevel10 .223617s/standardHost13.2032s; actual
+newtext/cooked is Levelfixture, Resource1.00207s is only old-sample compatibility.
+Stage55core evidence stays separate. Receipts stage56-levels2/levels3/host2 and stage56-actual-freeze.json bind
+per-run unchanged sources. levels2 remains overall Failed, with three genuine old
+case passes retained without rerun; only new10 was retried. First new fixture
+C2677/C2661 came from quoted-helper ADL (renamed jsonQuote); later CRLF source1007
+was wrongly equated with canonical LF980, corrected using independent previously
+accepted Stage54 canonical bytes/FNV3155852323544543593 while retaining original
+source/content fingerprints. Production behavior/hand oracle unchanged. First
+standard build exit1 had no compiler diagnostic; cause remains unconfirmed.
+All three failed receipts remain. The new test changed across batches, so whole
+source snapshots are not claimed identical between them. Stage55 standalone
+core evidence remains separate historical scope.

@@ -7,6 +7,7 @@
 #include <AYEntity/DeterministicVitality2D.h>
 #include <AYEntity/DeterministicAttack2D.h>
 #include <AYEntity/DeterministicBrain2D.h>
+#include <AYEntity/DeterministicCharacterControl2D.h>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -33,6 +34,8 @@ inline constexpr std::uint32_t kDetLevel2DMovingTriggerProfileVersion=7;
 inline constexpr std::uint32_t kDetLevel2DAttackProfileVersion=8;
 /// @brief Fixed patrol/chase/attack intent authoring; formats1..8 keep their literal bytes.
 inline constexpr std::uint32_t kDetLevel2DBrainProfileVersion=9;
+/// @brief Finite registered Character Control authoring; formats1..9 retain their bytes.
+inline constexpr std::uint32_t kDetLevel2DCharacterControlProfileVersion=10;
 /// @brief Bound on original ASCII source bytes, before decoding.
 inline constexpr std::size_t kDetLevel2DMaxTextBytes=65536;
 /// @brief Bound on complete field-wise semantic bytes entering the manifest.
@@ -119,6 +122,9 @@ struct DetLevel2D {
     /// Format9: sorted enabled character owners with fixed primary HP/Attack targets.
     /// Brain owns these actors' movement/held inputs; empty installs no Brain.
     std::vector<DetBrainOwner2D> brainOwners;
+    /// Format10: sorted enabled character owners; disjoint from all brainOwners.
+    /// Empty installs no Control. Dash is a finite target-speed override, not a pose/distance writer.
+    std::vector<DetCharacterControlOwner2D> characterControlOwners;
 };
 /// @brief Application-owned registration ranges; adjust these before combining other schemas/systems.
 /// @note Defaults reserve schemas 8..23 for paths,32..47 for content; path pre 11..18/post 41..48.
@@ -149,8 +155,10 @@ struct DetLevel2DOptions {
         attackSystemId=5,attackValidatorId=77,attackLogicProfileId=77;
     std::uint32_t brainStateSchema=272,brainPolicySchemaBase=273,
         brainSystemId=3,brainValidatorId=78,brainLogicProfileId=78;
+    std::uint32_t characterControlInputSchema=304,characterControlStateSchema=305,characterControlPolicySchemaBase=306,
+        characterControlSystemId=15,characterControlValidatorId=79,characterControlLogicProfileId=79;
 };
-/// @brief Strict ASCII AYDLEVEL1..9 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
+/// @brief Strict ASCII AYDLEVEL1..10 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
 /// @note Rejects unknown/trailing tokens, nonfinite values, invalid roles/policies and initial geometry.
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,
     const DetLevel2DOptions& options={});
@@ -167,7 +175,7 @@ DetSessionConfig detLevelSessionConfig(const DetLevel2D& level);
 /// @brief Resolve the registered path binding used by configure; unknown IDs/options throw.
 DetPathMotion2DConfig detLevelPathConfig2D(const DetLevel2D& level,std::uint32_t path,
     const DetLevel2DOptions& options={});
-/// @brief Resolve complete registered Actions authority from format2..8 content.
+/// @brief Resolve complete registered Actions authority from format2 and later content.
 /// @note Pure gameplay or HP counters may resolve a zero-target authority. Otherwise empty
 /// action content, invalid references/options or unsupported controls throw.
 DetActions2DConfig detLevelActionsConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
@@ -201,6 +209,9 @@ DetAttack2DConfig detLevelAttackConfig2D(const DetLevel2D& level,const DetLevel2
 /// @brief Resolve Brain1 over the exact prepared Character/Attack/HP authority.
 /// @note Empty Brain content throws. Namespaces use actual facade factories and fresh preflight.
 DetBrain2DConfig detLevelBrainConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
+/// @brief Resolve Control1 over the exact prepared Character and optional complete Respawn policy.
+/// @note Empty controls throw; actual factories and fresh seal enforce roles, full policy and joint capacity.
+DetCharacterControl2DConfig detLevelCharacterControlConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
 /** @details Configure initial level authority in a fresh Session; does not seal or own the tick loop.
  * @note Set Host recipe.config=detLevelSessionConfig(level), then call this from recipe.configure.
  * Install an earlier canonical input system separately. Collision remains the sole XY pose writer.
@@ -273,6 +284,21 @@ DetBrain2DConfig detLevelBrainConfig2D(const DetLevel2D& level,const DetLevel2DO
  * observations describe the previous Attack callback, not the later checkpoint phase.
  * An empty table installs no Brain and its getter throws. Formats1..8 reject nonempty
  * brainOwners without adding any fields/versions/default bytes to their branches.
+ * Format10 appends controls/control records after brains. Matching advanced Character
+ * and optional complete Respawn are bound through the real Control factories;
+ * installation follows Brain and precedes the destination hook/identity/actors.
+ * Brain and Control owner sets are checked disjoint before installation. Input
+ * uses only detCharacterControlInput2D for these actors and precedes Control15;
+ * Control precedes character pre at the same collision priority. Initial controls
+ * have zero raw/emitted samples and no held/window history. Retirement is legal;
+ * present owners remain enabled. An actual Accepted relocation cancels a remaining
+ * override on the next Control decision, retaining its original ready deadline.
+ * No implicit death binding is authored; application cancellation remains explicit.
+ * Actual acceleration, gravity, carrier and walls remain the sole Character/collision
+ * pipeline. No exact distance, instant velocity, no-gravity or HP authority is added.
+ * Empty controls install none; formats1..9 reject nonempty owners and preserve
+ * literal old semantic/default branches. Separate Control8KiB/9-chunk and real
+ * joint64-schema budgets apply; Options reserve only actual selected descriptors.
  * Entire tables and nested policies enter identity, not only a content hash.
  * Flow precedes Interaction and every path/character pre at collision.priority;
  * application Progress writes must precede Flow. Empty counters forbids objective,

@@ -50,6 +50,7 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         <<",\"attackOwnerCount\":"<<level.attackOwners.size()
         <<",\"attackCancelOnRecovery\":"<<(level.attackCancelOnRecovery?"true":"false")
         <<",\"brainOwnerCount\":"<<level.brainOwners.size()
+        <<",\"controlOwnerCount\":"<<level.characterControlOwners.size()
         <<",\"actors\":[";
     bool first=true;
     for(const auto& actor:level.actors) {
@@ -145,6 +146,11 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
             <<",\"patrolSpeedBits\":"<<json(bits(owner.patrolSpeed.bits()))<<",\"chaseSpeedBits\":"<<json(bits(owner.chaseSpeed.bits()))
             <<",\"senseHalfExtentBits\":["<<json(bits(owner.senseHalfExtent.x.bits()))<<','<<json(bits(owner.senseHalfExtent.y.bits()))
             <<"],\"attackDistanceBits\":"<<json(bits(owner.attackDistance.bits()))<<",\"initialRight\":"<<(owner.initialRight?"true":"false")<<'}';}
+    std::cout<<"],\"controls\":[";first=true;
+    for(const auto& owner:level.characterControlOwners){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"actor\":"<<json(std::to_string(owner.actor))<<",\"dashSpeedBits\":"<<json(bits(owner.dashSpeed.bits()))
+            <<",\"durationTicks\":"<<owner.durationTicks<<",\"cooldownTicks\":"<<owner.cooldownTicks
+            <<",\"groundOnly\":"<<(owner.groundOnly?"true":"false")<<",\"initialFacingRight\":"<<(owner.initialFacingRight?"true":"false")<<'}';}
     std::cout<<"]}\n";
 }
 int run(int argc,char** argv) {

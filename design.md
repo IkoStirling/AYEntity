@@ -2805,3 +2805,64 @@ brief, not production behavior or weakened oracle. Old successful gates did not
 repeat. No new numeric/Character/Collision/checkpoint/save/replay profile, Level
 grammar, Host Control scene, Debug/ASan/backend matrix or long-run/native result;
 final native VM deferred.
+
+## Stage56: field-wise authored Control identity and Host authority
+
+Version10 adds0..8 sorted Character Control owners after Brain, with exact dash
+bits/duration/cooldown/groundOnly/initialFacing. AYDLV010 binds complete semantics;
+old1..9 default/writer/semantic branches stay unchanged and reject nonempty new
+tables. Preparation uses actual Control mutable/policy factories over exact
+advanced Character/body/optional full Respawn, rejects actor-role and Brain-owner
+intersection, and reserves actual selected schemas/system/validator/logic IDs.
+Defaults input304/state305/policy306+/system15/validator&logic79 apply only when
+used. Source64KiB/Level8KiB/realjoint64schema capacities remain; Control8KiB/9chunks
+is separate policy ceiling, not additional aggregate capacity.
+
+Install selected Control after Brain before destination-only hook/identity/actors.
+Empty installs none; detLevelCharacterControlConfig2D throws for no content. These
+are immutable registration/content contracts, not mutable input migration.
+App input4 owns only Hero complete Control samples and Attack held/facing; Enemy
+Brain3 owns its Character/Attack inputs. No second writer, mutable capture or
+tick owner. Control15 at collision priority hands target speed/normal inputs to
+actual Character, retaining physical acceleration/gravity/support/wall response.
+groundOnly observes previous committed ground; explicit cancel and held release
+are application policy, not inferred from HP or future probe. Accepted relocation
+has the original Control next-decision cancellation and current-post exception.
+
+Standard default-OFF Control Host app56/inputVersion7/logic81 has eight bytes,
+not Stage52 Manual/EnemyHeld or Stage54 six-byte packet. External console/script
+acquisition precedes immutable canonical encode; presentation reads committed
+copies. It runs64ticks, active-save4 and load/seek60row suffix, full six-path
+state/trace/save comparison and selected hand movement/window checks. Live file
+I/O outside Sim, actual Host restore/resume on load; Record cannot rewind,
+Replay acquires no Live input. Outputs/paths preserve existing fresh-only/ASCII
+boundary. Execution cannot be inferred from source freeze or fresh seal.
+
+Necessary local MSVC Release7 unique cases passed: LevelCharacterControl10Checks
+0.223617s, old9 1.17518s/old7 .654778s/Cooked .116577s, standard ControlHost
+13.2032s, CLI1.37562s and existing Resource1.00207s. New Level10 actual16ticks/
+17CP,16selected hand rows/46advances/33CP comparisons/25authoring rejects,
+real file/text/cooked roundtrip and active restore. Optional Respawn checks initial
+seal/getter/restore binding only, not a new Accepted-motion exercise.
+Actual64tick active-save4 six-path full state/trace/suffix/save equality passed;
+load/seek60rows, stdin68rows with suffix8 of60, Replay0input calls. Control has
+4starts/11requests/7denials/1cancel, ends Active/ready73; HeroHP96/hurts2/attacks2/
+attempts2 and EnemyHP94/alive/hurts2/attacks2/attempts2/cancel0/64decisions2pulses.
+FinalHash5877846431418660777/content15814538279326814389 are diagnostics, not
+independent state goldens or authentication. Existing Resource27CP/14negatives
+uses old samples, not new10 combat Pak execution. Selected hand fields and whole
+actual CP execution equality are separate scopes; final native VM deferred.
+No new matrix/Debug/ASan/long/native run or numeric/Character/Collision/checkpoint/
+save/replay wire change is claimed; explicit Level profile10 is separate.
+
+Receipts stage56-levels2/levels3/host2 and stage56-actual-freeze.json bind
+per-run unchanged sources. levels2 remains overall Failed, with three genuine old
+case passes retained without rerun; only new10 was retried. First new fixture
+C2677/C2661 came from quoted-helper ADL (renamed jsonQuote); later CRLF source1007
+was wrongly equated with canonical LF980, corrected using independent previously
+accepted Stage54 canonical bytes/FNV3155852323544543593 while retaining original
+source/content fingerprints. Production behavior/hand oracle unchanged. First
+standard build exit1 had no compiler diagnostic; cause remains unconfirmed.
+All three failed receipts remain. The new test changed across batches, so whole
+source snapshots are not claimed identical between them. Stage55 standalone
+core evidence remains separate historical scope.

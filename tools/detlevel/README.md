@@ -236,3 +236,32 @@ CLI passed1.19754s, Level9 authoring1.24213s with real text/cooked roundtrip. Ol
 old7/Cooked/Resource compatibility passed, the latter using old samples rather
 than new9 Enemy Pak execution. SourcesUnchanged, no production fix, matrix or
 long-run; native final VM deferred. See [tool design](design.md) for boundaries.
+
+## Stage56: finite Character Control authoring
+
+Format10 appends after brains:
+
+```text
+controls <count:u32>
+control <actor:u64> <dashSpeed:bits8> <durationTicks:u32> <cooldownTicks:u32> <groundOnly:0|1> <initialFacingRight:0|1>
+```
+
+Count0..8 sorted enabled solid Kinematic advanced Character owners are disjoint
+from Brain owners. Exact positive dashSpeed<=maximum, duration1..65535 and
+cooldown0..65535 use actual Control policy validation. Inspect exposes
+`controlOwnerCount` plus complete `controls` fields: actor decimal string,
+dashSpeedBits, durationTicks, cooldownTicks, groundOnly and initialFacingRight.
+Canonicalize keeps format10/full identity/fresh output; old1..9 remain exact
+branches and refuse new nonempty authority. No phase, input or runtime state is
+authored, and Level/Control joint budgets are actual rather than independent sums.
+
+Start with [Control content](../../examples/detcontrol/content.dlt) and validate,
+inspect or canonicalize before Sim. The separate [Host](../../examples/detcontrol/README.md)
+owns Hero inputs through Control and Enemy through Brain. Actual Stage56 CLI
+passed1.37562s, Level10 .223617s with16tick/17CP/16hand/33CP comparison/25reject
+and actual text/cooked roundtrip, standard Host six64tick paths13.2032s. Old9/7/
+Cooked passed separately; existing Resource1.00207s is old-sample compatibility,
+not new10 content Pak combat. Initial fresh seal is static acquisition, not
+movement/save proof. New fixture ADL/source-vs-canonical failures and the
+diagnostic-free first standard build failure are preserved; production unchanged.
+Final native VM deferred, without new matrix or long campaign.

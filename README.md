@@ -1274,3 +1274,50 @@ gate ran. One CMake source line and nearby State Doxygen brief fixed integration
 production behavior/assertions unchanged, first failure preserved. No old gate
 repeated or new Host/Level content, Debug/ASan/backend matrix/long/native result;
 final native VM deferred. See the [SDK contract](../../AYDocs/sdk/contracts/2d.md#2dsimulationdeterministic-character-control).
+
+## Stage56: authored Level10 finite Character Control
+
+Format10 adds `controls/control` after brains. Use normal Level load/configure and
+`detLevelCharacterControlConfig2D` for the exact prepared advanced Character and
+optional complete Respawn. Level installs Control after Brain, before the
+destination hook/identity/actors; never duplicate it. Empty rows install none and
+getter throws. Old1..9 retain literal/writer/default/hash branches and reject
+nonempty Control rows. Authoring rejects Brain/Control owner overlap; actual
+factory-selected namespaces share the real Session budgets, not extra capacity.
+
+The optional default-OFF `AY_ENTITY_BUILD_DET_CONTROL_EXAMPLE` builds
+`AYEntity_DetControlExample`, a real EngineModuleRuntime/standard Host/Scene using
+[Level10 content](examples/detcontrol/content.dlt). Hero input is Control-owned;
+Enemy remains Brain-owned. App56/inputVersion7/eight-byte Hero samples/input4/
+logic81 map speed+2,jump,crouch,drop,attackHeld,facing,dashHeld,cancel. No Manual
+or Enemy-held input. Control15 precedes Character pre; actual gravity/braking/
+carrier/wall/jump remain. Death cancellation is explicit application input.
+
+Necessary local MSVC Release7 unique cases passed: LevelCharacterControl10Checks
+0.223617s, old9 1.17518s/old7 .654778s/Cooked .116577s, standard ControlHost
+13.2032s, CLI1.37562s and existing Resource1.00207s. New Level10 actual16ticks/
+17CP,16selected hand rows/46advances/33CP comparisons/25authoring rejects,
+real file/text/cooked roundtrip and active restore. Optional Respawn checks initial
+seal/getter/restore binding only, not a new Accepted-motion exercise.
+Actual64tick active-save4 six-path full state/trace/suffix/save equality passed;
+load/seek60rows, stdin68rows with suffix8 of60, Replay0input calls. Control has
+4starts/11requests/7denials/1cancel, ends Active/ready73; HeroHP96/hurts2/attacks2/
+attempts2 and EnemyHP94/alive/hurts2/attacks2/attempts2/cancel0/64decisions2pulses.
+FinalHash5877846431418660777/content15814538279326814389 are diagnostics, not
+independent state goldens or authentication. Existing Resource27CP/14negatives
+uses old samples, not new10 combat Pak execution. Selected hand fields and whole
+actual CP execution equality are separate scopes; final native VM deferred.
+No new matrix/Debug/ASan/long/native run or numeric/Character/Collision/checkpoint/
+save/replay wire change is claimed; explicit Level profile10 is separate.
+
+Receipts stage56-levels2/levels3/host2 and stage56-actual-freeze.json bind
+per-run unchanged sources. levels2 remains overall Failed, with three genuine old
+case passes retained without rerun; only new10 was retried. First new fixture
+C2677/C2661 came from quoted-helper ADL (renamed jsonQuote); later CRLF source1007
+was wrongly equated with canonical LF980, corrected using independent previously
+accepted Stage54 canonical bytes/FNV3155852323544543593 while retaining original
+source/content fingerprints. Production behavior/hand oracle unchanged. First
+standard build exit1 had no compiler diagnostic; cause remains unconfirmed.
+All three failed receipts remain. The new test changed across batches, so whole
+source snapshots are not claimed identical between them. Stage55 standalone
+core evidence remains separate historical scope.
