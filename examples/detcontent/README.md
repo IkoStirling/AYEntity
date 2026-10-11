@@ -1,6 +1,6 @@
 # 确定性内容、进度与持久存档示例
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 
 **Date:** 2026-10-12
 
@@ -10,8 +10,8 @@
 
 标准 `EngineModuleRuntime`、`EntityRuntimeModule`、`DeterministicHostIntegrationModule`
 驱动一个实际参与碰撞的移动平台关卡。加载 [content.dlt](content.dlt) 后，
-公开 Level facade 安装角色、碰撞、路径、Actions 和 Interaction。注册期
-`beforeActors` hook 安装 Progress，随后创建实体，最后由 Host seal；不重复安装 Actions。
+公开 Level facade 从版本3文件安装角色、碰撞、路径、Actions、Interaction、Progress
+和 ProgressFlow，随后创建实体，最后由 Host seal；应用不重复安装这些 facade。
 示例及下面的六进程短门禁已通过本机 Windows Release 验收；原生跨平台验收等待最终 VM 环境。
 
 ## §1 内容与输入
@@ -21,9 +21,9 @@
 默认全部false；角色预输入、路径、碰撞和支撑继续使用唯一既有 motion owner。
 初始位置、尺度、路径采样和1/64步长均使用易精确表示的二进制有理数。
 
-触发区200暂停平台，210恢复平台，规则来自 `AYDLEVEL 2`。两个钥匙220/230
-调用注册的 collectible claims，真实 Enter 使 counter1增加，随后禁用该触发体。
-两把钥匙满足 objective1，应用明确请求一次开门110，不隐藏重试。终点240只有
+触发区200暂停平台，210恢复平台，规则来自 `AYDLEVEL 3`。两个钥匙220/230
+通过文件内明确的 Flow bindings 调用 collectible claims，真实 Enter 使 counter1增加，随后禁用该触发体。
+两把钥匙满足 objective1，文件内目标上升沿动作请求一次开门110，不隐藏重试。终点240只有
 objective1已满足时才允许claim，counter2使objective2成立。普通拒绝单独记录。
 应用不在每帧调用claim，也不为没有真实 Enter 的状态制造请求。
 
@@ -31,9 +31,9 @@ objective1已满足时才允许claim，counter2使objective2成立。普通拒�
 与应用统计都进入完整检查点。外部终端输入不是检查点内容；恢复后下一tick的
 外部样本仍由调用者提供。表现只读稳定 Sim ID 每次重取状态，不保留跨恢复实体句柄。
 
-应用 schema112、logic/validator70、input6/progress8/observer63，与 Level 的
-路径8/9、内容32..47、Actions64起、Interaction80起、Progress96起互不重叠。
-注册系统都在 collision.priority 内按稳定ID排序，Rules9先于path11、角色20、
+应用 schema128、logic/validator70（应用 profile2）、input6/observer63，与 Level 的
+路径8/9、内容32..47、Actions64起、Interaction80起、Progress96起和Flow112起互不重叠。
+注册系统都在 collision.priority 内按稳定ID排序，Flow8、Rules9先于path11、角色20、
 collision30、support40、pathpost41；observer63最后读取本tick实际结果。
 
 ## §2 运行与存档

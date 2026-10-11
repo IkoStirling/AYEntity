@@ -13,6 +13,7 @@ inline constexpr std::uint32_t kDetCollision2DMotionProfileVersion=5;
 inline constexpr std::uint32_t kDetCollision2DSlopeProfileVersion=6;
 inline constexpr std::uint32_t kDetCollision2DMovingSlopeProfileVersion=7;
 inline constexpr std::uint32_t kDetCollision2DTerrainProfileVersion=8;
+inline constexpr std::uint32_t kDetCollision2DRespawnProfileVersion=9;
 enum class DetBodyMode2D : std::uint32_t {Disabled=0,Static=1,Kinematic=2,MovingObstacle=3};
 enum class DetCollisionShape2D : std::uint32_t {Aabb=0,SlopeRisesRight=1,SlopeRisesLeft=2};
 enum class DetCollisionMotionPolicy2D : std::uint32_t {Fault=0,StopPrescribedOnConflict=1};
@@ -93,6 +94,10 @@ struct DetCollision2DConfig {
     /// continuous upper surface of adjacent walkable shapes in the sole solver.
     /// At most56 trigger pairs; jumps and airborne actors never attach implicitly.
     bool continuousTerrain=false;
+    /// Explicit profile9 tick-end character relocation, acquired only through
+    /// installDetCharacterRespawn2D. Requires advanced standing support; <=55 pairs.
+    /// Default false preserves every old profile, field layout and history byte.
+    bool characterRespawn=false;
 };
 struct DetCollisionProxy2D {
     SimEntityId id=0;

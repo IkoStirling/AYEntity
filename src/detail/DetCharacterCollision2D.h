@@ -9,5 +9,6 @@ namespace ayt::entity::detail {
 /// AppliedCarry80. Only continuous carry of a stopped support is cancelled;
 /// the accepted carry is written for the facade post pass, never inherited own V.
 bool installDetCharacterCollision2D(DeterministicSession& session,DetCollision2DConfig config,
-    std::uint32_t controllerStateSchema=0,math::DetFloat32 maxSlopeRisePerRun=math::DetFloat32::fromInt(1));
+    std::uint32_t controllerStateSchema=0,math::DetFloat32 maxSlopeRisePerRun=math::DetFloat32::fromInt(1),
+    const DetCharacterRespawn2DConfig* respawn=nullptr);
 }

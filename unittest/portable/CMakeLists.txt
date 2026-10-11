@@ -98,6 +98,8 @@ add_library(ReplayArchiveKernel STATIC "${AYENTITY_ROOT}/src/AYDeterministicSess
     "${AYENTITY_ROOT}/src/AYDeterministicSave.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicProgress2D.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicProgressFlow2D.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicCharacterRespawn2D.cpp"
+    "${AYENTITY_ROOT}/src/AYDeterministicLevelCooked2D.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRollback.cpp" "${AYENTITY_ROOT}/src/AYDeterministicRollbackNetwork.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRollbackReplay.cpp" "${AYMATH_ROOT}/src/DetFloat.cpp" "${AYMATH_ROOT}/src/DetMath.cpp"
     $<TARGET_OBJECTS:TypedStateBackend>)
@@ -153,6 +155,9 @@ include("${AYENTITY_ROOT}/unittest/LevelInteraction2D.cmake")
 include("${AYENTITY_ROOT}/unittest/Save.cmake")
 include("${AYENTITY_ROOT}/unittest/Progress2D.cmake")
 include("${AYENTITY_ROOT}/unittest/ProgressFlow2D.cmake")
+include("${AYENTITY_ROOT}/unittest/LevelProgress3.cmake")
+include("${AYENTITY_ROOT}/unittest/CharacterRespawn.cmake")
+include("${AYENTITY_ROOT}/unittest/LevelCooked2D.cmake")
 include("${AYENTITY_ROOT}/unittest/LevelTool.cmake")
 include("${AYENTITY_ROOT}/unittest/Actions2D.cmake")
 include("${AYENTITY_ROOT}/unittest/Interaction2D.cmake")

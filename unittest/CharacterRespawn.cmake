@@ -1,0 +1,15 @@
+# design reference: AYEntity/design.md Stage44; bounded relocation/restore closure.
+if(NOT DEFINED _det_character_library)
+    set(_det_character_library AYEntityDeterminism)
+endif()
+add_executable(AYEntity_CharacterRespawnChecks "${AYENTITY_ROOT}/unittest/portable/characterrespawn.cpp")
+target_link_libraries(AYEntity_CharacterRespawnChecks PRIVATE ${_det_character_library})
+target_compile_features(AYEntity_CharacterRespawnChecks PRIVATE cxx_std_23)
+if(MSVC)
+    target_compile_options(AYEntity_CharacterRespawnChecks PRIVATE /utf-8)
+endif()
+set(_character_respawn_artifacts "${CMAKE_CURRENT_BINARY_DIR}/character-respawn-artifacts")
+file(MAKE_DIRECTORY "${_character_respawn_artifacts}")
+add_test(NAME AYEntity_CharacterRespawnChecks COMMAND AYEntity_CharacterRespawnChecks --output "${_character_respawn_artifacts}")
+set_tests_properties(AYEntity_CharacterRespawnChecks PROPERTIES TIMEOUT 120
+    LABELS "ayentity;determinism;character;respawn;2d;rollback;replay")

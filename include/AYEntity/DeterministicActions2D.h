@@ -35,7 +35,8 @@ struct DetActionTarget2D {
 /** @brief Fixed direct-action authority; install before actors and before seal.
  * No system or request queue is installed. All callers execute at collision.priority
  * before path pre (when present) and character pre. No pose is written here.
- * The table contains1..8 strictly increasing nonzero actor IDs; absent actors are
+ * The table contains0..8 strictly increasing nonzero actor IDs; zero targets
+ * grants no action authority and may bind pure Progress counters. Absent actors are
  * allowed and return MissingActor. Immutable canonical configuration is encoded
  * into at most8 typed policy chunks (at most8KiB), registered as globals and
  * actor copies, and checked at every Session boundary and action call.

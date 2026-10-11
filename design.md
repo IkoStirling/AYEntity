@@ -2363,3 +2363,54 @@ relationships are checked at all Session boundaries. Numeric, wire and previous
 facade profiles remain unchanged. The short test uses real events and complete
 production checkpoint equivalence across restore/rollback/replay, with bounded
 negative prospective/restore cases; no independent full-byte golden is claimed.
+## Stage42: authored registered progress
+
+Version3 uses `AYDLV003` field-wise semantic bytes and adds Progress and Flow tables
+after version2 Actions/Rules. All references close over initial actor/target/counter/
+objective/claim IDs. Progress policy options default96/97, Flow112/113/114; mutable
+and immutable actor copies are installed before the destination-only registration
+hook. Flow8 precedes Rules9, every path pre and character pre at collision.priority.
+External Progress writers must precede Flow. Zero-target Actions supports pure counter
+authority without granting a target. No counters requires all dependent tables empty.
+Validation uses actual scratch Session installation/seal, complete8KiB semantic identity,
+policy chunk requirements and aggregate64-registration budgets. Versions1/2 branches
+and bytes retain their original identity; mutable current progress is never an authored
+initial checkpoint import. Short LevelProgress3 and authoring-tool gates are LocalPassed.
+
+## Stage44: explicit character relocation
+
+The fresh Respawn installer selects controller8/collision9 with profile1 full immutable
+spawn policy. Existing ordinary installers reject the flag. Actor-local pending requests
+are transient and must be zero at committed boundaries; copied results carry committed
+nextTick stamps. The first valid early request wins; unknown/unavailable and duplicate
+requests are ordinary return codes. Wrong closure/late request is a tick fault.
+
+Collision completes its normal scratch solve, real trace and event-budget proof before
+relocation. Requests resolve in stable actor-ID order with full standing shape and reciprocal
+solid clearance (one-way thickness and filled wedges included). A normal destination denial
+leaves baseline motion intact. Accepted placement preserves Z/rotation, clears velocities,
+support/carry/windows/step/motion and speed, restores captured standing shape, and resets
+current/previous interpolation to the destination. Held jump/drop remain consumed; subsequent
+ordinary pre evaluates support, which need not attach immediately. Endpoint trigger transitions
+combine with actual normal movement; the relocation chord is never tested as physical travel.
+
+The readonly `canEmitEvents` check accounts for existing sequence/count/byte budgets before
+any commit; it does not emit or relax normal fault rules. Profile9 requires advanced,
+extended and one-way policy, at most55 trigger pairs, and1..8 immutable actor-specific spawns.
+Pure validators bind actual installed character/collision closure, descriptors and complete
+policy; malformed pending/result/standing/presentation states reject restore atomically.
+Necessary short Respawn, affected Advanced/Steps and Actions Release gates are LocalPassed;
+native final VM remains deferred. No automatic Level1/2/3 authoring or Actions authority is added.
+
+## Stage45: bounded cooked envelope
+
+`AYDLC001` is exactly32 header bytes: magic8, LEu32 envelope version1, LEu32 payload length,
+LEu64 semantic content hash and LEu64 payload FNV64. Payload is canonical Level text from
+the actual default-options encoder, at most65536 bytes; total is at most65568. Decode stages
+output, checks exact EOF/checksum, delegates to the actual Level decoder/preflight, re-encodes
+and requires identical text bytes plus semantic hash. Whitespace-equivalent noncanonical
+payload is refused. The original full field-wise level identity still enters Session policy;
+checksums are damage detection/content identification, without authentication or migration.
+Runtime options/callbacks are selected only by later `configureDetLevel2D` and are not hidden
+authority in the buffer. The codec is pure memory and stays in DeterminismKernel. The optional
+Resource/import adapter must retain the separate dependency boundary and is not yet accepted.

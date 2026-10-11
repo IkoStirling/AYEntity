@@ -106,6 +106,8 @@ if(TARGET AYReplay)
         src/AYDeterministicSave.cpp
         src/AYDeterministicProgress2D.cpp
         src/AYDeterministicProgressFlow2D.cpp
+        src/AYDeterministicCharacterRespawn2D.cpp
+        src/AYDeterministicLevelCooked2D.cpp
         src/AYDeterministicLockstepProtocol.cpp src/AYDeterministicLockstep.cpp
         src/AYDeterministicRollback.cpp src/AYDeterministicRollbackNetwork.cpp src/AYDeterministicTransport.cpp)
     add_library(AYEntity::DeterminismKernel ALIAS AYEntityDeterminismKernel)
@@ -148,6 +150,9 @@ if(TARGET AYReplay)
         include(unittest/Save.cmake)
         include(unittest/Progress2D.cmake)
         include(unittest/ProgressFlow2D.cmake)
+        include(unittest/LevelProgress3.cmake)
+        include(unittest/CharacterRespawn.cmake)
+        include(unittest/LevelCooked2D.cmake)
         include(unittest/LevelTool.cmake)
         include(unittest/ContentHost.cmake)
         include(unittest/Actions2D.cmake)

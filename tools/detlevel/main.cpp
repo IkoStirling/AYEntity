@@ -1,5 +1,6 @@
 // Content authoring boundary: no file access or native float conversion in Sim.
 #include <AYEntity/DeterministicLevel2D.h>
+#include <AYMath/DetFloatText.h>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -36,6 +37,9 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         <<",\"denominator\":"<<level.stepDenominator<<"},\"contentHash\":"<<json(std::to_string(config.contentHash))
         <<",\"actorCount\":"<<level.actors.size()<<",\"pathCount\":"<<level.paths.size()
         <<",\"actionTargetCount\":"<<level.actionTargets.size()<<",\"ruleCount\":"<<level.rules.size()
+        <<",\"counterCount\":"<<level.counters.size()<<",\"objectiveCount\":"<<level.objectives.size()
+        <<",\"claimCount\":"<<level.claims.size()<<",\"flowBindingCount\":"<<level.flowBindings.size()
+        <<",\"objectiveActionCount\":"<<level.objectiveActions.size()
         <<",\"actors\":[";
     bool first=true;
     for(const auto& actor:level.actors) {
@@ -56,18 +60,48 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
             <<",\"once\":"<<(rule.once?"true":"false")<<",\"cooldownTicks\":"<<rule.cooldownTicks
             <<",\"delayTicks\":"<<rule.delayTicks<<'}';
     }
+    std::cout<<"],\"counters\":[";first=true;
+    for(const auto& counter:level.counters){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"id\":"<<counter.id<<",\"minimum\":"<<json(std::to_string(counter.minimum))
+            <<",\"maximum\":"<<json(std::to_string(counter.maximum))<<",\"initial\":"<<json(std::to_string(counter.initial))<<'}';}
+    std::cout<<"],\"objectives\":[";first=true;
+    for(const auto& objective:level.objectives){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"id\":"<<objective.id<<",\"conditions\":[";bool firstCondition=true;
+        for(const auto& condition:objective.conditions){if(!firstCondition)std::cout<<',';firstCondition=false;
+            std::cout<<"{\"counter\":"<<condition.counter<<",\"atLeast\":"<<json(std::to_string(condition.atLeast))<<'}';}
+        std::cout<<"]}";}
+    std::cout<<"],\"claims\":[";first=true;
+    for(const auto& claim:level.claims){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"id\":"<<claim.id<<",\"trigger\":"<<json(std::to_string(claim.trigger))
+            <<",\"actor\":"<<json(std::to_string(claim.actor))<<",\"counter\":"<<claim.counter
+            <<",\"amount\":"<<json(std::to_string(claim.amount))<<'}';}
+    std::cout<<"],\"flowBindings\":[";first=true;
+    for(const auto& binding:level.flowBindings){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"claim\":"<<binding.claim<<",\"requiredObjective\":"<<binding.requiredObjective<<'}';}
+    std::cout<<"],\"objectiveActions\":[";first=true;
+    for(const auto& rule:level.objectiveActions){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"id\":"<<rule.id<<",\"objective\":"<<rule.objective<<",\"target\":"<<json(std::to_string(rule.action.target))
+            <<",\"kind\":"<<static_cast<std::uint32_t>(rule.action.kind)<<",\"once\":"<<(rule.once?"true":"false")<<'}';}
     std::cout<<"]}\n";
 }
 int run(int argc,char** argv) {
     if(argc==2 && std::string_view(argv[1])=="--help") {
         std::cout<<"aydetlevel validate <level.dlt>\naydetlevel inspect <level.dlt>\n"
             "aydetlevel canonicalize <level.dlt> <fresh.dlt>\n"
+            "aydetlevel float <finite-decimal>\n"
             "Validates the real initial Session pipeline. Canonicalize preserves exact Float32 bits.\n"
             "No input overwrite, arbitrary Scene import, runtime hot reload or cook is performed.\n";
         return 0;
     }
     require(argc>=3,"Use aydetlevel --help for commands");
     const std::string_view command=argv[1];
+    if(command=="float"){
+        require(argc==3,"float requires one finite decimal token");ayt::math::DetFloat32 value;
+        require(ayt::math::parseDetFloat32Decimal(argv[2],value),"Invalid, overflowing or over-budget finite decimal");
+        std::cout<<"{\"schema\":1,\"status\":\"passed\",\"command\":\"float\",\"textProfile\":"
+            <<ayt::math::kDetFloatTextProfileVersion<<",\"bits\":"<<json(bits(value.bits()))
+            <<",\"exactDecimal\":"<<json(ayt::math::detFloat32ExactDecimal(value))<<"}\n";return 0;
+    }
     require((command=="validate" || command=="inspect")?argc==3:command=="canonicalize" && argc==4,
         "Unknown command or argument count; use --help");
     const std::filesystem::path source=argv[2];ordinary(source);

@@ -1,6 +1,7 @@
 #include <AYEntity/DeterministicCharacterController2D.h>
 #include <AYMath/DetSlopeGeometry2D.h>
 #include "detail/DetCharacterCollision2D.h"
+#include "detail/DetCharacterRespawn2D.h"
 #include <algorithm>
 #include <array>
 #include <set>
@@ -12,10 +13,10 @@ using D=math::DetFloat32;
 using V=math::DetVec2;
 constexpr std::uint64_t logicHash=0x4443433244503031ull,advancedLogicHash=0x4443433244503032ull,
     stepLogicHash=0x4443433244503033ull,motionLogicHash=0x4443433244503034ull,slopeLogicHash=0x4443433244503035ull,
-    movingSlopeLogicHash=0x4443433244503036ull,terrainLogicHash=0x4443433244503037ull;
-std::uint32_t profile(const DetCharacterController2DConfig& c){return c.collision.continuousTerrain?kDetCharacterController2DTerrainProfileVersion:(c.collision.movingSlopes?kDetCharacterController2DMovingSlopeProfileVersion:(c.collision.staticSlopes?kDetCharacterController2DSlopeProfileVersion:
+    movingSlopeLogicHash=0x4443433244503036ull,terrainLogicHash=0x4443433244503037ull,respawnLogicHash=0x4443433244503038ull;
+std::uint32_t profile(const DetCharacterController2DConfig& c){return c.collision.characterRespawn?kDetCharacterController2DRespawnProfileVersion:(c.collision.continuousTerrain?kDetCharacterController2DTerrainProfileVersion:(c.collision.movingSlopes?kDetCharacterController2DMovingSlopeProfileVersion:(c.collision.staticSlopes?kDetCharacterController2DSlopeProfileVersion:
     (c.collision.motionPolicy!=DetCollisionMotionPolicy2D::Fault?kDetCharacterController2DMotionProfileVersion:(c.collision.stepUp?kDetCharacterController2DStepProfileVersion:
-    (c.advanced?kDetCharacterController2DAdvancedProfileVersion:kDetCharacterController2DProfileVersion)))));}
+    (c.advanced?kDetCharacterController2DAdvancedProfileVersion:kDetCharacterController2DProfileVersion))))));}
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic character 2D: invalid policy, character or support state");}
 D abs(D value){return value<D{}?-value:value;}
 bool zero(V value){return value.x.bits()==0 && value.y.bits()==0;}
@@ -35,7 +36,8 @@ bool validConfig(const DetCharacterController2DConfig& c) {
         || static_cast<std::uint32_t>(p.motionPolicy)>1
         || (p.motionPolicy!=DetCollisionMotionPolicy2D::Fault && p.maxTriggerPairs>59)
         || (p.staticSlopes && p.maxTriggerPairs>58) || (p.movingSlopes && (!p.staticSlopes || p.maxTriggerPairs>57))
-        || (p.continuousTerrain && (!p.movingSlopes || p.maxTriggerPairs>56)))return false;
+        || (p.continuousTerrain && (!p.movingSlopes || p.maxTriggerPairs>56))
+        || (p.characterRespawn && (!c.advanced || !p.oneWayPlatforms || p.maxTriggerPairs>55)))return false;
     if(c.advanced!=p.oneWayPlatforms || c.coyoteTicks>65535 || c.jumpBufferTicks>65535
         || c.dropThroughTicks>65535 || !c.crouchHeightScale.isFinite()
         || !(c.crouchHeightScale>D{} && c.crouchHeightScale<D::fromInt(1))
@@ -102,6 +104,7 @@ DetTypedStateSchema policySchema(const DetCharacterController2DConfig& c) {
     if(p.staticSlopes){result.fields.push_back({35,true});result.fields.push_back({36,c.maxSlopeRisePerRun});}
     if(p.movingSlopes)result.fields.push_back({37,true});
     if(p.continuousTerrain)result.fields.push_back({38,true});
+    if(p.characterRespawn)result.fields.push_back({39,true});
     return result;
 }
 DetTypedStateSchema bodySchema(const DetCharacterController2DConfig& c) {
@@ -402,9 +405,10 @@ void preAdvanced(DetTickContext& context,const DetCharacterController2DConfig& c
         }
     }
 }
-void postAdvanced(DetTickContext& context,const DetCharacterController2DConfig& c) {
+void postAdvanced(DetTickContext& context,const DetCharacterController2DConfig& c,const DetCharacterRespawn2DConfig* respawn=nullptr) {
     const auto scene=bodies(context,c);
     for(auto id:context.entities()) {
+        if(respawn && detail::consumeRespawn(context,id,*respawn))continue;
         if(!context.read<bool>(id,c.stateSchema,DetCharacterEnabled)){clearDisabled(context,id,c);context.write(id,c.collision.bodySchema,DetBodyIgnoredOneWay,DetEntityRef{});continue;}
         const auto* actor=locate(scene,id);if(!actor || actor->body.mode!=DetBodyMode2D::Kinematic || actor->body.trigger)invalid();
         const auto intent=context.read<V>(id,c.stateSchema,DetCharacterIntentVelocity);
@@ -499,8 +503,8 @@ void pre(DetTickContext& context,const DetCharacterController2DConfig& c) {
         context.write(id,c.collision.bodySchema,DetBodyVelocity,world);
     }
 }
-void post(DetTickContext& context,const DetCharacterController2DConfig& c) {
-    if(c.advanced){postAdvanced(context,c);return;}
+void post(DetTickContext& context,const DetCharacterController2DConfig& c,const DetCharacterRespawn2DConfig* respawn=nullptr) {
+    if(c.advanced){postAdvanced(context,c,respawn);return;}
     const auto scene=bodies(context,c);
     for(auto id:context.entities()) {
         if(!context.read<bool>(id,c.stateSchema,DetCharacterEnabled)){clearDisabled(context,id,c);continue;}
@@ -635,6 +639,12 @@ void validateCheckpoint(const DetSessionCheckpoint& checkpoint,const DetCharacte
     }
 }
 }
+DetTypedStateSchema detail::respawnCharacterStateSchema(const DetCharacterController2DConfig& config) {
+    if(!validConfig(config) || !config.collision.characterRespawn)invalid();return stateSchema(config);
+}
+DetTypedStateSchema detail::respawnCharacterPolicySchema(const DetCharacterController2DConfig& config) {
+    if(!validConfig(config) || !config.collision.characterRespawn)invalid();return policySchema(config);
+}
 std::vector<std::uint64_t> detCharacterState2D(const DetCharacterController2DConfig& config,const DetCharacterState2D& state) {
     if(!validConfig(config) || state.stepped)invalid();validateState(state,config);const auto schema=stateSchema(config);
     auto words=detStateDefaults(schema);
@@ -699,26 +709,40 @@ void detCharacterInput2D(DetTickContext& context,SimEntityId actor,const DetChar
         context.write(actor,config.stateSchema,DetCharacterCrouchHeld,input.crouchHeld);
     }else context.write(actor,config.stateSchema,DetCharacterJumpRequested,input.jumpPressed);
 }
-bool installDetCharacterController2D(DeterministicSession& session,DetCharacterController2DConfig config) {
-    if(!validConfig(config))return false;
-    const std::array schemas{config.collision.bodySchema,config.collision.historySchema,config.stateSchema,config.policySchema};
-    const std::array systems{config.preSystemId,config.collision.systemId,config.postSystemId};
-    const std::array validators{config.collision.systemId,config.validatorId};
-    const std::array logic{config.logicProfileId};
-    if(!session.characterRegistrationAvailable(schemas,systems,validators,logic))return false;
+namespace {
+bool installPipeline(DeterministicSession& session,const DetCharacterController2DConfig& config,const DetCharacterRespawn2DConfig* respawn) {
     const auto state=stateSchema(config),policy=policySchema(config);
     const DetStateLayout stateLayout(state),policyLayout(policy),bodyLayout(bodySchema(config));
+    const auto binding=respawn?std::optional{*respawn}:std::nullopt;
     if(!(session.registerTypedSchema(state) && session.registerTypedSchema(policy)
         && session.registerGlobalState(config.policySchema)
-        && detail::installDetCharacterCollision2D(session,config.collision,config.stateSchema,config.maxSlopeRisePerRun)
-        && session.registerLogicProfile(config.logicProfileId,profile(config),config.collision.continuousTerrain?terrainLogicHash:(config.collision.movingSlopes?movingSlopeLogicHash:(config.collision.staticSlopes?slopeLogicHash:
-            (config.collision.motionPolicy!=DetCollisionMotionPolicy2D::Fault?motionLogicHash:(config.collision.stepUp?stepLogicHash:(config.advanced?advancedLogicHash:logicHash))))))
+        && detail::installDetCharacterCollision2D(session,config.collision,config.stateSchema,config.maxSlopeRisePerRun,respawn)
+        && session.registerLogicProfile(config.logicProfileId,profile(config),config.collision.characterRespawn?respawnLogicHash:(config.collision.continuousTerrain?terrainLogicHash:(config.collision.movingSlopes?movingSlopeLogicHash:(config.collision.staticSlopes?slopeLogicHash:
+            (config.collision.motionPolicy!=DetCollisionMotionPolicy2D::Fault?motionLogicHash:(config.collision.stepUp?stepLogicHash:(config.advanced?advancedLogicHash:logicHash)))))))
         && session.registerValidator(config.validatorId,profile(config),
             [config,stateLayout,policyLayout,bodyLayout](const auto& checkpoint,std::string& error){
                 try {validateCheckpoint(checkpoint,config,stateLayout,policyLayout,bodyLayout);return true;}
                 catch(const std::exception& e){error=e.what();return false;}})
-        && session.registerSystem(config.preSystemId,config.collision.priority,[config](DetTickContext& context){pre(context,config);return true;})
-        && session.registerSystem(config.postSystemId,config.collision.priority,[config](DetTickContext& context){post(context,config);return true;})))return false;
+        && session.registerSystem(config.preSystemId,config.collision.priority,[config,binding](DetTickContext& context){pre(context,config);
+            if(binding)for(auto id:context.entities())context.write(id,binding->stateSchema,DetRespawnPreCompleted,true);return true;})))return false;
+    if(!session.registerSystem(config.postSystemId,config.collision.priority,[config,binding](DetTickContext& context){post(context,config,binding?&*binding:nullptr);return true;}))return false;
     return true;
+}
+}
+bool installDetCharacterController2D(DeterministicSession& session,DetCharacterController2DConfig config) {
+    if(!validConfig(config) || config.collision.characterRespawn)return false;
+    const std::array schemas{config.collision.bodySchema,config.collision.historySchema,config.stateSchema,config.policySchema};
+    const std::array systems{config.preSystemId,config.collision.systemId,config.postSystemId};
+    const std::array validators{config.collision.systemId,config.validatorId};const std::array logic{config.logicProfileId};
+    if(!session.characterRegistrationAvailable(schemas,systems,validators,logic))return false;
+    return installPipeline(session,config,nullptr);
+}
+bool installDetCharacterRespawn2D(DeterministicSession& session,DetCharacterRespawn2DConfig config) {
+    if(!validConfig(config.character) || !detail::validRespawnConfig(config))return false;const auto& c=config.character;
+    const std::array schemas{c.collision.bodySchema,c.collision.historySchema,c.stateSchema,c.policySchema,config.stateSchema,config.policySchema};
+    const std::array systems{c.preSystemId,c.collision.systemId,c.postSystemId};
+    const std::array validators{c.collision.systemId,c.validatorId,config.validatorId};const std::array logic{c.logicProfileId,config.logicProfileId};
+    if(!session.characterRegistrationAvailable(schemas,systems,validators,logic))return false;
+    return detail::registerRespawnState(session,config) && installPipeline(session,c,&config);
 }
 } // namespace ayt::entity

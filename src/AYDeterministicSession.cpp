@@ -376,4 +376,13 @@ void DetTickContext::emit(std::uint32_t type,std::span<const std::uint8_t> paylo
         ++_sequence;p.outgoingBytes+=payload.size()+16;}
     catch(const std::exception& e){p.contextFailure("emit [type="+std::to_string(type)+"]",e);}
 }
+bool DetTickContext::canEmitEvents(std::size_t count,std::size_t totalPayloadBytes) const {
+    const auto& p=*_session._impl;
+    if(p.outgoing.size()>maxCommands || count>maxCommands-p.outgoing.size()
+        || count>std::size_t{UINT32_MAX-_sequence} || p.outgoingBytes>maxInputBytes
+        || count>maxInputBytes/16)return false;
+    const auto overhead=count*16;
+    return overhead<=maxInputBytes-p.outgoingBytes
+        && totalPayloadBytes<=maxInputBytes-p.outgoingBytes-overhead;
+}
 } // namespace ayt::entity

@@ -26,7 +26,7 @@ namespace {
 using namespace ayt::entity;
 using D=ayt::math::DetFloat32;
 constexpr SimEntityId player=10,door=110,platform=130;
-constexpr std::uint32_t appSchema=112,inputSystem=6,progressSystem=8,observeSystem=63,appProfile=70;
+constexpr std::uint32_t appSchema=128,inputSystem=6,observeSystem=63,appProfile=70;
 enum Stats : std::uint32_t {DoorClosed=10,PathPaused=20,Opened=30,Paused=40,Resumed=50,Carried=60,
     Claims=70,Finishes=80,Denied=90};
 void require(bool ok,const std::string& error){if(!ok)throw std::runtime_error(error);}
@@ -59,19 +59,11 @@ DetTypedStateSchema stats(){return {appSchema,1,{{DoorClosed,true},{PathPaused,f
     {Resumed,std::uint64_t{0}},{Carried,std::uint64_t{0}},{Claims,std::uint64_t{0}},{Finishes,std::uint64_t{0}},{Denied,std::uint64_t{0}}}};}
 void count(DetTickContext& context,std::uint32_t field){const auto value=context.readGlobal<std::uint64_t>(appSchema,field);
     require(value!=UINT64_MAX,"Application count overflow");context.writeGlobal(appSchema,field,value+1);}
-DetProgress2DConfig progressConfig(const DetInteraction2DConfig& interaction){DetProgress2DConfig p;p.actions=interaction.actions;
-    p.counters={{1,0,2,0},{2,0,1,0}};p.objectives={{1,{{1,2}}},{2,{{1,2},{2,1}}}};
-    p.claims={{1,220,player,1,1},{2,230,player,1,1},{3,240,player,2,1}};return p;}
-bool exactEnter(const DetTickCommand& command,const DetCollision2DConfig& collision,SimEntityId trigger){
-    if(command.source!=collision.systemId || command.type!=collision.eventType)return false;
-    DetTriggerEvent2D event;if(!decodeDetTriggerEvent2D(command.payload,event))return false;
-    return event.phase==DetTriggerPhase2D::Enter && ((event.pair.first==player && event.pair.second==trigger) || (event.pair.second==player && event.pair.first==trigger));
-}
 bool configure(DeterministicSession& session,const DetLevel2D& level,const DetProgress2DConfig& progress){
     const auto schema=stats();const DetStateLayout layout(schema);
     if(!session.registerTypedSchema(schema) || !session.registerGlobalState(appSchema)
-        || !session.registerLogicProfile(appProfile,1,0x44434f4e54333931ULL))return false;
-    if(!session.registerValidator(appProfile,1,[layout](const DetSessionCheckpoint& cp,std::string& error){
+        || !session.registerLogicProfile(appProfile,2,0x44434f4e54343232ULL))return false;
+    if(!session.registerValidator(appProfile,2,[layout](const DetSessionCheckpoint& cp,std::string& error){
         try {const auto& words=cp.globals.at(appSchema);
             for(auto field:{Opened,Paused,Resumed,Carried,Denied})if(std::get<std::uint64_t>(layout.read(words,field))>cp.nextTick){error="App count exceeds tick frontier";return false;}
             if(std::get<std::uint64_t>(layout.read(words,Claims))>3 || std::get<std::uint64_t>(layout.read(words,Finishes))>1){error="App claim count bound";return false;}
@@ -85,24 +77,21 @@ bool configure(DeterministicSession& session,const DetLevel2D& level,const DetPr
             || command.payload[1]>1 || command.payload[2]>1 || command.payload[3]>1)return false;
         detCharacterInput2D(context,player,character,{D::fromInt(int(command.payload[0])-2),command.payload[1]!=0,command.payload[2]!=0,command.payload[3]!=0});return true;
     }))return false;
-    if(!session.registerSystem(progressSystem,level.character.collision.priority,[progress](DetTickContext& context){
-        // Only real delivered Enter invokes a claim. A normal denial does not enqueue a retry.
-        for(const auto& event:context.events())for(const auto& claim:progress.claims){
-            if(!exactEnter(event,progress.actions.collision,claim.trigger))continue;
-            if(claim.id==3 && !detProgressObjective2D(context,progress,1))continue;
-            const auto result=claimDetCollectible2D(context,progress,claim.id);
-            if(result.code==DetProgressCode2D::Applied){count(context,Claims);if(claim.id==3)count(context,Finishes);
-                if(claim.id!=3 && detProgressObjective2D(context,progress,1)){
-                    const auto action=executeDetAction2D(context,progress.actions,{door,DetActionKind2D::CollisionDisable});
-                    if(action.code!=DetActionCode2D::Applied && action.code!=DetActionCode2D::Unchanged)count(context,Denied);
-                }
-            }else if(result.code!=DetProgressCode2D::AlreadyClaimed)count(context,Denied);
-        }return true;
-    }))return false;
-    std::string error;if(!configureDetLevel2D(session,level,error,{},[progress](DeterministicSession& destination){return installDetProgress2D(destination,progress);}))
+    std::string error;if(!configureDetLevel2D(session,level,error))
         throw std::runtime_error("Content setup: "+error);
     const auto path=detLevelPathConfig2D(level,1);
-    return session.registerSystem(observeSystem,level.character.collision.priority,[progress,path,character=level.character](DetTickContext& context){
+    const auto flow=detLevelProgressFlowConfig2D(level);
+    return session.registerSystem(observeSystem,level.character.collision.priority,[progress,flow,path,character=level.character](DetTickContext& context){
+        // Observe the actual registered consumer; content rules live in the .dlt3 file.
+        for(const auto& binding:flow.claims){const auto result=detProgressFlowClaim2D(context,flow,binding.claim);
+            if(!result.attemptCount || result.lastTick!=context.tick())continue;
+            if(result.lastResult==DetProgressCode2D::Applied){count(context,Claims);if(binding.claim==3)count(context,Finishes);}
+            else if(result.lastResult!=DetProgressCode2D::AlreadyClaimed)count(context,Denied);
+        }
+        for(const auto& rule:flow.rules){const auto result=detProgressFlowObjective2D(context,flow,rule.id);
+            if(result.attemptCount && result.lastTick==context.tick()
+                && result.lastResult!=DetActionCode2D::Applied && result.lastResult!=DetActionCode2D::Unchanged)count(context,Denied);
+        }
         const bool closed=context.read<std::uint32_t>(door,progress.actions.collision.bodySchema,DetBodyMask)!=0;
         const auto motion=detPathMotionState2D(context,platform,path);
         if(!closed && context.readGlobal<bool>(appSchema,DoorClosed))count(context,Opened);
@@ -163,7 +152,7 @@ void help(){std::cout<<"Commands: right [ticks], left [ticks], idle [ticks], jum
 int run(const Options& opts){require(std::filesystem::is_regular_file(opts.level) && !std::filesystem::is_symlink(opts.level),"Level must be an ordinary file");
     DetLevel2D level;std::string error;require(loadDetLevel2D(opts.level,level,error),error);
     require(level.applicationVersion==39 && level.inputVersion==1 && level.stepNumerator==1 && level.stepDenominator==64,"Content requires app39/input1/step1/64");
-    const auto progress=progressConfig(detLevelInteractionConfig2D(level));
+    const auto progress=detLevelProgressConfig2D(level);
     if(opts.mode==DetHostMode::Record){auto path=opts.replay;if(!std::filesystem::path(path).has_extension())path+=".rpl";
         require(!std::filesystem::exists(path) && !std::filesystem::exists(ayt::replay::FileReplayRecorder::rotationPathFor(path,0)),"Record destination exists");}
     if(!opts.output.empty())for(const auto* suffix:{".state",".trace",".summary.json"})require(!std::filesystem::exists(opts.output+suffix),"Output already exists");

@@ -934,3 +934,34 @@ authored Progress/Flow is a separate forthcoming format3 capability.
 including actual Enter/gates/denials, objective reversal,8-tick complete checkpoint
 continuation, late rollback/confirmed drain and real sealed replay/two seeks.
 See [the ongoing execution record](../../AYDocs/DETERMINISTIC-CONTENT-TEN-HOUR-20261011.md).
+## Deterministic authored progress, relocation and cooked memory (Stages42/44/45)
+
+`AYDLEVEL 3` adds sorted counters, AND objectives, actor-specific collectible claims,
+explicit gated claim bindings and objective rising-edge actions. The Level facade
+installs matching Actions/Progress/Flow internally before actors; use
+`detLevelProgressConfig2D` and `detLevelProgressFlowConfig2D` to read that policy,
+and avoid duplicate installers. Pure counters permit zero authorized Actions targets.
+Version1/2 canonical bytes and hashes remain unchanged. Individual maxima still must
+fit the combined8KiB semantic identity and actual64-schema/session budgets. Start from
+[the content level](examples/detcontent/content.dlt) and use
+[aydetlevel](tools/detlevel/README.md) to validate/inspect/canonicalize it. `aydetlevel float`
+provides the independent AYMath integer decimal-to-bits authoring boundary.
+
+Manual assembly can opt into `installDetCharacterRespawn2D` before actors/seal,
+with advanced/extended/one-way/characterRespawn explicitly enabled,1..8 fixed
+actor-specific spawns and matching body/controller factories. This is the sole
+controller8/collision9 pipeline. An earlier canonical input system requests a spawn;
+collision first validates normal whole-world motion, then resolves standing destination
+clearance in actor-ID order at tick end. An occupied destination keeps normal movement.
+Accepted relocation resets movement/support/windows, preserves consumed held samples,
+and discards interpolation history. It retains real normal-motion/endpoint triggers,
+without a teleport chord. Results are copied typed state and restore with checkpoints.
+Level1/2/3 and Actions profile1 do not authorize this opt-in; direct facade assembly
+is required. See `DeterministicCharacterRespawn2D.h` for explicit timing and limits.
+
+`encodeDetLevelCooked2D` / `decodeDetLevelCooked2D` provide a pure-memory bounded
+`AYDLC001` envelope for validated canonical Level text. Decoding checks exact version,
+length/EOF, payload checksum, actual Level preflight, byte-identical canonical text
+and semantic identity; failure leaves output unchanged. FNV values do not authenticate
+content. This codec has no file/Resource owner or simulation tick ownership; the optional
+resource/import/Pak adapter is a separate integration under implementation.

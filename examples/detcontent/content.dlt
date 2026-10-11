@@ -1,4 +1,4 @@
-AYDLEVEL 2
+AYDLEVEL 3
 session 39 1 1 64
 collision 4 5 30 0 196609 64 32 128 1 1 0 00000000 1 0 0 0
 character 6 7 20 40 40 40 40000000 43000000 43000000 40800000 40800000 41000000 41000000 3d800000 00000000 3e000000 0 1 0 0 0 0 3f000000 3f800000
@@ -25,4 +25,20 @@ target 240 1 1 0
 rules 2
 rule 1 200 10 1 130 5 1 0 0
 rule 2 210 10 1 130 6 1 0 0
+progress 2 2 3
+counter 1 0 2 0
+counter 2 0 1 0
+objective 1 1
+condition 1 2
+objective 2 2
+condition 1 2
+condition 2 1
+claim 1 220 10 1 1
+claim 2 230 10 1 1
+claim 3 240 10 2 1
+flow 3 1
+binding 1 0
+binding 2 0
+binding 3 1
+objectiveaction 1 1 110 2 1
 end

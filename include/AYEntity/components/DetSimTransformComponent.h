@@ -44,6 +44,16 @@ struct DetSimTransformComponent final : public IComponent {
         ++revision;
         return true;
     }
+    /// Explicit discontinuous translation commit: one revision and no interpolation
+    /// chord. Collision's opt-in respawn owner uses this after complete validation.
+    /// Does not alter Z/rotation itself; caller supplies the full finite position.
+    bool setPositionDiscontinuous(math::DetVec3 value) noexcept {
+        if (!value.isFinite()) return false;
+        position = previousPosition = value;
+        hasPreviousPosition = false;
+        ++revision;
+        return true;
+    }
     /// Reject invalid inputs/overflow before mutation; no implicit Fixed/native conversion.
     bool translate(math::DetVec3 delta) noexcept {
         if (!delta.isFinite()) return false;

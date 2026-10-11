@@ -70,6 +70,7 @@ bool decodeDetInput(std::span<const std::uint8_t> bytes,DetTickInput& input,std:
 
 class DeterministicSession;
 struct DetCharacterController2DConfig;
+struct DetCharacterRespawn2DConfig;
 /** @brief One sealed tick's authoritative access, valid only during its system callback.
  * @note Iterate entities() by stable SimEntityId. Hidden mutable callback state,
  * runtime Entity IDs, native floats and external effects are outside the contract.
@@ -108,6 +109,10 @@ public:
     void despawn(SimEntityId id);
     /// Next-tick delivery, sorted by stable producer system ID and local sequence.
     void emit(std::uint32_t type,std::span<const std::uint8_t> payload={});
+    /// Internal adapter preflight only: exact current outgoing count/aggregate and
+    /// local sequence capacity for a batch. Read-only; payload bytes exclude the
+    /// existing16-byte command overhead. Does not reserve capacity or emit events.
+    bool canEmitEvents(std::size_t count,std::size_t totalPayloadBytes) const;
 private:
     friend class DeterministicSession;
     DetTickContext(DeterministicSession& session,std::uint32_t system);
@@ -179,6 +184,7 @@ public:
 private:
     friend class DetTickContext;
     friend bool installDetCharacterController2D(DeterministicSession&,DetCharacterController2DConfig);
+    friend bool installDetCharacterRespawn2D(DeterministicSession&,DetCharacterRespawn2DConfig);
     // Narrow installer preflight; no public configuration-inspection surface.
     bool characterRegistrationAvailable(std::span<const std::uint32_t> schemas,
         std::span<const std::uint32_t> systems,std::span<const std::uint32_t> validators,

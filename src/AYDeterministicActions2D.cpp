@@ -56,7 +56,8 @@ struct Plan {
 Plan plan(const DetActions2DConfig& c){
     if(c.stateSchema<2 || c.stateSchema==UINT32_MAX || c.policySchemaBase<2 || c.policySchemaBase==UINT32_MAX
         || !c.validatorId || !c.logicProfileId || c.validatorId==c.collision.systemId
-        || !c.maxActionsPerTick || c.maxActionsPerTick>1024 || c.targets.empty() || c.targets.size()>8)invalid();
+        || !c.maxActionsPerTick || c.maxActionsPerTick>1024 || c.targets.size()>8
+        || c.collision.characterRespawn)invalid();
     Plan p;p.state=stateSchema(c);p.body=detCollisionBodySchema2D(c.collision);
     Writer w;w.u32(kDetActions2DProfileVersion);collisionBytes(w,c.collision);
     w.u32(c.stateSchema);w.u32(c.policySchemaBase);w.u32(c.validatorId);w.u32(c.logicProfileId);

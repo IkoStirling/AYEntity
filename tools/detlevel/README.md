@@ -9,11 +9,13 @@ approximate parser.
 aydetlevel validate AYRuntime/AYEntity/examples/detlevel/terrain.dlt
 aydetlevel inspect AYRuntime/AYEntity/examples/detinteraction/interaction.dlt
 aydetlevel canonicalize edited.dlt fresh-canonical.dlt
+aydetlevel float 0.1
 ```
 
 `validate` and `inspect` emit a JSON receipt containing format/session versions,
 the rational step, content identity, actor/path/target/rule counts, stable actor
-IDs, exact position bits, roles and complete rule routing/timers. UInt64 IDs and
+IDs, exact position bits, roles, complete rule routing/timers, counters, objectives,
+claims, claim permissions and objective actions. UInt64 IDs, counter values and
 hashes are JSON strings so a JavaScript consumer cannot round them. Authoritative
 Float32 values remain exact eight-digit hexadecimal software binary32 bits.
 
@@ -46,10 +48,38 @@ implicit retry.
 Start from a shipped complete `.dlt`, edit its content, run `validate`, inspect
 the result, then canonicalize to a fresh destination. Format2 can contain an
 Actions table with zero rules, or both empty. Format1 rejects new fields rather
-than silently discarding them. Registration ranges remain an application choice
+than silently discarding them. Format3 additionally authors complete bounded Progress
+and Flow tables after `rules`:
+
+```text
+progress <counter-count> <objective-count> <claim-count>
+counter <id> <minimum> <maximum> <initial>
+objective <id> <condition-count>
+condition <counter-id> <at-least>
+claim <id> <trigger-id> <actor-id> <counter-id> <amount>
+flow <binding-count> <objective-action-count>
+binding <claim-id> <required-objective-or-0>
+objectiveaction <id> <objective-id> <action-target-id> <kind> <once>
+```
+
+Tables use increasing nonzero IDs and closed references. An objective combines1..8
+conditions with AND. Claims need actual Enter and successful collision disable;
+only explicit bindings collect automatically. A closed permission or ordinary
+denial needs a new Enter. Objective actions execute on false-to-true edges after
+claims, with no implicit retry; once is consumed even on denial. Pure counters may
+use a zero-target Actions authority. No counters requires all Progress/Flow tables
+empty. Individual table maxima do not guarantee that their combined semantic bytes,
+policy chunks and64-schema Session budget fit; `validate` performs real preflight.
+
+`float` uses AYMath's bounded, pure-integer nearest-even decimal parser and returns
+exact binary32 bits plus an exact decimal spelling that roundtrips those bits.
+For example, `0.1` becomes `3dcccccd`; authored `.dlt` still persists these bits.
+Nonfinite, overflow or out-of-budget input is refused with a JSON diagnostic.
+
+Registration ranges remain an application choice
 in `DetLevel2DOptions`, rather than arbitrary gameplay-authored system IDs.
 
-This tool does not import a Scene/Tilemap, round native decimal values, hot reload
+This tool does not import a Scene/Tilemap, use native float parsing, hot reload
 a running Session, migrate a save or cook/package an asset. Resource loading and
 authoring stay outside simulation ticks. See
 [the execution record](../../../../AYDocs/DETERMINISTIC-CONTENT-TEN-HOUR-20261011.md)

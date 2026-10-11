@@ -1,4 +1,4 @@
-// design reference: AYEntity/design.md Stage32/36 bounded level and interaction content.
+// design reference: AYEntity/design.md Stage32/36/42 bounded complete level content.
 #include <AYEntity/DeterministicLevel2D.h>
 #include <algorithm>
 #include <charconv>
@@ -43,12 +43,24 @@ struct BinaryCodec {Writer w;
     template<class E>void enumeration(E value){w.u(static_cast<std::uint32_t>(value));}
 };
 Bytes canonical(const DetLevel2D& level){
+    // Format1..3 intentionally has no respawn authoring fields. Do not silently
+    // omit a newly enabled facade option from the legacy collision byte layout.
+    if(level.character.collision.characterRespawn)invalid("Level formats1..3 do not author character respawn");
     if(level.paths.size()>8 || level.actors.empty() || level.actors.size()>64)invalid("Level body/path count limit");
-    if(level.formatVersion!=1 && level.formatVersion!=2)invalid("Unknown level format version");
+    if(level.formatVersion<1 || level.formatVersion>3)invalid("Unknown level format version");
     if(level.formatVersion==1 && (!level.actionTargets.empty() || !level.rules.empty() || level.maxActionsPerTick!=64))invalid("Format1 cannot author actions/rules");
     if(level.actionTargets.size()>8 || level.rules.size()>kDetInteraction2DMaxRules
         || !level.maxActionsPerTick || level.maxActionsPerTick>1024 || (level.actionTargets.empty() && !level.rules.empty()))invalid("Level action/rule budget");
-    BinaryCodec io;for(auto ch:level.formatVersion==1?std::string_view("AYDLV001"):std::string_view("AYDLV002"))io.w.u(static_cast<unsigned char>(ch),1);
+    const bool progressContent=!level.counters.empty() || !level.objectives.empty() || !level.claims.empty()
+        || !level.flowBindings.empty() || !level.objectiveActions.empty();
+    if(level.formatVersion<3 && progressContent)invalid("Older formats cannot author progress/flow");
+    if((level.counters.empty() && progressContent) || level.counters.size()>kDetProgress2DMaxCounters
+        || level.objectives.size()>kDetProgress2DMaxObjectives || level.claims.size()>kDetProgress2DMaxClaims
+        || level.flowBindings.size()>kDetProgressFlow2DMaxClaims || level.objectiveActions.size()>kDetProgressFlow2DMaxRules)invalid("Level progress/flow budget");
+    for(const auto& objective:level.objectives)if(objective.conditions.empty() || objective.conditions.size()>kDetProgress2DMaxConditions)invalid("Level objective condition budget");
+    BinaryCodec io;const auto magic=level.formatVersion==1?std::string_view("AYDLV001"):
+        level.formatVersion==2?std::string_view("AYDLV002"):std::string_view("AYDLV003");
+    for(auto ch:magic)io.w.u(static_cast<unsigned char>(ch),1);
     io.word(level.formatVersion);io.word(level.applicationVersion);io.word(level.inputVersion);
     io.word(level.stepNumerator);io.word(level.stepDenominator);
     auto policy=level.character;collision(io,policy.collision);character(io,policy);
@@ -62,17 +74,27 @@ Bytes canonical(const DetLevel2D& level){
         io.word(actor.body.layer);io.word(actor.body.mask);io.boolean(actor.body.trigger);io.boolean(actor.body.oneWay);
         io.boolean(actor.character);io.word(actor.path);
         if(actor.body.ignoredOneWay.value)invalid("Level cannot author ignored platform IDs");}
-    if(level.formatVersion==2){io.word(level.maxActionsPerTick);io.word(static_cast<std::uint32_t>(level.actionTargets.size()));
+    if(level.formatVersion>=2){io.word(level.maxActionsPerTick);io.word(static_cast<std::uint32_t>(level.actionTargets.size()));
         for(const auto& target:level.actionTargets){io.w.u(target.actor,8);io.word(target.collisionMask);io.boolean(target.collisionControl);io.word(target.path);}
         io.word(static_cast<std::uint32_t>(level.rules.size()));for(const auto& rule:level.rules){io.word(rule.id);io.w.u(rule.trigger,8);io.w.u(rule.actor,8);
             io.enumeration(rule.phase);io.w.u(rule.action.target,8);io.enumeration(rule.action.kind);io.boolean(rule.once);io.word(rule.cooldownTicks);io.word(rule.delayTicks);}}
+    if(level.formatVersion==3){io.word(static_cast<std::uint32_t>(level.counters.size()));
+        io.word(static_cast<std::uint32_t>(level.objectives.size()));io.word(static_cast<std::uint32_t>(level.claims.size()));
+        for(const auto& counter:level.counters){io.word(counter.id);io.w.u(counter.minimum,8);io.w.u(counter.maximum,8);io.w.u(counter.initial,8);}
+        for(const auto& objective:level.objectives){io.word(objective.id);io.word(static_cast<std::uint32_t>(objective.conditions.size()));
+            for(const auto& condition:objective.conditions){io.word(condition.counter);io.w.u(condition.atLeast,8);}}
+        for(const auto& claim:level.claims){io.word(claim.id);io.w.u(claim.trigger,8);io.w.u(claim.actor,8);io.word(claim.counter);io.w.u(claim.amount,8);}
+        io.word(static_cast<std::uint32_t>(level.flowBindings.size()));io.word(static_cast<std::uint32_t>(level.objectiveActions.size()));
+        for(const auto& binding:level.flowBindings){io.word(binding.claim);io.word(binding.requiredObjective);}
+        for(const auto& rule:level.objectiveActions){io.word(rule.id);io.word(rule.objective);io.w.u(rule.action.target,8);io.enumeration(rule.action.kind);io.boolean(rule.once);}}
     if(io.w.bytes.size()>kDetLevel2DMaxCanonicalBytes)invalid("Level canonical content limit");return std::move(io.w.bytes);
 }
 std::uint64_t hash(const Bytes& bytes){std::uint64_t h=14695981039346656037ull;for(auto byte:bytes){h^=byte;h*=1099511628211ull;}return h;}
 struct Chunk {DetTypedStateSchema schema;std::vector<std::uint64_t> words;};
 struct Prepared {Bytes bytes;std::vector<DetPathMotion2DConfig> paths;std::vector<Chunk> chunks;
     std::vector<std::pair<SimEntityId,DetActorState>> actors;
-    std::optional<DetActions2DConfig> actions;std::optional<DetInteraction2DConfig> interaction;};
+    std::optional<DetActions2DConfig> actions;std::optional<DetInteraction2DConfig> interaction;
+    std::optional<DetProgress2DConfig> progress;std::optional<DetProgressFlow2DConfig> flow;};
 void unique(std::set<std::uint32_t>& ids,std::uint32_t value,bool schema=false){
     if(!value || value==UINT32_MAX || (schema && value<2) || !ids.insert(value).second)invalid("Level registration namespace conflict");
 }
@@ -95,13 +117,13 @@ Prepared prepare(const DetLevel2D& level,const DetLevel2DOptions& options){
         if(!(p.preSystemId<cc.preSystemId && p.postSystemId>cc.postSystemId))invalid("Level path/character ordering conflict");
         unique(schemas,p.stateSchema,true);unique(schemas,p.policySchema,true);unique(systems,p.preSystemId);unique(systems,p.postSystemId);
         unique(validators,p.validatorId);unique(logic,p.logicProfileId);result.paths.push_back(std::move(p));}
-    if(!level.actionTargets.empty()){
+    const auto actorAt=[&](SimEntityId id)->const DetLevelActor2D&{const auto it=std::find_if(level.actors.begin(),level.actors.end(),[&](const auto& a){return a.id==id;});
+        if(it==level.actors.end())invalid("Level authority actor is missing");return *it;};
+    if(!level.actionTargets.empty() || !level.counters.empty()){
         DetActions2DConfig actions;actions.collision=bc;actions.stateSchema=options.actionsStateSchema;
         actions.policySchemaBase=options.actionsPolicySchemaBase;actions.validatorId=options.actionsValidatorId;
         actions.logicProfileId=options.actionsLogicProfileId;actions.maxActionsPerTick=level.maxActionsPerTick;
         SimEntityId previous=0;
-        const auto actorAt=[&](SimEntityId id)->const DetLevelActor2D&{const auto it=std::find_if(level.actors.begin(),level.actors.end(),[&](const auto& a){return a.id==id;});
-            if(it==level.actors.end())invalid("Level action/rule actor is missing");return *it;};
         for(const auto& source:level.actionTargets){if(!source.actor || source.actor<=previous || !source.collisionMask)invalid("Level targets must increase with nonzero mask");previous=source.actor;
             const auto& actor=actorAt(source.actor);const auto& body=actor.body;
             if(body.mask!=0 && body.mask!=source.collisionMask)invalid("Level action target initial mask is unauthorized");
@@ -134,6 +156,35 @@ Prepared prepare(const DetLevel2D& level,const DetLevel2DOptions& options){
             const auto chunks=(bytes.size()+999)/1000;
             for(std::size_t n=0;n<chunks;++n)unique(schemas,indexed(rules.policySchemaBase,n),true);
             unique(systems,rules.systemId);unique(validators,rules.validatorId);unique(logic,rules.logicProfileId);result.interaction=std::move(rules);
+        }
+    }
+    if(!level.counters.empty()){
+        DetProgress2DConfig progress;progress.actions=*result.actions;progress.stateSchema=options.progressStateSchema;
+        progress.policySchemaBase=options.progressPolicySchemaBase;progress.validatorId=options.progressValidatorId;
+        progress.logicProfileId=options.progressLogicProfileId;progress.counters=level.counters;
+        progress.objectives=level.objectives;progress.claims=level.claims;
+        for(const auto& claim:progress.claims){const auto& trigger=actorAt(claim.trigger).body;const auto& actor=actorAt(claim.actor).body;
+            if(trigger.shape!=DetCollisionShape2D::Aabb || !trigger.trigger || trigger.oneWay || trigger.mode==DetBodyMode2D::Disabled
+                || actor.trigger || actor.mode!=DetBodyMode2D::Kinematic)invalid("Level collectible trigger/actor role mismatch");}
+        const auto bytes=encodeDetProgressConfig2D(progress);unique(schemas,progress.stateSchema,true);
+        for(std::size_t n=0;n<(bytes.size()+999)/1000;++n)unique(schemas,indexed(progress.policySchemaBase,n),true);
+        unique(validators,progress.validatorId);unique(logic,progress.logicProfileId);result.progress=std::move(progress);
+        if(!level.flowBindings.empty() || !level.objectiveActions.empty()){
+            DetProgressFlow2DConfig flow;flow.progress=*result.progress;flow.collectStateSchema=options.flowCollectStateSchema;
+            flow.objectiveStateSchema=options.flowObjectiveStateSchema;flow.policySchemaBase=options.flowPolicySchemaBase;
+            flow.systemId=options.flowSystemId;flow.validatorId=options.flowValidatorId;flow.logicProfileId=options.flowLogicProfileId;
+            flow.claims=level.flowBindings;flow.rules=level.objectiveActions;
+            if(flow.systemId>=cc.preSystemId || flow.systemId>=bc.systemId
+                || (result.interaction && flow.systemId>=result.interaction->systemId))invalid("Level flow ordering conflict");
+            for(const auto& path:result.paths)if(flow.systemId>=path.preSystemId)invalid("Level flow must precede every path pre");
+            for(const auto& rule:flow.rules){const auto target=std::find_if(flow.progress.actions.targets.begin(),flow.progress.actions.targets.end(),[&](const auto& t){return t.actor==rule.action.target;});
+                if(target==flow.progress.actions.targets.end())invalid("Level objective action target has no authority");
+                const auto kind=static_cast<std::uint32_t>(rule.action.kind);
+                if(kind<=2?!target->collisionControl:!target->path)invalid("Level objective action unsupported by target");}
+            const auto flowBytes=encodeDetProgressFlowConfig2D(flow);
+            unique(schemas,flow.collectStateSchema,true);unique(schemas,flow.objectiveStateSchema,true);
+            for(std::size_t n=0;n<(flowBytes.size()+999)/1000;++n)unique(schemas,indexed(flow.policySchemaBase,n),true);
+            unique(systems,flow.systemId);unique(validators,flow.validatorId);unique(logic,flow.logicProfileId);result.flow=std::move(flow);
         }
     }
     std::vector<std::uint64_t> words(1+(result.bytes.size()+7)/8);words[0]=result.bytes.size();
@@ -179,10 +230,13 @@ bool install(DeterministicSession& session,const DetLevel2D& level,const DetLeve
     if(prepared.interaction && !installDetInteraction2D(session,*prepared.interaction))return false;
     if(!installDetCharacterController2D(session,level.character))return false;
     for(const auto& p:prepared.paths)if(!installDetPathMotion2D(session,p))return false;
+    if(prepared.progress && !installDetProgress2D(session,*prepared.progress))return false;
+    if(prepared.flow && !installDetProgressFlow2D(session,*prepared.flow))return false;
     if(beforeActors && !beforeActors(session))return false;
     if(session.sealed() || session.faulted() || session.nextTick()!=0)return false;
     for(const auto& chunk:prepared.chunks)if(!(session.registerTypedSchema(chunk.schema) && session.registerGlobalState(chunk.schema.id)))return false;
-    if(!session.registerLogicProfile(options.identityLogicId,level.formatVersion,level.formatVersion==1?0x41444c5630303031ull:0x41444c5630303032ull))return false;
+    const auto identityHash=level.formatVersion==1?0x41444c5630303031ull:level.formatVersion==2?0x41444c5630303032ull:0x41444c5630303033ull;
+    if(!session.registerLogicProfile(options.identityLogicId,level.formatVersion,identityHash))return false;
     if(!session.registerValidator(options.identityValidatorId,level.formatVersion,[chunks=prepared.chunks](const DetSessionCheckpoint& cp,std::string& error){
         for(const auto& chunk:chunks){auto g=cp.globals.find(chunk.schema.id);if(g==cp.globals.end() || g->second!=chunk.words){error="Immutable level content global changed";return false;}
             for(const auto& [id,actor]:cp.actors){(void)id;auto block=actor.blocks.find(chunk.schema.id);
@@ -225,10 +279,14 @@ DetActions2DConfig detLevelActionsConfig2D(const DetLevel2D& level,const DetLeve
     if(!p.actions)invalid("Level has no Actions content");return std::move(*p.actions);}
 DetInteraction2DConfig detLevelInteractionConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options){auto p=prepare(level,options);
     if(!p.interaction)invalid("Level has no Interaction rules");return std::move(*p.interaction);}
+DetProgress2DConfig detLevelProgressConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options){auto p=prepare(level,options);
+    if(!p.progress)invalid("Level has no Progress content");return std::move(*p.progress);}
+DetProgressFlow2DConfig detLevelProgressFlowConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options){auto p=prepare(level,options);
+    if(!p.flow)invalid("Level has no Progress Flow content");return std::move(*p.flow);}
 bool validateDetLevel2D(const DetLevel2D& level,std::string& error,const DetLevel2DOptions& options){try{(void)checked(level,options);error.clear();return true;}catch(const std::exception& e){error=e.what();return false;}}
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,const DetLevel2DOptions& options){std::size_t location=0;bool semantic=false;try{
     TokenReader r(text,location);DetLevel2D value;r.expect("AYDLEVEL");value.formatVersion=r.integer<std::uint32_t>();
-    if(value.formatVersion!=1 && value.formatVersion!=2)invalid("Unknown level format version");
+    if(value.formatVersion<1 || value.formatVersion>3)invalid("Unknown level format version");
     r.expect("session");r.word(value.applicationVersion);r.word(value.inputVersion);r.word(value.stepNumerator);r.word(value.stepDenominator);
     r.expect("collision");collision(r,value.character.collision);r.expect("character");character(r,value.character);
     r.expect("paths");const auto paths=r.integer<std::uint32_t>();if(paths>8)invalid("Level path count limit");
@@ -238,13 +296,27 @@ bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& erro
     for(std::uint32_t n=0;n<actors;++n){r.expect("actor");DetLevelActor2D actor;actor.id=r.integer<std::uint64_t>();r.enumeration(actor.body.mode);r.enumeration(actor.body.shape);
         r.vector(actor.position);r.vector(actor.body.half);r.vector(actor.body.offset);r.vector(actor.body.velocity);r.word(actor.body.layer);r.word(actor.body.mask);
         r.boolean(actor.body.trigger);r.boolean(actor.body.oneWay);r.boolean(actor.character);r.word(actor.path);value.actors.push_back(actor);}
-    if(value.formatVersion==2){r.expect("actions");r.word(value.maxActionsPerTick);const auto targets=r.integer<std::uint32_t>();
+    if(value.formatVersion>=2){r.expect("actions");r.word(value.maxActionsPerTick);const auto targets=r.integer<std::uint32_t>();
         if(targets>8)invalid("Level target count limit");for(std::uint32_t n=0;n<targets;++n){r.expect("target");DetLevelActionTarget2D target;
             target.actor=r.integer<std::uint64_t>();r.word(target.collisionMask);r.boolean(target.collisionControl);r.word(target.path);value.actionTargets.push_back(target);}
         r.expect("rules");const auto count=r.integer<std::uint32_t>();if(count>kDetInteraction2DMaxRules)invalid("Level rule count limit");
         for(std::uint32_t n=0;n<count;++n){r.expect("rule");DetInteractionRule2D rule;r.word(rule.id);rule.trigger=r.integer<std::uint64_t>();
             rule.actor=r.integer<std::uint64_t>();r.enumeration(rule.phase);rule.action.target=r.integer<std::uint64_t>();r.enumeration(rule.action.kind);
             r.boolean(rule.once);r.word(rule.cooldownTicks);r.word(rule.delayTicks);value.rules.push_back(rule);}}
+    if(value.formatVersion==3){r.expect("progress");const auto counters=r.integer<std::uint32_t>(),objectives=r.integer<std::uint32_t>(),claims=r.integer<std::uint32_t>();
+        if(counters>kDetProgress2DMaxCounters || objectives>kDetProgress2DMaxObjectives || claims>kDetProgress2DMaxClaims)invalid("Level progress count limit");
+        for(std::uint32_t n=0;n<counters;++n){r.expect("counter");DetProgressCounter2D counter;r.word(counter.id);
+            counter.minimum=r.integer<std::uint64_t>();counter.maximum=r.integer<std::uint64_t>();counter.initial=r.integer<std::uint64_t>();value.counters.push_back(counter);}
+        for(std::uint32_t n=0;n<objectives;++n){r.expect("objective");DetProgressObjective2D objective;r.word(objective.id);const auto count=r.integer<std::uint32_t>();
+            if(!count || count>kDetProgress2DMaxConditions)invalid("Level objective condition limit");
+            for(std::uint32_t k=0;k<count;++k){r.expect("condition");DetProgressCondition2D condition;r.word(condition.counter);condition.atLeast=r.integer<std::uint64_t>();objective.conditions.push_back(condition);}value.objectives.push_back(std::move(objective));}
+        for(std::uint32_t n=0;n<claims;++n){r.expect("claim");DetCollectibleClaim2D claim;r.word(claim.id);
+            claim.trigger=r.integer<std::uint64_t>();claim.actor=r.integer<std::uint64_t>();r.word(claim.counter);claim.amount=r.integer<std::uint64_t>();value.claims.push_back(claim);}
+        r.expect("flow");const auto bindings=r.integer<std::uint32_t>(),rules=r.integer<std::uint32_t>();
+        if(bindings>kDetProgressFlow2DMaxClaims || rules>kDetProgressFlow2DMaxRules)invalid("Level flow count limit");
+        for(std::uint32_t n=0;n<bindings;++n){r.expect("binding");DetProgressFlowClaimBinding2D binding;r.word(binding.claim);r.word(binding.requiredObjective);value.flowBindings.push_back(binding);}
+        for(std::uint32_t n=0;n<rules;++n){r.expect("objectiveaction");DetProgressFlowRule2D rule;r.word(rule.id);r.word(rule.objective);
+            rule.action.target=r.integer<std::uint64_t>();r.enumeration(rule.action.kind);r.boolean(rule.once);value.objectiveActions.push_back(rule);}}
     r.expect("end");r.end();semantic=true;(void)checked(value,options);output=std::move(value);error.clear();return true;
 }catch(const std::exception& e){error=e.what();if(semantic)error+=" [semantic preflight]";
     else {std::size_t line=1,column=1;for(std::size_t n=0;n<std::min(location,text.size());++n){if(text[n]=='\n'){++line;column=1;}else ++column;}
@@ -262,11 +334,21 @@ std::string encodeDetLevel2D(const DetLevel2D& level,const DetLevel2DOptions& op
     w.stream<<"\nactors";w.word(static_cast<std::uint32_t>(level.actors.size()));for(const auto& actor:level.actors){w.stream<<"\nactor "<<actor.id;w.enumeration(actor.body.mode);w.enumeration(actor.body.shape);
         w.vector(actor.position);w.vector(actor.body.half);w.vector(actor.body.offset);w.vector(actor.body.velocity);w.word(actor.body.layer);w.word(actor.body.mask);
         w.boolean(actor.body.trigger);w.boolean(actor.body.oneWay);w.boolean(actor.character);w.word(actor.path);}
-    if(level.formatVersion==2){w.stream<<"\nactions";w.word(level.maxActionsPerTick);w.word(static_cast<std::uint32_t>(level.actionTargets.size()));
+    if(level.formatVersion>=2){w.stream<<"\nactions";w.word(level.maxActionsPerTick);w.word(static_cast<std::uint32_t>(level.actionTargets.size()));
         for(const auto& target:level.actionTargets){w.stream<<"\ntarget "<<target.actor;w.word(target.collisionMask);w.boolean(target.collisionControl);w.word(target.path);}
         w.stream<<"\nrules";w.word(static_cast<std::uint32_t>(level.rules.size()));for(const auto& rule:level.rules){w.stream<<"\nrule";w.word(rule.id);
             w.stream<<' '<<rule.trigger<<' '<<rule.actor;w.enumeration(rule.phase);w.stream<<' '<<rule.action.target;w.enumeration(rule.action.kind);
             w.boolean(rule.once);w.word(rule.cooldownTicks);w.word(rule.delayTicks);}}
+    if(level.formatVersion==3){w.stream<<"\nprogress";w.word(static_cast<std::uint32_t>(level.counters.size()));
+        w.word(static_cast<std::uint32_t>(level.objectives.size()));w.word(static_cast<std::uint32_t>(level.claims.size()));
+        for(const auto& counter:level.counters)w.stream<<"\ncounter "<<counter.id<<' '<<counter.minimum<<' '<<counter.maximum<<' '<<counter.initial;
+        for(const auto& objective:level.objectives){w.stream<<"\nobjective";w.word(objective.id);w.word(static_cast<std::uint32_t>(objective.conditions.size()));
+            for(const auto& condition:objective.conditions)w.stream<<"\ncondition "<<condition.counter<<' '<<condition.atLeast;}
+        for(const auto& claim:level.claims)w.stream<<"\nclaim "<<claim.id<<' '<<claim.trigger<<' '<<claim.actor<<' '<<claim.counter<<' '<<claim.amount;
+        w.stream<<"\nflow";w.word(static_cast<std::uint32_t>(level.flowBindings.size()));w.word(static_cast<std::uint32_t>(level.objectiveActions.size()));
+        for(const auto& binding:level.flowBindings)w.stream<<"\nbinding "<<binding.claim<<' '<<binding.requiredObjective;
+        for(const auto& rule:level.objectiveActions){w.stream<<"\nobjectiveaction "<<rule.id<<' '<<rule.objective<<' '<<rule.action.target;
+            w.enumeration(rule.action.kind);w.boolean(rule.once);}}
     w.stream<<"\nend\n";
     auto result=w.stream.str();if(result.size()>kDetLevel2DMaxTextBytes)invalid("Encoded level text size limit");return result;}
 bool configureDetLevel2D(DeterministicSession& session,const DetLevel2D& level,std::string& error,const DetLevel2DOptions& options,

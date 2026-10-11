@@ -2,6 +2,7 @@
 #include <AYEntity/DeterministicCharacterController2D.h>
 #include <AYEntity/DeterministicPathMotion2D.h>
 #include <AYEntity/DeterministicInteraction2D.h>
+#include <AYEntity/DeterministicProgressFlow2D.h>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -14,6 +15,8 @@ namespace ayt::entity {
 inline constexpr std::uint32_t kDetLevel2DProfileVersion=1;
 /// @brief Extended authoring profile; format1 retains its original canonical bytes.
 inline constexpr std::uint32_t kDetLevel2DInteractionProfileVersion=2;
+/// @brief Complete counters/claims/automatic progress authoring profile; older bytes are unchanged.
+inline constexpr std::uint32_t kDetLevel2DProgressProfileVersion=3;
 /// @brief Bound on original ASCII source bytes, before decoding.
 inline constexpr std::size_t kDetLevel2DMaxTextBytes=65536;
 /// @brief Bound on complete field-wise semantic bytes entering the manifest.
@@ -55,6 +58,13 @@ struct DetLevel2D {
     std::uint32_t maxActionsPerTick=64;
     /// Format2: sorted IDs, at most16; targets/roles must resolve within this level.
     std::vector<DetInteractionRule2D> rules;
+    /// Format3: bounded sorted Progress tables; no counters requires all five tables empty.
+    std::vector<DetProgressCounter2D> counters;
+    std::vector<DetProgressObjective2D> objectives;
+    std::vector<DetCollectibleClaim2D> claims;
+    /// Format3: explicit automatic claim permissions and rising-objective actions.
+    std::vector<DetProgressFlowClaimBinding2D> flowBindings;
+    std::vector<DetProgressFlowRule2D> objectiveActions;
 };
 /// @brief Application-owned registration ranges; adjust these before combining other schemas/systems.
 /// @note Defaults reserve schemas 8..23 for paths,32..47 for content; path pre 11..18/post 41..48.
@@ -66,8 +76,12 @@ struct DetLevel2DOptions {
         actionsValidatorId=61,actionsLogicProfileId=61;
     std::uint32_t interactionStateSchema=80,interactionPolicySchemaBase=81,
         interactionSystemId=9,interactionValidatorId=62,interactionLogicProfileId=62;
+    std::uint32_t progressStateSchema=96,progressPolicySchemaBase=97,
+        progressValidatorId=64,progressLogicProfileId=64;
+    std::uint32_t flowCollectStateSchema=112,flowObjectiveStateSchema=113,flowPolicySchemaBase=114,
+        flowSystemId=8,flowValidatorId=65,flowLogicProfileId=65;
 };
-/// @brief Strict ASCII AYDLEVEL1/2 decode with 8-hex-digit Float32 bits; failure leaves output unchanged.
+/// @brief Strict ASCII AYDLEVEL1/2/3 decode with 8-hex-digit Float32 bits; failure leaves output unchanged.
 /// @note Rejects unknown/trailing tokens, nonfinite values, invalid roles/policies and initial geometry.
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,
     const DetLevel2DOptions& options={});
@@ -84,12 +98,19 @@ DetSessionConfig detLevelSessionConfig(const DetLevel2D& level);
 /// @brief Resolve the registered path binding used by configure; unknown IDs/options throw.
 DetPathMotion2DConfig detLevelPathConfig2D(const DetLevel2D& level,std::uint32_t path,
     const DetLevel2DOptions& options={});
-/// @brief Resolve complete registered Actions authority from format2 targets.
-/// @note Empty action content, invalid references/options or unsupported controls throw.
+/// @brief Resolve complete registered Actions authority from format2/3 content.
+/// @note Format3 pure counters may resolve a zero-target authority. Otherwise empty
+/// action content, invalid references/options or unsupported controls throw.
 DetActions2DConfig detLevelActionsConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
 /// @brief Resolve complete registered Interaction policy from format2 rules.
 /// @note Empty rules or invalid references/options throw; this does not install systems.
 DetInteraction2DConfig detLevelInteractionConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
+/// @brief Resolve complete registered Progress policy from format3 counter content.
+/// @note Empty counters or invalid tables/options throw; zero-target Actions is valid for pure counters.
+DetProgress2DConfig detLevelProgressConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
+/// @brief Resolve complete registered Flow policy from format3 explicit bindings/rules.
+/// @note Empty Flow tables or invalid references/options throw; unbound claims are not automatically collected.
+DetProgressFlow2DConfig detLevelProgressFlowConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
 /** @details Configure initial level authority in a fresh Session; does not seal or own the tick loop.
  * @note Set Host recipe.config=detLevelSessionConfig(level), then call this from recipe.configure.
  * Install an earlier canonical input system separately. Collision remains the sole XY pose writer.
@@ -104,6 +125,14 @@ DetInteraction2DConfig detLevelInteractionConfig2D(const DetLevel2D& level,const
  * earlier application schemas/systems must use nonconflicting registration IDs.
  * input version and dt are checked here. Standard Host retains tick ownership and presentation.
  * Format2 installs Actions, then optional Interaction, before the existing level pipeline.
+ * Format3 additionally installs Progress and optional Flow before beforeActors.
+ * Flow precedes Interaction and every path/character pre at collision.priority;
+ * application Progress writes must precede Flow. Empty counters forbids objective,
+ * claim and Flow tables. Pure counters still install matching zero-target Actions.
+ * Table maxima do not guarantee a simultaneously valid combination: the full
+ * 8KiB semantic limit, actual policy chunks and Session's64-schema/system/profile
+ * budgets are checked by fresh installation/seal. Options determine registered
+ * identity and are included by each complete facade policy, not by a callback.
  * Do not install a duplicate Actions/Interaction policy separately. Use the level getters
  * for canonical input callbacks. Only initial level IDs may be granted authority here;
  * direct facade capabilities for absent/dynamic actors remain a separate API contract.

@@ -445,6 +445,7 @@ void validateExtendedState(const DetSessionCheckpoint& state,const DetCollision2
     if(c.staticSlopes && (!std::get<bool>(history.read(words,129)) || u(130)!=math::kDetSlopeGeometry2DProfileVersion))invalid();
     if(c.movingSlopes && !std::get<bool>(history.read(words,131)))invalid();
     if(c.continuousTerrain && !std::get<bool>(history.read(words,132)))invalid();
+    if(c.characterRespawn && !std::get<bool>(history.read(words,133)))invalid();
     const auto count=u(5);if(count>c.maxTriggerPairs)invalid();DetCollisionPair2D previous{};
     const auto known=[&](SimEntityId id){return state.actors.contains(id) || std::binary_search(state.retiredIds.begin(),state.retiredIds.end(),id);};
     for(std::uint32_t i=0;i<c.maxTriggerPairs;++i){const DetCollisionPair2D p{std::get<DetEntityRef>(history.read(words,10+2*i)).value,std::get<DetEntityRef>(history.read(words,11+2*i)).value};

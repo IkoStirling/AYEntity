@@ -9,6 +9,7 @@ inline constexpr std::uint32_t kDetCharacterController2DMotionProfileVersion=4;
 inline constexpr std::uint32_t kDetCharacterController2DSlopeProfileVersion=5;
 inline constexpr std::uint32_t kDetCharacterController2DMovingSlopeProfileVersion=6;
 inline constexpr std::uint32_t kDetCharacterController2DTerrainProfileVersion=7;
+inline constexpr std::uint32_t kDetCharacterController2DRespawnProfileVersion=8;
 /// Applied once on release/jump with policy caps; direct support changes do not inherit the old carrier.
 enum class DetCharacterLeaveVelocity2D : std::uint32_t {Discard=0,Inherit=1};
 /// Stable fields; internal intent/carry fields are zero at every committed boundary.
@@ -204,6 +205,8 @@ struct DetCharacterState2D {
 /// the actual bounded own X after walls, with one solver and registered carry state.
 /// Terrain8 also adopts carry at a real walkable upward landing while own intent
 /// descends and jump/drop are absent; proximity alone does not attach an airborne body.
+/// characterRespawn selects controller8/collision9 only through the fresh respawn
+/// facade; this ordinary installer rejects that flag. Old default bytes are unchanged.
 bool installDetCharacterController2D(DeterministicSession& session,DetCharacterController2DConfig config={});
 /// Validated actor block defaults/overrides; other actors keep the disabled zero defaults.
 std::vector<std::uint64_t> detCharacterState2D(const DetCharacterController2DConfig& config,const DetCharacterState2D& state={});
