@@ -997,3 +997,15 @@ Start from [the standard Host example](examples/detcheckpoint/README.md). Necess
 core/Level4 and six128-tick Host paths passed, including keys/exit, collision door,
 real platform carrying, death and manual relocation with save/load/replay/seek/stdin.
 This stage adds no implicit damage/health system or final native acceptance.
+
+## Stage47: dedicated deterministic vitality
+
+Install matching shared Actions, a separate HP-only Progress and `installDetVitality2D`
+before actors/seal. Fixed Hurt/Heal direct permissions and real Enter regions own
+bounded UInt64 HP. Nonlethal Hurt grants an exact tick protection window; healing
+does not revive HP0 or refresh protection. Direct canonical input precedes Vitality6,
+then every path/character pre. Read copied actor/results, never write HP Progress
+outside Vitality. Normal denials preserve HP; pure checkpoint closure binds exact
+owned writes, mirrors, deadlines, counts and permissions. No body/respawn writer is
+added. The necessary Release core gate passed0.344201s with8ticks and actual short
+restore/rollback/replay/seek. See `DeterministicVitality2D.h`; native VM is deferred.

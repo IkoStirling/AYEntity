@@ -2445,3 +2445,29 @@ validation. A narrow internal wrapper reuses actual Respawn validation for empty
 worlds. The closure checks state consistency rather than historical authentication.
 The Host observer verifies cached door/path bools against actual typed state; six local
 content processes pass. Native VM deferred, no soak or generic Combat authority imported.
+
+## Stage47: finite HP authority and protection
+
+Vitality1 composes an explicitly dedicated Progress1 with the same full shared
+Actions1/2 policy. Sorted actors each own one min0/max>0 HP counter; no HP objectives
+or claims, and every external Progress attempt invalidates owned-sequence closure.
+Hurt/Heal saturates0/max; dead Heal is denied. Successful nonlethal Hurt t,N sets
+deadline t+N and protects[t,t+N); N0 is canonical zero, lethal clears protection,
+Heal neither clears nor refreshes. LastHurtTick closes the exact deadline after
+later healed/denied attempts. All overflow planning precedes the sole HP write.
+
+At most8actors/16permissions/16regions,1..64 attempts per tick, complete4096-byte
+policy/five chunks and maximum84 typed fields. Unknown permissions are ordinary
+attempts with their own count, so sum(actor attempts)+unknown equals total exactly.
+Owned Progress sequence equals positive Hurt+Heal writes; last numerical write is
+exact. Actor HP mirrors dedicated counters; initialHP0 stays dead, and initially
+alive actors have at most one death in profile1. Pure policy/defaults/manifest,
+references, roles, reciprocal initial participation and boundary ProcessedTick
+close atomic restores. This is consistency, not historical authentication.
+
+Canonical direct calls precede Vitality6. The callback consumes only exact producer
+AND type and24-byte Enter, canonical source/sequence then region ID, at most one
+binding attempt/tick; Stay/Exit and unrelated namespaces do nothing. Actor copies
+remain defaults. No pose/mask/controller/lifecycle/respawn mutation occurs; HP0
+does not freeze movement. Local Release8tick/9CP actual restore/late rollback/drain/
+sealed replay/two seeks passed; only this necessary short gate, no broad matrix.
