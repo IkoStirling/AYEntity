@@ -205,3 +205,34 @@ canonical paths. Authoring0.463677s also exercised Level8 actual text/cooked rou
 Existing Resource loose/ProjectBuild-Pak/CookShip-Pak compatibility passed0.975352s
 (27CP/14rejects); the new attack content was not separately packaged/run through Pak.
 No runtime fix, first diagnostic-free build failure preserved, native final VM deferred.
+
+## Stage54: Level9 fixed-target enemy authoring
+
+Format9 follows the complete Attack table with:
+
+```text
+brains <count:u32>
+brain <actor:u64> <target:u64> <left:bits8> <right:bits8> <patrolSpeed:bits8> <chaseSpeed:bits8> <senseX:bits8> <senseY:bits8> <attackDistance:bits8> <initialRight:0|1>
+```
+
+Rows are stable actor-ID-sorted enabled solid Kinematic Character/HP/Attack owners;
+the nonself primary target is already Attack-whitelisted. Counts/bounds/speeds/
+sensing/roles and full nested policies use actual Brain preparation. Empty rows
+install no Brain. Old1..8 reject nondefault rows, preserve old writer/semantic/hash
+branches, and are never silently upgraded. Original64KiB/semantic8KiB/joint schema
+budgets remain; maximum individual tables cannot all be assumed to fit.
+
+Inspect adds `brainOwnerCount` and full `brains`: actor/target string IDs,
+patrolLeftBits/patrolRightBits, patrolSpeedBits/chaseSpeedBits,
+senseHalfExtentBits, attackDistanceBits and initialRight. Canonicalize preserves
+explicit format9, complete authority and identity to a fresh destination. Center
+sensing is not line of sight or navigation and does not narrow Attack damage targets.
+
+Start from [brain content](../../examples/detbrain/content.dlt), validate, inspect
+and canonicalize. Runtime uses the separate [standard Host](../../examples/detbrain/README.md),
+where only Hero is externally controlled and Brain owns Enemy. Offline validation
+does not execute enemies or establish future outcomes. Actual short Stage54 Release
+CLI passed1.19754s, Level9 authoring1.24213s with real text/cooked roundtrip. Old8/
+old7/Cooked/Resource compatibility passed, the latter using old samples rather
+than new9 Enemy Pak execution. SourcesUnchanged, no production fix, matrix or
+long-run; native final VM deferred. See [tool design](design.md) for boundaries.

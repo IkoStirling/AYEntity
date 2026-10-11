@@ -1191,3 +1191,36 @@ the ordinary Respawn compatibility pass does not establish that new combination.
 No new Level Brain grammar/Host content/Debug/ASan/native/backend matrix/long-run
 result; final native VM deferred.
 See [design](design.md) and [SDK contract](../../AYDocs/sdk/contracts/2d.md#2dsimulationdeterministic-brain).
+
+## Stage54: authored Level9 enemies in the standard Host
+
+`AYDLEVEL 9` appends complete sorted `brains`/`brain` rows after attacks. Use normal
+Level load/decode, session config and configure; resolve `detLevelBrainConfig2D`
+for copied decisions from the exact prepared Character/Attack/HP authority. Level
+installs Brain before the application hook/actors; never install it twice. Empty
+rows install no Brain and the getter throws. Formats1..8 reject nondefault rows
+and keep their old writer/default/semantic/hash branches; capacities remain joint.
+
+The [Brain content example](examples/detbrain/README.md) uses the real standard
+EngineModuleRuntime/Entity runtime/Host Scene. Enable default-OFF
+`AY_ENTITY_BUILD_DET_BRAIN_EXAMPLE` for target `AYEntity_DetBrainExample`.
+App54/inputVersion6, logic80 and input system4 map six Hero-only canonical bytes;
+Enemy belongs to Brain3. There is no Manual or Enemy-held command mapping.
+Busy/Dead zero intent retains actual controller braking/gravity/carrier motion.
+The fixed target controls sensing, not the full Attack damage whitelist. No
+navigation, line of sight or second pose/HP/tick owner is introduced.
+
+The default64tick scenario and warmup save38 compare Live/fresh load/Record/Replay/
+seek/stdin complete checkpoints and trace suffixes when actually executed. Live
+file I/O stays outside Sim; Record cannot rewind and Replay captures no input.
+Necessary local Release Level9 passed1.24213s (16ticks/17CP/16selected hand rows/
+13fullCP restore comparisons/28rejects), including real text/cooked roundtrip.
+Old8 .476128s/old7 .740938s/Cooked .18782s, standard six-path Host11.3003s and
+CLI1.19754s passed. Actual stdin68rows includes4revisited ticks and suffix42 of26;
+load/seek26rows, Replay0input calls. HeroHP6/hurts1/attacks3/attempts3 and
+EnemyHP0/dead/hurts3/attacks3/attempt1/cancel1,64decisions/3pulses/Dead actually
+passed selected hand checks. Existing Resource .986975s is old-sample compatibility,
+not a separate new9 Enemy Pak run. SourcesUnchanged receipts stage54-levels1/host1;
+no production behavior fix. Stage53 core evidence stays separate, and this scene
+does not cover its unmatched recovery combination. Final native VM deferred;
+no new matrix or long campaign, independent full-CP golden or authentication.

@@ -49,6 +49,7 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         <<",\"vitalityPeriodicRegions\":"<<(level.periodicVitalityRegions?"true":"false")
         <<",\"attackOwnerCount\":"<<level.attackOwners.size()
         <<",\"attackCancelOnRecovery\":"<<(level.attackCancelOnRecovery?"true":"false")
+        <<",\"brainOwnerCount\":"<<level.brainOwners.size()
         <<",\"actors\":[";
     bool first=true;
     for(const auto& actor:level.actors) {
@@ -137,6 +138,13 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
             std::cout<<"{\"actor\":"<<json(std::to_string(target.actor))<<",\"permission\":"<<target.permission
                 <<",\"amount\":"<<json(std::to_string(target.amount))<<'}';}
         std::cout<<"]}";}
+    std::cout<<"],\"brains\":[";first=true;
+    for(const auto& owner:level.brainOwners){if(!first)std::cout<<',';first=false;
+        std::cout<<"{\"actor\":"<<json(std::to_string(owner.actor))<<",\"target\":"<<json(std::to_string(owner.target))
+            <<",\"patrolLeftBits\":"<<json(bits(owner.patrolLeft.bits()))<<",\"patrolRightBits\":"<<json(bits(owner.patrolRight.bits()))
+            <<",\"patrolSpeedBits\":"<<json(bits(owner.patrolSpeed.bits()))<<",\"chaseSpeedBits\":"<<json(bits(owner.chaseSpeed.bits()))
+            <<",\"senseHalfExtentBits\":["<<json(bits(owner.senseHalfExtent.x.bits()))<<','<<json(bits(owner.senseHalfExtent.y.bits()))
+            <<"],\"attackDistanceBits\":"<<json(bits(owner.attackDistance.bits()))<<",\"initialRight\":"<<(owner.initialRight?"true":"false")<<'}';}
     std::cout<<"]}\n";
 }
 int run(int argc,char** argv) {

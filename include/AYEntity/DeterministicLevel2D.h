@@ -6,6 +6,7 @@
 #include <AYEntity/DeterministicCharacterRespawnFlow2D.h>
 #include <AYEntity/DeterministicVitality2D.h>
 #include <AYEntity/DeterministicAttack2D.h>
+#include <AYEntity/DeterministicBrain2D.h>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -30,6 +31,8 @@ inline constexpr std::uint32_t kDetLevel2DPeriodicVitalityProfileVersion=6;
 inline constexpr std::uint32_t kDetLevel2DMovingTriggerProfileVersion=7;
 /// @brief Explicit fixed melee authority; formats1..7 keep their literal semantic bytes.
 inline constexpr std::uint32_t kDetLevel2DAttackProfileVersion=8;
+/// @brief Fixed patrol/chase/attack intent authoring; formats1..8 keep their literal bytes.
+inline constexpr std::uint32_t kDetLevel2DBrainProfileVersion=9;
 /// @brief Bound on original ASCII source bytes, before decoding.
 inline constexpr std::size_t kDetLevel2DMaxTextBytes=65536;
 /// @brief Bound on complete field-wise semantic bytes entering the manifest.
@@ -113,6 +116,9 @@ struct DetLevel2D {
     /// Format8: copied accepted-recovery generation cancels a still-open attack.
     /// An empty owner table requires true; formats1..7 also require this default.
     bool attackCancelOnRecovery=true;
+    /// Format9: sorted enabled character owners with fixed primary HP/Attack targets.
+    /// Brain owns these actors' movement/held inputs; empty installs no Brain.
+    std::vector<DetBrainOwner2D> brainOwners;
 };
 /// @brief Application-owned registration ranges; adjust these before combining other schemas/systems.
 /// @note Defaults reserve schemas 8..23 for paths,32..47 for content; path pre 11..18/post 41..48.
@@ -141,8 +147,10 @@ struct DetLevel2DOptions {
     std::uint32_t vitalityRegionStateSchema=224;
     std::uint32_t attackStateSchema=240,attackLedgerSchema=241,attackPolicySchemaBase=242,
         attackSystemId=5,attackValidatorId=77,attackLogicProfileId=77;
+    std::uint32_t brainStateSchema=272,brainPolicySchemaBase=273,
+        brainSystemId=3,brainValidatorId=78,brainLogicProfileId=78;
 };
-/// @brief Strict ASCII AYDLEVEL1..8 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
+/// @brief Strict ASCII AYDLEVEL1..9 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
 /// @note Rejects unknown/trailing tokens, nonfinite values, invalid roles/policies and initial geometry.
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,
     const DetLevel2DOptions& options={});
@@ -190,6 +198,9 @@ DetVitality2DConfig detLevelVitalityConfig2D(const DetLevel2D& level,const DetLe
 /// @note Empty owners or invalid geometry, permissions, namespaces or scratch seal throw.
 /// Input is runtime-owned and precedes Attack; authored content never imports a held latch or hit ledger.
 DetAttack2DConfig detLevelAttackConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
+/// @brief Resolve Brain1 over the exact prepared Character/Attack/HP authority.
+/// @note Empty Brain content throws. Namespaces use actual facade factories and fresh preflight.
+DetBrain2DConfig detLevelBrainConfig2D(const DetLevel2D& level,const DetLevel2DOptions& options={});
 /** @details Configure initial level authority in a fresh Session; does not seal or own the tick loop.
  * @note Set Host recipe.config=detLevelSessionConfig(level), then call this from recipe.configure.
  * Install an earlier canonical input system separately. Collision remains the sole XY pose writer.
@@ -250,6 +261,18 @@ DetAttack2DConfig detLevelAttackConfig2D(const DetLevel2D& level,const DetLevel2
  * descriptors before the fresh complete install/seal; its16KiB nested policy
  * bound is separate from this level's existing8KiB semantic/64KiB text bounds.
  * Formats1..7 reject attack rows and cancelOnRecovery=false, preserving old bytes.
+ * Format9 appends finite sorted Brain1 owners after the attack table, binding fixed
+ * character/HP/Attack owner IDs and allowed primary HP targets. Prepare uses complete
+ * actual Brain mutable/policy factories and full Character/Attack identity. Brain
+ * installs after Attack before beforeActors; defaults Brain3 precedes external
+ * player Input4, Attack5, Vitality6 and motion pre. Application input must not replace
+ * Brain-owned movement/attack input. Owners remain enabled while present. Dead or
+ * retired owners release motion/held intent; zero speed retains real controller
+ * deceleration, carrier and gravity. Patrol bounds choose direction, not pose clamps;
+ * no navigation, ledge/line-of-sight or animation authority is added. Copied Brain
+ * observations describe the previous Attack callback, not the later checkpoint phase.
+ * An empty table installs no Brain and its getter throws. Formats1..8 reject nonempty
+ * brainOwners without adding any fields/versions/default bytes to their branches.
  * Entire tables and nested policies enter identity, not only a content hash.
  * Flow precedes Interaction and every path/character pre at collision.priority;
  * application Progress writes must precede Flow. Empty counters forbids objective,

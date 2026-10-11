@@ -2709,3 +2709,47 @@ branch has no directed new-combination gate; old Respawn compatibility is separa
 No new Host or Level authoring Brain route, Debug/ASan/native/backend matrix or
 long-run result; final native VM deferred. Existing numeric/Character/Attack/
 checkpoint/replay identities are unchanged; Brain full policy has a distinct manifest.
+
+## Stage54: Level9 prepared Brain identity and content input ownership
+
+Format9 selects AYDLV009/profile9 and appends exact owner/primary target IDs,
+software bits for bounds/speeds/sensing/attack distance, and initial direction.
+Level1..8 writers/defaults/semantic/hash branches encode no new fields and reject
+nonempty Brain content. The fresh prepare planner uses public Brain state/policy
+factories and complete actual Character/Attack/HP configs, validates roles/whitelist/
+namespaces and installs/seals scratch before configuring a destination. Actual
+18KiB Brain policy is separate from8KiB Level semantics/64KiB original source;
+all dependencies still share real64-schema/system/validator/logic budgets.
+
+Brain installs immediately after Attack and before configuration-only application
+hook/immutable content/actors. The getter returns this prepared authority; empty
+content throws. It does not authorize additional target inputs. Default Brain3
+precedes player4/Attack5/Vitals6/optional Flow7/Character pre. Fixed target sensing
+does not narrow Attack's complete whitelist. Preserved observations refer to prior
+Attack processing; later positions/HP/window state remain separate. Ordinary
+braking/carrier/gravity execute for zero intent; no navigation, sight or pose writer.
+
+Optional standard Host app54/inputVersion6 owns immutable Hero packet mapping at
+logic80. Six bytes are speed+2,jump,crouch,drop,HeroHeld,HeroFacing; Enemy never
+receives external input. Pre-frame polls encode canonical commands, the existing
+Host owns ticks and presentation reads committed getters. The authored no-recovery
+scene runs64ticks with real patrol/chase, prepared attack/jump miss and later death.
+Warmup boundary38 is the complete persistent/replay continuation point. Save/load
+is outside Sim and obeys controller restore/resume; Record cannot rewind, Replay
+has zero live input callbacks. This is not the Stage52 Manual/EnemyHeld map.
+
+LevelBrain9Checks selects16tick hand content/typed observations and actual restore
+execution equality, file/cooked roundtrip and authoring negatives. BrainHostExample
+completed six64tick state/trace/seek/stdin/save38 paths in11.3003s. Real stdin68rows
+retains4revisited ticks, and index42 suffix equals26baseline rows; Replay0input
+callbacks. HeroHP6/hurts1/attacks3/attempts3; EnemyHP0/dead/hurts3/attacks3/
+attempt1/cancel1/64decisions/3pulses/Dead passed selected hand checks. Level9
+1.24213s has16tick/17CP/16hand rows/13fullCP comparisons/28rejects and actual
+text/cooked roundtrip. Old8 .476128s/old7 .740938s/Cooked .18782s, CLI1.19754s
+and existing Resource .986975s compatibility passed; the latter is not new9 Pak
+content execution. Result/source snapshots stage54-levels1/host1 are unchanged;
+public-layout consumers were forced rebuilt, without production behavior fixes.
+No OUT metadata/preflight is promoted to runtime proof. Final diagnostic
+hash9235648105896247954/content2553473865409833715 is not a state golden. No new
+independent whole-CP golden, recovery-combination, Host matrix, long-run or nativeVM
+result is claimed. Stage53 core and failures remain separate historical evidence.
