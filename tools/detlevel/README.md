@@ -134,3 +134,19 @@ a running Session, migrate a save or cook/package an asset. Resource loading and
 authoring stay outside simulation ticks. See
 [the execution record](../../../../AYDocs/DETERMINISTIC-CONTENT-TEN-HOUR-20261011.md)
 for actual implementation and necessary local acceptance status.
+
+
+## Stage49: real periodic Level6
+
+Format6 changes only the vitality authoring lines after the existing tables:
+
+```text
+vitality <max-operations> <respawn-recovery> <periodic-regions> <health-count> <permission-count> <region-count>
+vitalityregion <id> <trigger> <actor> <kind> <amount> <period-ticks>
+```
+
+Period0 retains Enter-only;1..65535 repeats on due real Stay after real Enter.
+Exit clears the episode, reentry starts afresh, normal denials consume the interval.
+No independent polling or wall clock. Inspect exposes both boolean and intervals;
+canonicalize preserves complete identity. Old1..5 keep bytes/hash and reject new
+authority. Start with `examples/detperiodic/content.dlt`; actual short CLI passed.

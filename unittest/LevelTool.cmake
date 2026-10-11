@@ -14,6 +14,7 @@ add_test(NAME AYEntity_LevelToolChecks COMMAND "${CMAKE_COMMAND}"
     "-DLEVEL3=${AYENTITY_ROOT}/examples/detcontent/content.dlt"
     "-DLEVEL4=${AYENTITY_ROOT}/examples/detcheckpoint/content.dlt"
     "-DLEVEL5=${AYENTITY_ROOT}/examples/detvitality/content.dlt"
+    "-DLEVEL6=${AYENTITY_ROOT}/examples/detperiodic/content.dlt"
     "-DOUTPUT_DIR=${CMAKE_CURRENT_BINARY_DIR}/level-tool-artifacts"
     -P "${AYENTITY_ROOT}/unittest/RunLevelTool.cmake")
 set_tests_properties(AYEntity_LevelToolChecks PROPERTIES TIMEOUT 60

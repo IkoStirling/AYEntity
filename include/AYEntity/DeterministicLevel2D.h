@@ -23,6 +23,8 @@ inline constexpr std::uint32_t kDetLevel2DProgressProfileVersion=3;
 inline constexpr std::uint32_t kDetLevel2DRespawnProfileVersion=4;
 /// @brief Bounded life/damage/accepted-respawn authoring; formats1..4 keep their bytes.
 inline constexpr std::uint32_t kDetLevel2DVitalityProfileVersion=5;
+/// @brief Explicit bounded periodic regions; formats1..5 retain their literal bytes.
+inline constexpr std::uint32_t kDetLevel2DPeriodicVitalityProfileVersion=6;
 /// @brief Bound on original ASCII source bytes, before decoding.
 inline constexpr std::size_t kDetLevel2DMaxTextBytes=65536;
 /// @brief Bound on complete field-wise semantic bytes entering the manifest.
@@ -96,6 +98,8 @@ struct DetLevel2D {
     std::uint32_t maxVitalityOperationsPerTick=32;
     /// Explicit Vitality2/RespawnFlow2 acquisition; no implicit Manual restoration.
     bool vitalityRespawnRecovery=false;
+    /// Format6 selects actual Vitality3; false preserves Enter-only1/2 behavior.
+    bool periodicVitalityRegions=false;
 };
 /// @brief Application-owned registration ranges; adjust these before combining other schemas/systems.
 /// @note Defaults reserve schemas 8..23 for paths,32..47 for content; path pre 11..18/post 41..48.
@@ -121,8 +125,9 @@ struct DetLevel2DOptions {
     std::uint32_t vitalityStateSchema=192,vitalityPolicySchemaBase=193,
         vitalitySystemId=6,vitalityPostSystemId=62,vitalityValidatorId=75,vitalityLogicProfileId=75,
         vitalityRecoveryStateSchema=208;
+    std::uint32_t vitalityRegionStateSchema=224;
 };
-/// @brief Strict ASCII AYDLEVEL1..5 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
+/// @brief Strict ASCII AYDLEVEL1..6 decode with Float32 bits and UInt64 HP; failure leaves output unchanged.
 /// @note Rejects unknown/trailing tokens, nonfinite values, invalid roles/policies and initial geometry.
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,
     const DetLevel2DOptions& options={});
@@ -200,6 +205,12 @@ DetVitality2DConfig detLevelVitalityConfig2D(const DetLevel2D& level,const DetLe
  * Hurt/Heal budget and registered restoration counts remain distinct. Progress1
  * has no per-tick operation budget. Runtime factories and scratch seal bound all
  * optional schemas and nested complete policies; no simultaneous-maxima promise.
+ * Format6 additionally appends an explicit periodic opt-in and each region's
+ * period0..65535. Period0 stays Enter-only; nonzero uses Enter immediately and
+ * only actual due Stay events. Exit clears that episode, with no timer retry.
+ * Vitality3 region clocks are typed in the optional factory-selected schema224,
+ * independent of HP recovery. No extra system or native overlap sampling occurs.
+ * Formats1..5 reject new nondefault fields and keep all old bytes and profiles.
  * Entire tables and nested policies enter identity, not only a content hash.
  * Flow precedes Interaction and every path/character pre at collision.priority;
  * application Progress writes must precede Flow. Empty counters forbids objective,

@@ -9,8 +9,9 @@ namespace ayt::entity {
 namespace {
 constexpr std::uint64_t logicHash=UINT64_C(0x4456493244503031);
 constexpr std::uint64_t recoveryLogicHash=UINT64_C(0x4456493244503032);
-std::uint32_t version(const DetVitality2DConfig& c){return c.respawnRecovery?2u:1u;}
-std::uint64_t fingerprint(const DetVitality2DConfig& c){return c.respawnRecovery?recoveryLogicHash:logicHash;}
+constexpr std::uint64_t periodicLogicHash=UINT64_C(0x4456493244503033);
+std::uint32_t version(const DetVitality2DConfig& c){return c.periodicRegions?3u:(c.respawnRecovery?2u:1u);}
+std::uint64_t fingerprint(const DetVitality2DConfig& c){return c.periodicRegions?periodicLogicHash:(c.respawnRecovery?recoveryLogicHash:logicHash);}
 constexpr std::size_t chunkBytes=1000;
 [[noreturn]] void invalid(){throw std::invalid_argument("deterministic vitality 2D: invalid policy, event, authority or registered state");}
 std::uint64_t add(std::uint64_t a,std::uint64_t b){if(a>UINT64_MAX-b)invalid();return a+b;}
@@ -20,9 +21,11 @@ std::size_t actorIndex(const DetVitality2DConfig& c,SimEntityId id){const auto i
 std::uint32_t af(std::size_t n,std::uint32_t m){return static_cast<std::uint32_t>(1000+n*100)+m;}
 std::uint32_t rf(std::size_t n,std::uint32_t m){return static_cast<std::uint32_t>(2000+n*200)+m;}
 bool recoveryField(std::uint32_t f){return f<=2 || f>=2000;}
+std::uint32_t zf(std::size_t n,std::uint32_t m){return static_cast<std::uint32_t>(1000+n*100)+m;}
+std::size_t regionIndex(const DetVitality2DConfig& c,std::uint32_t id){const auto* row=find(c.regions,id);if(!row)invalid();return static_cast<std::size_t>(row-c.regions.data());}
 bool kindValid(DetVitalityKind2D k){return k==DetVitalityKind2D::Hurt || k==DetVitalityKind2D::Heal;}
 struct Writer {std::vector<std::uint8_t> bytes;void u64(std::uint64_t v,unsigned w=8){for(unsigned n=0;n<w;++n)bytes.push_back(static_cast<std::uint8_t>(v>>(8*n)));}void u32(std::uint32_t v){u64(v,4);}};
-struct Plan {std::vector<std::uint8_t> bytes;DetTypedStateSchema state,body,recovery;std::vector<DetTypedStateSchema> policies,pathPolicies,flowPolicies,flowStates;};
+struct Plan {std::vector<std::uint8_t> bytes;DetTypedStateSchema state,body,recovery,regions;std::vector<DetTypedStateSchema> policies,pathPolicies,flowPolicies,flowStates;};
 // Path1 exposes its mutable descriptor but no immutable-policy factory. This
 // read-only dependency descriptor matches its public fixed policy fields.
 DetTypedStateSchema pathPolicy(const DetPathMotion2DConfig& c){DetTypedStateSchema s{c.policySchema,1,{{1,std::uint32_t{1}},
@@ -31,6 +34,7 @@ DetTypedStateSchema pathPolicy(const DetPathMotion2DConfig& c){DetTypedStateSche
     for(std::size_t n=0;n<c.waypoints.size();++n){const auto id=static_cast<std::uint32_t>(20+3*n);const auto& point=c.waypoints[n];
         s.fields.insert(s.fields.end(),{{id,point.offset},{id+1,point.travelTicks},{id+2,point.dwellTicks}});}return s;}
 Plan plan(const DetVitality2DConfig& c){
+    if((!c.periodicRegions && c.regionStateSchema!=224) || (c.periodicRegions && (c.regions.empty() || c.regionStateSchema<2 || c.regionStateSchema==UINT32_MAX)))invalid();
     if(!c.respawnRecovery && (c.recoveryStateSchema!=208 || c.postSystemId!=62 || c.respawnFlow || !c.recoveries.empty()))invalid();
     if(c.actors.empty() || c.actors.size()>kDetVitality2DMaxActors || c.permissions.size()>kDetVitality2DMaxPermissions
         || c.regions.size()>kDetVitality2DMaxRegions || (c.permissions.empty() && c.regions.empty())
@@ -50,6 +54,7 @@ Plan plan(const DetVitality2DConfig& c){
         {DetVitalityLastPermission,std::uint32_t{}},{DetVitalityLastRegion,std::uint32_t{}},{DetVitalityLastRequested,std::uint64_t{}},
         {DetVitalityLastActual,std::uint64_t{}},{DetVitalityLastBefore,std::uint64_t{}},{DetVitalityLastAfter,std::uint64_t{}},{DetVitalityLastTick,std::uint64_t{}},{DetVitalityUnknownCount,std::uint64_t{}}}};
     Writer w;w.u32(version(c));w.u32(c.stateSchema);w.u32(c.policySchemaBase);w.u32(c.systemId);w.u32(c.validatorId);w.u32(c.logicProfileId);w.u32(c.maxOperationsPerTick);
+    if(c.periodicRegions)w.u32(c.respawnRecovery?1u:0u);
     w.u32(static_cast<std::uint32_t>(progressBytes.size()));w.bytes.insert(w.bytes.end(),progressBytes.begin(),progressBytes.end());
     w.u32(static_cast<std::uint32_t>(c.actors.size()));SimEntityId previous=0;std::set<std::uint32_t> counters;
     for(std::size_t n=0;n<c.actors.size();++n){const auto& a=c.actors[n];const auto* counter=find(c.progress.counters,a.counter);
@@ -62,8 +67,8 @@ Plan plan(const DetVitality2DConfig& c){
     for(const auto& r:c.permissions){if(!r.id || r.id<=last || !kindValid(r.kind) || !r.maxAmount)invalid();last=r.id;(void)actorIndex(c,r.actor);
         w.u32(r.id);w.u64(r.actor);w.u32(static_cast<std::uint32_t>(r.kind));w.u64(r.maxAmount);}
     w.u32(static_cast<std::uint32_t>(c.regions.size()));last=0;
-    for(const auto& r:c.regions){if(!r.id || r.id<=last || !r.trigger || r.trigger==r.actor || !kindValid(r.kind) || !r.amount)invalid();last=r.id;(void)actorIndex(c,r.actor);
-        w.u32(r.id);w.u64(r.trigger);w.u64(r.actor);w.u32(static_cast<std::uint32_t>(r.kind));w.u64(r.amount);}
+    for(const auto& r:c.regions){if(!r.id || r.id<=last || !r.trigger || r.trigger==r.actor || !kindValid(r.kind) || !r.amount || r.periodTicks>65535 || (!c.periodicRegions && r.periodTicks))invalid();last=r.id;(void)actorIndex(c,r.actor);
+        w.u32(r.id);w.u64(r.trigger);w.u64(r.actor);w.u32(static_cast<std::uint32_t>(r.kind));w.u64(r.amount);if(c.periodicRegions)w.u32(r.periodTicks);}
     if(c.respawnRecovery){
         if(!c.respawnFlow || !c.respawnFlow->externalDeaths || c.recoveries.size()!=c.actors.size()
             || c.recoveryStateSchema<2 || c.recoveryStateSchema==UINT32_MAX || !c.postSystemId)invalid();
@@ -76,7 +81,7 @@ Plan plan(const DetVitality2DConfig& c){
             || c.postSystemId==flow.systemId || c.postSystemId==c.systemId)invalid();
         const auto flowBytes=encodeDetCharacterRespawnFlowConfig2D(flow);
         p.flowStates=detCharacterRespawnFlowStateSchemas2D(flow);p.flowPolicies=detCharacterRespawnFlowPolicySchemas2D(flow);
-        p.recovery={c.recoveryStateSchema,2,{{DetVitalityPostProcessedTick,std::uint64_t{}},{DetVitalityLastResultProtectionUntil,std::uint64_t{}}}};
+        p.recovery={c.recoveryStateSchema,version(c),{{DetVitalityPostProcessedTick,std::uint64_t{}},{DetVitalityLastResultProtectionUntil,std::uint64_t{}}}};
         w.u32(c.recoveryStateSchema);w.u32(c.postSystemId);w.u32(static_cast<std::uint32_t>(flowBytes.size()));
         w.bytes.insert(w.bytes.end(),flowBytes.begin(),flowBytes.end());w.u32(static_cast<std::uint32_t>(c.recoveries.size()));
         for(std::size_t n=0;n<c.recoveries.size();++n){const auto& row=c.recoveries[n];const auto& actor=c.actors[n];
@@ -89,8 +94,11 @@ Plan plan(const DetVitality2DConfig& c){
                 else p.recovery.fields.push_back({rf(n,m),m==110?counter->initial:std::uint64_t{}});}
         }
     }
-    p.bytes=std::move(w.bytes);if(p.bytes.size()>(c.respawnRecovery?kDetVitality2DRespawnMaxPolicyBytes:kDetVitality2DMaxPolicyBytes))invalid();const auto chunks=(p.bytes.size()+chunkBytes-1)/chunkBytes;
-    if(!chunks || chunks>(c.respawnRecovery?9u:5u) || c.policySchemaBase>UINT32_MAX-chunks)invalid();
+    if(c.periodicRegions){w.u32(c.regionStateSchema);p.regions={c.regionStateSchema,3,{{DetVitalityRegionTotalCount,std::uint64_t{}},{DetVitalityRegionProcessedTick,std::uint64_t{}}}};
+        for(std::size_t n=0;n<c.regions.size();++n)for(std::uint32_t m=10;m<=70;m+=10){if(m==10)p.regions.fields.push_back({zf(n,m),false});
+            else if(m==60)p.regions.fields.push_back({zf(n,m),std::uint32_t{}});else p.regions.fields.push_back({zf(n,m),std::uint64_t{}});}}
+    p.bytes=std::move(w.bytes);if(p.bytes.size()>((c.respawnRecovery || c.periodicRegions)?kDetVitality2DRespawnMaxPolicyBytes:kDetVitality2DMaxPolicyBytes))invalid();const auto chunks=(p.bytes.size()+chunkBytes-1)/chunkBytes;
+    if(!chunks || chunks>((c.respawnRecovery || c.periodicRegions)?9u:5u) || c.policySchemaBase>UINT32_MAX-chunks)invalid();
     std::set<std::uint32_t> schemas;const auto reserve=[&](auto id){if(!schemas.insert(id).second)invalid();};
     reserve(p.body.id);reserve(c.progress.actions.collision.historySchema);reserve(actionState.id);for(const auto& s:actionPolicies)reserve(s.id);reserve(progressState.id);
     for(std::size_t n=0;n<(progressBytes.size()+chunkBytes-1)/chunkBytes;++n)reserve(c.progress.policySchemaBase+static_cast<std::uint32_t>(n));
@@ -103,11 +111,12 @@ Plan plan(const DetVitality2DConfig& c){
     if(c.respawnRecovery){const auto& r=c.respawnFlow->respawn;reserve(r.stateSchema);reserve(r.policySchema);reserve(r.character.stateSchema);reserve(r.character.policySchema);
         for(const auto& s:p.flowStates)reserve(s.id);for(const auto& s:p.flowPolicies)reserve(s.id);reserve(c.recoveryStateSchema);}
     reserve(c.stateSchema);
+    if(c.periodicRegions)reserve(c.regionStateSchema);
     for(std::size_t n=0;n<chunks;++n){const auto id=c.policySchemaBase+static_cast<std::uint32_t>(n);reserve(id);
         DetTypedStateSchema s{id,version(c),{{1,static_cast<std::uint32_t>(n)},{2,static_cast<std::uint32_t>(chunks)},{3,static_cast<std::uint32_t>(p.bytes.size())}}};
         const auto begin=n*chunkBytes,end=std::min(begin+chunkBytes,p.bytes.size());for(std::size_t off=begin;off<end;off+=8){std::uint64_t word=0;
             for(std::size_t b=0;b<8 && off+b<end;++b)word|=std::uint64_t{p.bytes[off+b]}<<(8*b);s.fields.push_back({static_cast<std::uint32_t>(4+(off-begin)/8),word});}p.policies.push_back(std::move(s));}
-    (void)detStateDefaults(p.state);if(c.respawnRecovery)(void)detStateDefaults(p.recovery);return p;
+    (void)detStateDefaults(p.state);if(c.respawnRecovery)(void)detStateDefaults(p.recovery);if(c.periodicRegions)(void)detStateDefaults(p.regions);return p;
 }
 void policiesMatch(DetTickContext& ctx,const Plan& p){for(const auto& s:p.policies)for(const auto& f:s.fields)std::visit([&]<class T>(const T& expected){
     if(encodeDetStateValue(ctx.readGlobal<T>(s.id,f.id))!=encodeDetStateValue(expected))invalid();},f.initial);}
@@ -237,6 +246,28 @@ template<class Get,class HP>void validState2(Get&& get,HP&& hp,const DetVitality
 template<class Get,class HP>void validState(Get&& get,HP&& hp,const DetVitality2DConfig& c,const DetProgressResult2D& progress,std::uint64_t maximumStamp,bool boundary){
     if(c.respawnRecovery)validState2(get,hp,c,progress,maximumStamp,boundary);else validState1(get,hp,c,progress,maximumStamp,boundary);
 }
+struct RegionRecord {bool active=false;std::uint64_t next=0,attempts=0,attemptAt=0,transitionAt=0,episodes=0;std::uint32_t phase=0;};
+template<class Get>RegionRecord readRegion(Get&& get,std::size_t n){RegionRecord r;r.active=get.template operator()<bool>(zf(n,10));r.next=get.template operator()<std::uint64_t>(zf(n,20));
+    r.attempts=get.template operator()<std::uint64_t>(zf(n,30));r.attemptAt=get.template operator()<std::uint64_t>(zf(n,40));r.transitionAt=get.template operator()<std::uint64_t>(zf(n,50));
+    r.phase=get.template operator()<std::uint32_t>(zf(n,60));r.episodes=get.template operator()<std::uint64_t>(zf(n,70));return r;}
+template<class Get,class Main>void validRegions(Get&& get,Main&& main,const DetVitality2DConfig& c,std::uint64_t maximumStamp,bool boundary){
+    const auto processed=get.template operator()<std::uint64_t>(DetVitalityRegionProcessedTick),total=get.template operator()<std::uint64_t>(DetVitalityRegionTotalCount);
+    if(processed>maximumStamp || (boundary && processed!=maximumStamp) || processed!=main.template operator()<std::uint64_t>(DetVitalityProcessedTick)
+        || total>main.template operator()<std::uint64_t>(DetVitalityTotalCount))invalid();
+    std::uint64_t sum=0;std::vector<std::uint64_t> actorCounts(c.actors.size(),0);
+    for(std::size_t n=0;n<c.regions.size();++n){const auto r=readRegion(get,n);const auto& row=c.regions[n];
+        if(bool(r.attempts)!=bool(r.attemptAt) || r.attemptAt>maximumStamp || r.transitionAt>maximumStamp || r.phase>3 || (!r.transitionAt && r.phase)
+            || (r.active && (!row.periodTicks || !r.episodes || !r.attempts || r.phase==0 || r.phase==3)) || (!r.active && r.next)
+            || (r.active && r.next!=add(r.attemptAt-1,row.periodTicks)) || (r.attempts && row.periodTicks && r.transitionAt<r.attemptAt)
+            || (!row.periodTicks && (r.active || r.next || r.episodes || r.transitionAt || r.phase)))invalid();
+        sum=add(sum,r.attempts);const auto actor=actorIndex(c,row.actor);actorCounts[actor]=add(actorCounts[actor],r.attempts);}
+    if(sum!=total)invalid();for(std::size_t n=0;n<actorCounts.size();++n)if(actorCounts[n]>main.template operator()<std::uint64_t>(af(n,DetVitalityAttempts)))invalid();
+    const auto last=readResult(main);if(last.region){const auto n=regionIndex(c,last.region);const auto r=readRegion(get,n);
+        if(!r.attempts || r.attemptAt!=stamp(last.tick))invalid();}
+}
+void writeRegion(DetTickContext& ctx,const DetVitality2DConfig& c,std::size_t n,const RegionRecord& r){const auto s=c.regionStateSchema;
+    ctx.writeGlobal(s,zf(n,10),r.active);ctx.writeGlobal(s,zf(n,20),r.next);ctx.writeGlobal(s,zf(n,30),r.attempts);ctx.writeGlobal(s,zf(n,40),r.attemptAt);
+    ctx.writeGlobal(s,zf(n,50),r.transitionAt);ctx.writeGlobal(s,zf(n,60),r.phase);ctx.writeGlobal(s,zf(n,70),r.episodes);}
 void roles(const DetSessionCheckpoint& cp,const DetVitality2DConfig& c,const Plan& p){
     const auto check=[&](SimEntityId id,bool trigger){const auto it=cp.actors.find(id);if(it==cp.actors.end()){if(!cp.nextTick || !std::binary_search(cp.retiredIds.begin(),cp.retiredIds.end(),id))invalid();return;}
         const auto& w=it->second.blocks.at(p.body.id);const auto mode=readDetState<std::uint32_t>(p.body,w,DetBodyMode);if(readDetState<bool>(p.body,w,DetBodyTrigger)!=trigger || (trigger?!mode:mode!=2))invalid();
@@ -267,6 +298,15 @@ void validateCheckpoint(const DetSessionCheckpoint& cp,const DetVitality2DConfig
                 if(cp.actors.contains(row.actor)){const auto bottom=detCharacterRespawnState2D(cp,row.actor,c.respawnFlow->respawn);
                     if(bottom.result!=DetRespawnResult2D::Accepted || bottom.resultTick!=r.at || bottom.spawn!=r.spawn)invalid();}}}
     }
+    if(c.periodicRegions){descriptor(m,p.regions);const DetStateLayout region(p.regions);const auto& words=cp.globals.at(p.regions.id);if(!region.valid(words))invalid();
+        for(const auto& [id,a]:cp.actors){(void)id;if(a.blocks.at(p.regions.id)!=region.defaults())invalid();}
+        validRegions([&]<class T>(auto f){return readDetState<T>(p.regions,words,f);},[&]<class T>(auto f){return readDetState<T>(p.state,cp.globals.at(p.state.id),f);},c,cp.nextTick,true);
+        for(std::size_t n=0;n<c.regions.size();++n){const auto r=readRegion([&]<class T>(auto f){return readDetState<T>(p.regions,words,f);},n);const auto& row=c.regions[n];
+            const bool retired=!cp.actors.contains(row.actor) || !cp.actors.contains(row.trigger);
+            // A same-boundary retirement is later than the delivered frontier.
+            // The next routing callback clears it; no final pair-history equality.
+            if(r.active && retired && r.transitionAt!=cp.nextTick)invalid();
+            if(r.transitionAt && !r.phase && (!retired || r.active))invalid();}}
     validState([&]<class T>(auto f){if(c.respawnRecovery && recoveryField(f))return readDetState<T>(p.recovery,cp.globals.at(p.recovery.id),f);
         return std::get<T>(l.read(words,f));},[&](auto id){return detProgressCounter2D(cp,c.progress,id);},c,progress,cp.nextTick,true);roles(cp,c,p);
     for(const auto& e:cp.pendingEvents)if(e.source==c.progress.actions.collision.systemId && e.type==c.progress.actions.collision.eventType){DetTriggerEvent2D d;if(!decodeDetTriggerEvent2D(e.payload,d))invalid();}
@@ -275,6 +315,7 @@ Plan access(DetTickContext& ctx,const DetVitality2DConfig& c,bool writing){auto 
     if(c.respawnRecovery){for(const auto& row:c.recoveries)(void)detCharacterRespawnFlowState2D(ctx,row.actor,*c.respawnFlow);}
     validState([&]<class T>(auto f){return ctx.readGlobal<T>(c.respawnRecovery && recoveryField(f)?c.recoveryStateSchema:c.stateSchema,f);},
         [&](auto id){return detProgressCounter2D(ctx,c.progress,id);},c,progress,stamp(ctx.tick()),false);
+    if(c.periodicRegions)validRegions([&]<class T>(auto f){return ctx.readGlobal<T>(c.regionStateSchema,f);},[&]<class T>(auto f){return ctx.readGlobal<T>(c.stateSchema,f);},c,stamp(ctx.tick()),false);
     if(writing && ctx.readGlobal<std::uint64_t>(c.stateSchema,DetVitalityProcessedTick)>=stamp(ctx.tick()))invalid();return p;}
 void writeActor(DetTickContext& ctx,const DetVitality2DConfig& c,std::size_t n,const DetVitalityState2D& r){const auto s=c.stateSchema;
     ctx.writeGlobal(s,af(n,DetVitalityHP),r.hp);ctx.writeGlobal(s,af(n,DetVitalityUntil),r.invulnerableUntil);ctx.writeGlobal(s,af(n,DetVitalityAttempts),r.attemptCount);
@@ -331,9 +372,35 @@ bool run(DetTickContext& ctx,const DetVitality2DConfig& c){(void)access(ctx,c,tr
     if(c.respawnRecovery && ctx.systemId()!=c.systemId)invalid();
     for(const auto& e:ctx.events())if(e.source==c.progress.actions.collision.systemId && e.type==c.progress.actions.collision.eventType)events.push_back(&e);
     std::sort(events.begin(),events.end(),[](const auto* a,const auto* b){return std::pair{a->source,a->sequence}<std::pair{b->source,b->sequence};});std::vector<bool> used(c.regions.size(),false);
-    for(const auto* e:events){DetTriggerEvent2D d;if(!decodeDetTriggerEvent2D(e->payload,d))invalid();if(d.phase!=DetTriggerPhase2D::Enter)continue;
-        for(std::size_t n=0;n<c.regions.size();++n){const auto& b=c.regions[n];if(used[n] || d.pair!=DetCollisionPair2D{std::min(b.actor,b.trigger),std::max(b.actor,b.trigger)})continue;
-            used[n]=true;DetVitalityResult2D r;r.actor=b.actor;r.region=b.id;r.kind=b.kind;r.requested=b.amount;(void)attempt(ctx,c,r);}}
+    if(!c.periodicRegions){
+        for(const auto* e:events){DetTriggerEvent2D d;if(!decodeDetTriggerEvent2D(e->payload,d))invalid();if(d.phase!=DetTriggerPhase2D::Enter)continue;
+            for(std::size_t n=0;n<c.regions.size();++n){const auto& b=c.regions[n];if(used[n] || d.pair!=DetCollisionPair2D{std::min(b.actor,b.trigger),std::max(b.actor,b.trigger)})continue;
+                used[n]=true;DetVitalityResult2D r;r.actor=b.actor;r.region=b.id;r.kind=b.kind;r.requested=b.amount;(void)attempt(ctx,c,r);}}
+    }else {
+        const auto ids=ctx.entities();const auto at=stamp(ctx.tick()); // bounded immutable ID snapshot
+        const auto live=[&](const auto& b){return std::binary_search(ids.begin(),ids.end(),b.actor) && std::binary_search(ids.begin(),ids.end(),b.trigger);};
+        for(std::size_t n=0;n<c.regions.size();++n){auto r=readRegion([&]<class T>(auto f){return ctx.readGlobal<T>(c.regionStateSchema,f);},n);
+            if(r.active && !live(c.regions[n])){r.active=false;r.next=0;r.transitionAt=at;r.phase=0;writeRegion(ctx,c,n,r);}}
+        for(const auto* e:events){DetTriggerEvent2D d;if(!decodeDetTriggerEvent2D(e->payload,d))invalid();
+            for(std::size_t n=0;n<c.regions.size();++n){const auto& b=c.regions[n];if(d.pair!=DetCollisionPair2D{std::min(b.actor,b.trigger),std::max(b.actor,b.trigger)})continue;
+                auto r=readRegion([&]<class T>(auto f){return ctx.readGlobal<T>(c.regionStateSchema,f);},n);bool due=false;
+                if(!b.periodTicks){due=d.phase==DetTriggerPhase2D::Enter && !used[n];}
+                else if(d.phase==DetTriggerPhase2D::Exit){r.active=false;r.next=0;r.transitionAt=at;r.phase=3;}
+                else if(d.phase==DetTriggerPhase2D::Enter){
+                    const auto deadline=add(ctx.tick(),b.periodTicks);r.episodes=add(r.episodes,1);r.active=live(b);r.next=r.active?deadline:0;r.transitionAt=at;r.phase=1;due=!used[n];
+                }else if(r.active){r.transitionAt=at;r.phase=2;due=!used[n] && ctx.tick()>=r.next;}
+                // Once-per-tick limits only the attempt. Exit and later reentry
+                // still change the real delivered episode in canonical order.
+                if(due){const auto attempts=add(r.attempts,1),total=add(ctx.readGlobal<std::uint64_t>(c.regionStateSchema,DetVitalityRegionTotalCount),1);
+                    const auto deadline=b.periodTicks?add(ctx.tick(),b.periodTicks):0;
+                    DetVitalityResult2D request;request.actor=b.actor;request.region=b.id;request.kind=b.kind;request.requested=b.amount;
+                    (void)attempt(ctx,c,request);r.attempts=attempts;r.attemptAt=at;if(b.periodTicks)r.next=r.active?deadline:0;
+                    ctx.writeGlobal(c.regionStateSchema,DetVitalityRegionTotalCount,total);used[n]=true;}
+                writeRegion(ctx,c,n,r);
+            }
+        }
+        ctx.writeGlobal(c.regionStateSchema,DetVitalityRegionProcessedTick,at);
+    }
     if(c.respawnRecovery)for(std::size_t n=0;n<c.actors.size();++n)if(ctx.readGlobal<bool>(c.recoveryStateSchema,rf(n,DetVitalityLethalPending))){
         detCharacterRespawnFlowDeath2D(ctx,*c.respawnFlow,c.recoveries[n].externalDeathPermission);
         ctx.writeGlobal(c.recoveryStateSchema,rf(n,DetVitalityLethalPending),false);ctx.writeGlobal(c.recoveryStateSchema,rf(n,DetVitalityLethalTick),std::uint64_t{});}
@@ -380,13 +447,14 @@ std::vector<std::uint8_t> encodeDetVitalityConfig2D(const DetVitality2DConfig& c
 std::vector<DetTypedStateSchema> detVitalityPolicySchemas2D(const DetVitality2DConfig& c){return plan(c).policies;}
 DetTypedStateSchema detVitalityStateSchema2D(const DetVitality2DConfig& c){return plan(c).state;}
 std::vector<DetTypedStateSchema> detVitalityStateSchemas2D(const DetVitality2DConfig& c){const auto p=plan(c);std::vector<DetTypedStateSchema> result{p.state};
-    if(c.respawnRecovery)result.push_back(p.recovery);return result;}
+    if(c.respawnRecovery)result.push_back(p.recovery);if(c.periodicRegions)result.push_back(p.regions);return result;}
 std::uint32_t detVitalityActorField2D(const DetVitality2DConfig& c,SimEntityId id,DetVitalityActorField2D member){(void)plan(c);if(member<1 || member>8)invalid();return af(actorIndex(c,id),member);}
 std::uint32_t detVitalityRecoveryField2D(const DetVitality2DConfig& c,SimEntityId id,DetVitalityRecoveryField2D member){(void)plan(c);
     const auto value=static_cast<std::uint32_t>(member);if(!c.respawnRecovery || value<10 || value>150 || value%10)invalid();return rf(actorIndex(c,id),value);}
 bool installDetVitality2D(DeterministicSession& session,DetVitality2DConfig c){Plan p;try{p=plan(c);if(session.sealed() || session.faulted() || session.nextTick())return false;}catch(const std::invalid_argument&){return false;}
     if(!(session.registerTypedSchema(p.state) && session.registerGlobalState(p.state.id)))return false;
     if(c.respawnRecovery && !(session.registerTypedSchema(p.recovery) && session.registerGlobalState(p.recovery.id)))return false;
+    if(c.periodicRegions && !(session.registerTypedSchema(p.regions) && session.registerGlobalState(p.regions.id)))return false;
     for(const auto& s:p.policies)if(!(session.registerTypedSchema(s) && session.registerGlobalState(s.id)))return false;
     return session.registerLogicProfile(c.logicProfileId,version(c),fingerprint(c))
         && session.registerSystem(c.systemId,c.progress.actions.collision.priority,[c](DetTickContext& ctx){return run(ctx,c);})
@@ -409,4 +477,13 @@ DetVitalityRecoveryState2D detVitalityRecoveryState2D(DetTickContext& ctx,const 
     const auto n=actorIndex(c,id);if(!c.respawnRecovery)return {};return copyRecovery(readRecovery([&]<class T>(auto f){return ctx.readGlobal<T>(c.recoveryStateSchema,f);},n));}
 DetVitalityRecoveryState2D detVitalityRecoveryState2D(const DetSessionCheckpoint& cp,const DetVitality2DConfig& c,SimEntityId id){const auto p=plan(c);validateCheckpoint(cp,c,p);
     const auto n=actorIndex(c,id);if(!c.respawnRecovery)return {};return copyRecovery(readRecovery([&]<class T>(auto f){return readDetState<T>(p.recovery,cp.globals.at(p.recovery.id),f);},n));}
+std::uint32_t detVitalityRegionField2D(const DetVitality2DConfig& c,std::uint32_t id,DetVitalityRegionField2D member){(void)plan(c);const auto value=static_cast<std::uint32_t>(member);
+    if(!c.periodicRegions || value<10 || value>70 || value%10)invalid();return zf(regionIndex(c,id),value);}
+namespace {
+DetVitalityRegionState2D copyRegion(const RegionRecord& r){return {r.active,r.attempts,r.attempts?r.attemptAt-1:0,r.next,r.episodes,r.transitionAt?r.transitionAt-1:0,static_cast<DetTriggerPhase2D>(r.phase)};}
+}
+DetVitalityRegionState2D detVitalityRegionState2D(DetTickContext& ctx,const DetVitality2DConfig& c,std::uint32_t id){(void)access(ctx,c,false);const auto n=regionIndex(c,id);
+    if(!c.periodicRegions)return {};return copyRegion(readRegion([&]<class T>(auto f){return ctx.readGlobal<T>(c.regionStateSchema,f);},n));}
+DetVitalityRegionState2D detVitalityRegionState2D(const DetSessionCheckpoint& cp,const DetVitality2DConfig& c,std::uint32_t id){const auto p=plan(c);validateCheckpoint(cp,c,p);const auto n=regionIndex(c,id);
+    if(!c.periodicRegions)return {};return copyRegion(readRegion([&]<class T>(auto f){return readDetState<T>(p.regions,cp.globals.at(p.regions.id),f);},n));}
 } // namespace ayt::entity

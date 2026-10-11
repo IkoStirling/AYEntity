@@ -2497,3 +2497,32 @@ manual opt-in. Dedicated HP Progress has no objectives/claims and may share zero
 Actions. Getters use actual facade factories; scratch assembly checks joint8KiB,
 64schema,64KiB text and actual seal budgets. Earlier1..4 bytes/hash retained.
 Necessary local short core and six actual128tick Host paths passed; native deferred.
+
+
+## Stage49: real periodic regions and Level6
+
+Prefer Level6 authored acquisition. The vitality header adds a periodic boolean
+after recovery and before counts; each region line appends periodTicks. Explicit
+periodicRegions selects Vitality3, false retains exact1/2 and requires period0.
+Period0 remains Enter-only;1..65535 starts an episode/attempt on real Enter and
+allows only future real Stay at processingTick>=nextEligible. All callbacks consume
+previous collision events in canonical order, then region ID. At most one attempt
+per binding/tick, but later matching Exit/reentry transitions still run. Exit clears
+the clock; reentry starts afresh; transient Enter+Exit has one attempt and ends inactive.
+Normal protection/dead/budget/inactive/Unchanged denials consume the interval.
+No independent poll, overlap sampling, fake Enter, wall time or implicit death retry.
+
+Separate region224 is<=114fields for16regions, complete policy<=8192/nine chunks.
+Copied `detVitalityRegionState2D` exposes attempts/lastAttempt/nextEligible/episode/
+transition/phase. Pure closure checks exact registered counts/sums/stamps/deadlines
+and actor-attempt witness. Delivered episode frontier precedes current motion/respawn,
+so it is not falsely tied to final collision history. Retired references clear in the
+next routing callback; same-boundary retirement remains valid. Actor copies defaults.
+Level1..5 retain complete bytes/hash, including actual fixed Level5 fixture identity.
+
+Necessary local Release periodic core0.331411s, Level6 0.324838s passed; selected
+hand interval/protection/budget/Exit/reentry/transient/recovery behavior is distinct
+from full CP actual restore/late rollback/rpl/seek equality. Native final VM deferred.
+Actual standard Host example includes Hurt2 period3, Heal2 period2, accepted death
+placement outside hazard and equalHP Manual recovery; six actual file/input paths
+agree. Full source/failure/commit receipt is acceptance-49.json.

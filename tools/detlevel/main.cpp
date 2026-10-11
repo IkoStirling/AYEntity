@@ -46,6 +46,7 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
         <<",\"vitalityActorCount\":"<<level.vitalityActors.size()<<",\"vitalityPermissionCount\":"<<level.vitalityPermissions.size()
         <<",\"vitalityRegionCount\":"<<level.vitalityRegions.size()<<",\"maxVitalityOperationsPerTick\":"<<level.maxVitalityOperationsPerTick
         <<",\"vitalityRespawnRecovery\":"<<(level.vitalityRespawnRecovery?"true":"false")
+        <<",\"vitalityPeriodicRegions\":"<<(level.periodicVitalityRegions?"true":"false")
         <<",\"actors\":[";
     bool first=true;
     for(const auto& actor:level.actors) {
@@ -113,7 +114,8 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
     std::cout<<"],\"vitalityRegions\":[";first=true;
     for(const auto& region:level.vitalityRegions){if(!first)std::cout<<',';first=false;
         std::cout<<"{\"id\":"<<region.id<<",\"trigger\":"<<json(std::to_string(region.trigger))<<",\"actor\":"<<json(std::to_string(region.actor))
-            <<",\"kind\":"<<static_cast<std::uint32_t>(region.kind)<<",\"amount\":"<<json(std::to_string(region.amount))<<'}';}
+            <<",\"kind\":"<<static_cast<std::uint32_t>(region.kind)<<",\"amount\":"<<json(std::to_string(region.amount))
+            <<",\"periodTicks\":"<<region.periodTicks<<'}';}
     std::cout<<"]}\n";
 }
 int run(int argc,char** argv) {

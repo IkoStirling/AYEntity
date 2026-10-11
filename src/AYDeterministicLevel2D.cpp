@@ -1,4 +1,4 @@
-// design reference: AYEntity/design.md Stage32/36/42/46/48 bounded complete level content.
+// design reference: AYEntity/design.md Stage32/36/42/46/48/49 bounded complete level content.
 #include <AYEntity/DeterministicLevel2D.h>
 #include <algorithm>
 #include <charconv>
@@ -43,6 +43,10 @@ struct BinaryCodec {Writer w;
     template<class E>void enumeration(E value){w.u(static_cast<std::uint32_t>(value));}
 };
 Bytes canonical(const DetLevel2D& level){
+    const bool periodicContent=level.periodicVitalityRegions || std::any_of(level.vitalityRegions.begin(),level.vitalityRegions.end(),[](const auto& r){return r.periodTicks!=0;});
+    if(level.formatVersion<6 && periodicContent)invalid("Older level formats cannot author periodic vitality");
+    for(const auto& region:level.vitalityRegions)if(region.periodTicks>65535 || (!level.periodicVitalityRegions && region.periodTicks))invalid("Level vitality interval policy");
+    if(level.periodicVitalityRegions && level.vitalityActors.empty())invalid("Periodic vitality requires HP actors");
     const bool vitalityContent=!level.vitalityActors.empty() || !level.vitalityPermissions.empty() || !level.vitalityRegions.empty()
         || level.vitalityRespawnRecovery || level.maxVitalityOperationsPerTick!=32;
     if(level.formatVersion<5 && vitalityContent)invalid("Older level formats cannot author vitality");
@@ -56,7 +60,7 @@ Bytes canonical(const DetLevel2D& level){
         || level.respawnRegions.size()>kDetCharacterRespawnFlow2DMaxRegions
         || (level.character.collision.characterRespawn?level.respawnSpawns.empty() || level.respawnBindings.empty():respawnContent))invalid("Level respawn table budget or opt-in mismatch");
     if(level.paths.size()>8 || level.actors.empty() || level.actors.size()>64)invalid("Level body/path count limit");
-    if(level.formatVersion<1 || level.formatVersion>5)invalid("Unknown level format version");
+    if(level.formatVersion<1 || level.formatVersion>6)invalid("Unknown level format version");
     if(level.formatVersion==1 && (!level.actionTargets.empty() || !level.rules.empty() || level.maxActionsPerTick!=64))invalid("Format1 cannot author actions/rules");
     if(level.actionTargets.size()>8 || level.rules.size()>kDetInteraction2DMaxRules
         || !level.maxActionsPerTick || level.maxActionsPerTick>1024 || (level.actionTargets.empty() && !level.rules.empty()))invalid("Level action/rule budget");
@@ -69,7 +73,7 @@ Bytes canonical(const DetLevel2D& level){
     for(const auto& objective:level.objectives)if(objective.conditions.empty() || objective.conditions.size()>kDetProgress2DMaxConditions)invalid("Level objective condition budget");
     BinaryCodec io;const auto magic=level.formatVersion==1?std::string_view("AYDLV001"):
         level.formatVersion==2?std::string_view("AYDLV002"):level.formatVersion==3?std::string_view("AYDLV003"):
-        level.formatVersion==4?std::string_view("AYDLV004"):std::string_view("AYDLV005");
+        level.formatVersion==4?std::string_view("AYDLV004"):level.formatVersion==5?std::string_view("AYDLV005"):std::string_view("AYDLV006");
     for(auto ch:magic)io.w.u(static_cast<unsigned char>(ch),1);
     io.word(level.formatVersion);io.word(level.applicationVersion);io.word(level.inputVersion);
     io.word(level.stepNumerator);io.word(level.stepDenominator);
@@ -102,12 +106,12 @@ Bytes canonical(const DetLevel2D& level){
         for(const auto& spawn:level.respawnSpawns){io.word(spawn.id);io.w.u(spawn.actor,8);io.w.vector(spawn.position);}
         for(const auto& binding:level.respawnBindings){io.w.u(binding.actor,8);io.word(binding.spawn);}
         for(const auto& region:level.respawnRegions){io.word(region.id);io.w.u(region.trigger,8);io.w.u(region.actor,8);io.enumeration(region.kind);io.word(region.spawn);}}
-    if(level.formatVersion>=5){io.word(level.maxVitalityOperationsPerTick);io.boolean(level.vitalityRespawnRecovery);
+    if(level.formatVersion>=5){io.word(level.maxVitalityOperationsPerTick);io.boolean(level.vitalityRespawnRecovery);if(level.formatVersion>=6)io.boolean(level.periodicVitalityRegions);
         io.word(static_cast<std::uint32_t>(level.vitalityActors.size()));io.word(static_cast<std::uint32_t>(level.vitalityPermissions.size()));io.word(static_cast<std::uint32_t>(level.vitalityRegions.size()));
         for(const auto& actor:level.vitalityActors){io.w.u(actor.actor,8);io.word(actor.counter);io.w.u(actor.maximumHP,8);io.w.u(actor.initialHP,8);
             io.word(actor.invulnerabilityTicks);io.w.u(actor.restoredHP,8);io.boolean(actor.recoverManual);}
         for(const auto& permission:level.vitalityPermissions){io.word(permission.id);io.w.u(permission.actor,8);io.enumeration(permission.kind);io.w.u(permission.maxAmount,8);}
-        for(const auto& region:level.vitalityRegions){io.word(region.id);io.w.u(region.trigger,8);io.w.u(region.actor,8);io.enumeration(region.kind);io.w.u(region.amount,8);}}
+        for(const auto& region:level.vitalityRegions){io.word(region.id);io.w.u(region.trigger,8);io.w.u(region.actor,8);io.enumeration(region.kind);io.w.u(region.amount,8);if(level.formatVersion>=6)io.word(region.periodTicks);}}
     if(io.w.bytes.size()>kDetLevel2DMaxCanonicalBytes)invalid("Level canonical content limit");return std::move(io.w.bytes);
 }
 std::uint64_t hash(const Bytes& bytes){std::uint64_t h=14695981039346656037ull;for(auto byte:bytes){h^=byte;h*=1099511628211ull;}return h;}
@@ -251,6 +255,7 @@ Prepared prepare(const DetLevel2D& level,const DetLevel2DOptions& options){
         DetVitality2DConfig vitality;vitality.stateSchema=options.vitalityStateSchema;vitality.policySchemaBase=options.vitalityPolicySchemaBase;
         vitality.systemId=options.vitalitySystemId;vitality.validatorId=options.vitalityValidatorId;vitality.logicProfileId=options.vitalityLogicProfileId;
         vitality.maxOperationsPerTick=level.maxVitalityOperationsPerTick;vitality.permissions=level.vitalityPermissions;vitality.regions=level.vitalityRegions;
+        vitality.periodicRegions=level.periodicVitalityRegions;if(vitality.periodicRegions)vitality.regionStateSchema=options.vitalityRegionStateSchema;
         SimEntityId previous=0;std::set<std::uint32_t> counters;
         for(const auto& source:level.vitalityActors){const auto& actor=actorAt(source.actor);
             if(!source.actor || source.actor<=previous || !source.counter || !counters.insert(source.counter).second || !source.maximumHP
@@ -339,7 +344,7 @@ bool install(DeterministicSession& session,const DetLevel2D& level,const DetLeve
     if(session.sealed() || session.faulted() || session.nextTick()!=0)return false;
     for(const auto& chunk:prepared.chunks)if(!(session.registerTypedSchema(chunk.schema) && session.registerGlobalState(chunk.schema.id)))return false;
     const auto identityHash=level.formatVersion==1?0x41444c5630303031ull:level.formatVersion==2?0x41444c5630303032ull:level.formatVersion==3?0x41444c5630303033ull:
-        level.formatVersion==4?0x41444c5630303034ull:0x41444c5630303035ull;
+        level.formatVersion==4?0x41444c5630303034ull:level.formatVersion==5?0x41444c5630303035ull:0x41444c5630303036ull;
     if(!session.registerLogicProfile(options.identityLogicId,level.formatVersion,identityHash))return false;
     if(!session.registerValidator(options.identityValidatorId,level.formatVersion,[chunks=prepared.chunks](const DetSessionCheckpoint& cp,std::string& error){
         for(const auto& chunk:chunks){auto g=cp.globals.find(chunk.schema.id);if(g==cp.globals.end() || g->second!=chunk.words){error="Immutable level content global changed";return false;}
@@ -398,7 +403,7 @@ DetVitality2DConfig detLevelVitalityConfig2D(const DetLevel2D& level,const DetLe
 bool validateDetLevel2D(const DetLevel2D& level,std::string& error,const DetLevel2DOptions& options){try{(void)checked(level,options);error.clear();return true;}catch(const std::exception& e){error=e.what();return false;}}
 bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& error,const DetLevel2DOptions& options){std::size_t location=0;bool semantic=false;try{
     TokenReader r(text,location);DetLevel2D value;r.expect("AYDLEVEL");value.formatVersion=r.integer<std::uint32_t>();
-    if(value.formatVersion<1 || value.formatVersion>5)invalid("Unknown level format version");
+    if(value.formatVersion<1 || value.formatVersion>6)invalid("Unknown level format version");
     r.expect("session");r.word(value.applicationVersion);r.word(value.inputVersion);r.word(value.stepNumerator);r.word(value.stepDenominator);
     r.expect("collision");collision(r,value.character.collision);if(value.formatVersion>=4)r.boolean(value.character.collision.characterRespawn);r.expect("character");character(r,value.character);
     r.expect("paths");const auto paths=r.integer<std::uint32_t>();if(paths>8)invalid("Level path count limit");
@@ -435,7 +440,7 @@ bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& erro
         for(std::uint32_t n=0;n<bindings;++n){r.expect("defaultspawn");DetRespawnFlowBinding2D binding;binding.actor=r.integer<std::uint64_t>();r.word(binding.spawn);value.respawnBindings.push_back(binding);}
         for(std::uint32_t n=0;n<regions;++n){r.expect("region");DetRespawnFlowRegion2D region;r.word(region.id);region.trigger=r.integer<std::uint64_t>();
             region.actor=r.integer<std::uint64_t>();r.enumeration(region.kind);r.word(region.spawn);value.respawnRegions.push_back(region);}}
-    if(value.formatVersion>=5){r.expect("vitality");r.word(value.maxVitalityOperationsPerTick);r.boolean(value.vitalityRespawnRecovery);
+    if(value.formatVersion>=5){r.expect("vitality");r.word(value.maxVitalityOperationsPerTick);r.boolean(value.vitalityRespawnRecovery);if(value.formatVersion>=6)r.boolean(value.periodicVitalityRegions);
         const auto actors=r.integer<std::uint32_t>(),permissions=r.integer<std::uint32_t>(),regions=r.integer<std::uint32_t>();
         if(actors>kDetVitality2DMaxActors || permissions>kDetVitality2DMaxPermissions || regions>kDetVitality2DMaxRegions)invalid("Level vitality count limit");
         for(std::uint32_t n=0;n<actors;++n){r.expect("health");DetLevelVitalityActor2D actor;actor.actor=r.integer<std::uint64_t>();r.word(actor.counter);
@@ -444,7 +449,7 @@ bool decodeDetLevel2D(std::string_view text,DetLevel2D& output,std::string& erro
         for(std::uint32_t n=0;n<permissions;++n){r.expect("vitalitypermission");DetVitalityPermission2D permission;r.word(permission.id);
             permission.actor=r.integer<std::uint64_t>();r.enumeration(permission.kind);permission.maxAmount=r.integer<std::uint64_t>();value.vitalityPermissions.push_back(permission);}
         for(std::uint32_t n=0;n<regions;++n){r.expect("vitalityregion");DetVitalityRegion2D region;r.word(region.id);region.trigger=r.integer<std::uint64_t>();
-            region.actor=r.integer<std::uint64_t>();r.enumeration(region.kind);region.amount=r.integer<std::uint64_t>();value.vitalityRegions.push_back(region);}}
+            region.actor=r.integer<std::uint64_t>();r.enumeration(region.kind);region.amount=r.integer<std::uint64_t>();if(value.formatVersion>=6)r.word(region.periodTicks);value.vitalityRegions.push_back(region);}}
     r.expect("end");r.end();semantic=true;(void)checked(value,options);output=std::move(value);error.clear();return true;
 }catch(const std::exception& e){error=e.what();if(semantic)error+=" [semantic preflight]";
     else {std::size_t line=1,column=1;for(std::size_t n=0;n<std::min(location,text.size());++n){if(text[n]=='\n'){++line;column=1;}else ++column;}
@@ -482,12 +487,12 @@ std::string encodeDetLevel2D(const DetLevel2D& level,const DetLevel2DOptions& op
         for(const auto& spawn:level.respawnSpawns){w.stream<<"\nspawn "<<spawn.id<<' '<<spawn.actor;w.vector(spawn.position);}
         for(const auto& binding:level.respawnBindings)w.stream<<"\ndefaultspawn "<<binding.actor<<' '<<binding.spawn;
         for(const auto& region:level.respawnRegions){w.stream<<"\nregion "<<region.id<<' '<<region.trigger<<' '<<region.actor;w.enumeration(region.kind);w.word(region.spawn);}}
-    if(level.formatVersion>=5){w.stream<<"\nvitality";w.word(level.maxVitalityOperationsPerTick);w.boolean(level.vitalityRespawnRecovery);
+    if(level.formatVersion>=5){w.stream<<"\nvitality";w.word(level.maxVitalityOperationsPerTick);w.boolean(level.vitalityRespawnRecovery);if(level.formatVersion>=6)w.boolean(level.periodicVitalityRegions);
         w.word(static_cast<std::uint32_t>(level.vitalityActors.size()));w.word(static_cast<std::uint32_t>(level.vitalityPermissions.size()));w.word(static_cast<std::uint32_t>(level.vitalityRegions.size()));
         for(const auto& actor:level.vitalityActors){w.stream<<"\nhealth "<<actor.actor<<' '<<actor.counter<<' '<<actor.maximumHP<<' '<<actor.initialHP;
             w.word(actor.invulnerabilityTicks);w.stream<<' '<<actor.restoredHP;w.boolean(actor.recoverManual);}
         for(const auto& permission:level.vitalityPermissions){w.stream<<"\nvitalitypermission "<<permission.id<<' '<<permission.actor;w.enumeration(permission.kind);w.stream<<' '<<permission.maxAmount;}
-        for(const auto& region:level.vitalityRegions){w.stream<<"\nvitalityregion "<<region.id<<' '<<region.trigger<<' '<<region.actor;w.enumeration(region.kind);w.stream<<' '<<region.amount;}}
+        for(const auto& region:level.vitalityRegions){w.stream<<"\nvitalityregion "<<region.id<<' '<<region.trigger<<' '<<region.actor;w.enumeration(region.kind);w.stream<<' '<<region.amount;if(level.formatVersion>=6)w.word(region.periodTicks);}}
     w.stream<<"\nend\n";
     auto result=w.stream.str();if(result.size()>kDetLevel2DMaxTextBytes)invalid("Encoded level text size limit");return result;}
 bool configureDetLevel2D(DeterministicSession& session,const DetLevel2D& level,std::string& error,const DetLevel2DOptions& options,

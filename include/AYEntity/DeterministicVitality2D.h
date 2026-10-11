@@ -6,6 +6,7 @@
 namespace ayt::entity {
 inline constexpr std::uint32_t kDetVitality2DProfileVersion=1;
 inline constexpr std::uint32_t kDetVitality2DRespawnProfileVersion=2;
+inline constexpr std::uint32_t kDetVitality2DPeriodicProfileVersion=3;
 inline constexpr std::size_t kDetVitality2DRespawnMaxPolicyBytes=8192;
 inline constexpr std::size_t kDetVitality2DMaxActors=8,kDetVitality2DMaxPermissions=16,
     kDetVitality2DMaxRegions=16,kDetVitality2DMaxPolicyBytes=4096;
@@ -21,10 +22,12 @@ struct DetVitalityPermission2D {
     std::uint32_t id=0;SimEntityId actor=0;
     DetVitalityKind2D kind=DetVitalityKind2D::Hurt;std::uint64_t maxAmount=1;
 };
-/// @brief Fixed Hurt/Heal on a real configured collision Enter; Stay/Exit do nothing.
+/// @brief Fixed Hurt/Heal on Enter, with an explicit profile3 real-Stay interval.
 struct DetVitalityRegion2D {
     std::uint32_t id=0;SimEntityId trigger=0,actor=0;
     DetVitalityKind2D kind=DetVitalityKind2D::Hurt;std::uint64_t amount=1;
+    /// Profile3:0 is Enter-only;1..65535 repeats only on real delivered Stay.
+    std::uint32_t periodTicks=0;
 };
 /// @brief Fixed fresh-accepted recovery and source-bound external death permission.
 struct DetVitalityRecovery2D {
@@ -40,6 +43,11 @@ struct DetVitalityRecovery2D {
  * use strictly ascending nonzero IDs (actors use actor IDs), with no shared counters.
  * Direct calls run before this system at collision.priority; events then run in
  * canonical (source,sequence), region ID order, at most once per binding per tick.
+ * Explicit periodic3 adds at most114 fields in regionStateSchema. Enter starts an
+ * episode and attempts now; period1..65535 admits future real Stay only when due.
+ * Exit always clears, including after an earlier same-tick attempt. Denials consume
+ * intervals; a later Enter resets the episode. Committed episode state describes
+ * the delivered frontier, which precedes current collision motion/relocation.
  * No pose, mask, controller or lifecycle writes occur. Default1 has no respawn
  * dependency. Explicit recovery2 additionally installs postSystemId and binds the
  * complete previously installed Flow2; Vitality precedes Flow and post follows
@@ -61,6 +69,9 @@ struct DetVitality2DConfig {
     std::uint32_t recoveryStateSchema=208,postSystemId=62;
     std::optional<DetCharacterRespawnFlow2DConfig> respawnFlow;
     std::vector<DetVitalityRecovery2D> recoveries;
+    /// Explicit profile3. False retains exact profiles1/2 and requires period0.
+    bool periodicRegions=false;
+    std::uint32_t regionStateSchema=224;
 };
 /// @brief Copied actor state; dead is derived from HP0, not a hidden latch.
 struct DetVitalityState2D {
@@ -96,6 +107,21 @@ enum DetVitalityRecoveryField2D : std::uint32_t {
 enum DetVitalityRecoveryGlobalField2D : std::uint32_t {
     DetVitalityPostProcessedTick=1,DetVitalityLastResultProtectionUntil=2
 };
+/// @brief A copied delivered-event episode, not the current collision pair history.
+/// @note At most one attempt/binding/tick; every matching Exit/Enter still changes
+/// the episode after that attempt. Denials consume the logical interval. Active
+/// timers never poll independently: a future real Stay or new Enter is required.
+struct DetVitalityRegionState2D {
+    bool active=false;
+    std::uint64_t attemptCount=0,lastAttemptTick=0,nextEligible=0,episodeCount=0,lastTransitionTick=0;
+    DetTriggerPhase2D lastPhase=static_cast<DetTriggerPhase2D>(0);
+};
+enum DetVitalityRegionField2D : std::uint32_t {
+    DetVitalityRegionActive=10,DetVitalityRegionNextEligible=20,DetVitalityRegionAttempts=30,
+    DetVitalityRegionLastAttemptTick=40,DetVitalityRegionLastTransitionTick=50,
+    DetVitalityRegionLastPhase=60,DetVitalityRegionEpisodes=70
+};
+enum DetVitalityRegionGlobalField2D : std::uint32_t {DetVitalityRegionTotalCount=1,DetVitalityRegionProcessedTick=2};
 enum DetVitalityField2D : std::uint32_t {
     DetVitalityTotalCount=10,DetVitalityBudgetTick=20,DetVitalityTickCount=30,
     DetVitalityProcessedTick=40,DetVitalityOwnedProgressCount=50,
@@ -156,9 +182,13 @@ DetVitalityRecoveryState2D detVitalityRecoveryState2D(DetTickContext& context,co
 DetVitalityRecoveryState2D detVitalityRecoveryState2D(const DetSessionCheckpoint& checkpoint,const DetVitality2DConfig& config,SimEntityId actor);
 /// @brief Exact descriptor/field factories for committed typed reads.
 DetTypedStateSchema detVitalityStateSchema2D(const DetVitality2DConfig& config);
-/// @brief Exact complete mutable schema set: primary1, or primary2 and recovery208.
+/// @brief Exact selected mutable set: primary, optional recovery208 and periodic224.
 std::vector<DetTypedStateSchema> detVitalityStateSchemas2D(const DetVitality2DConfig& config);
 std::uint32_t detVitalityRecoveryField2D(const DetVitality2DConfig& config,SimEntityId actor,DetVitalityRecoveryField2D member);
+/// @brief Copy literal region attempts and delivered-frontier episode state.
+DetVitalityRegionState2D detVitalityRegionState2D(DetTickContext& context,const DetVitality2DConfig& config,std::uint32_t regionId);
+DetVitalityRegionState2D detVitalityRegionState2D(const DetSessionCheckpoint& checkpoint,const DetVitality2DConfig& config,std::uint32_t regionId);
+std::uint32_t detVitalityRegionField2D(const DetVitality2DConfig& config,std::uint32_t regionId,DetVitalityRegionField2D member);
 std::uint32_t detVitalityActorField2D(const DetVitality2DConfig& config,SimEntityId actor,DetVitalityActorField2D member);
 /// @brief Full immutable policy bytes and descriptors; not a save file or authentication.
 std::vector<std::uint8_t> encodeDetVitalityConfig2D(const DetVitality2DConfig& config);
