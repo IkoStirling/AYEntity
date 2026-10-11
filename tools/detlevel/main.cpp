@@ -237,6 +237,47 @@ DetLevel2D terrainStarter() {
     return level;
 }
 
+// Stage64 private offline path authoring. Reuse Stage61 editActorId/editDecimal,
+// actual Level load/validation/encoding and the existing exclusive writeFresh.
+std::uint32_t authorPathWord(std::string_view token,std::uint32_t minimum,
+    std::uint32_t maximum,std::string_view name) {
+    std::uint32_t value=0;
+    const auto parsed=std::from_chars(token.data(),token.data()+token.size(),value,10);
+    require(parsed.ec==std::errc{} && parsed.ptr==token.data()+token.size()
+        && value>=minimum && value<=maximum,
+        std::string(name)+" must be a bounded decimal UInt32");
+    return value;
+}
+DetPathPlayback2D authorPathPlayback(std::string_view token) {
+    if(token=="once")return DetPathPlayback2D::Once;
+    if(token=="loop")return DetPathPlayback2D::Loop;
+    if(token=="pingpong")return DetPathPlayback2D::PingPong;
+    throw std::runtime_error("Unknown path playback; choose once, loop or pingpong");
+}
+DetLevelPath2D& authorExistingPath(DetLevel2D& level,std::uint32_t id) {
+    const auto found=std::lower_bound(level.paths.begin(),level.paths.end(),id,
+        [](const DetLevelPath2D& path,std::uint32_t identity){return path.id<identity;});
+    require(found!=level.paths.end() && found->id==id,"Path identity is not authored in this level");
+    return *found;
+}
+void authorBindOrdinaryPath(DetLevel2D& level,SimEntityId id,const DetLevelPath2D& path) {
+    require(!path.movingTrigger,"Ordinary binding cannot grant the explicit moving-trigger path role");
+    const auto found=std::lower_bound(level.actors.begin(),level.actors.end(),id,
+        [](const DetLevelActor2D& actor,SimEntityId identity){return actor.id<identity;});
+    require(found!=level.actors.end() && found->id==id,"Actor identity is not authored in this level");
+    require(found->body.mode==DetBodyMode2D::Static && !found->character
+        && !found->body.trigger && !found->body.oneWay && found->path==0,
+        "Binding requires an unbound ordinary solid Static actor");
+    if(found->body.shape!=DetCollisionShape2D::Aabb)
+        require(level.character.collision.movingSlopes,
+            "A translating wedge requires the source's explicit movingSlopes policy");
+    // No source policy/permissions are upgraded. The path origin remains the
+    // actor pose, independently of the preserved body's geometric offset.
+    found->body.mode=DetBodyMode2D::MovingObstacle;
+    found->body.velocity={};
+    found->path=path.id;
+}
+
 void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
     const auto config=detLevelSessionConfig(level);
     std::cout<<"{\"schema\":1,\"status\":\"passed\",\"source\":"<<json(source.generic_string())
@@ -372,6 +413,9 @@ int run(int argc,char** argv) {
             "aydetlevel float-bits <eight-hex-digits>\n"
             "aydetlevel create <character|dash|terrain> <fresh.dlt>\n"
             "aydetlevel add-solid <source.dlt> <new-id> <aabb|slope-left|slope-right> <x> <y> <half-x> <half-y> <layer-u32> <mask-u32> <fresh.dlt>\n"
+            "aydetlevel add-path <source.dlt> <actor-id> <new-path-u32> <dx> <dy> <travel-ticks> <once|loop|pingpong> <fresh.dlt>\n"
+            "aydetlevel bind-path <source.dlt> <actor-id> <existing-path-u32> <fresh.dlt>\n"
+            "aydetlevel edit-waypoint <source.dlt> <path-u32> <index0> <dx> <dy> <travel-ticks> <dwell-ticks> <fresh.dlt>\n"
             "aydetlevel preview <level.dlt> <fresh.svg>\n"
             "aydetlevel place <source.dlt> <actor-id> <x> <y> <fresh.dlt>\n"
             "aydetlevel resize-half <source.dlt> <actor-id> <half-x> <half-y> <fresh.dlt>\n"
@@ -462,6 +506,71 @@ int run(int argc,char** argv) {
         const bool valid=validateDetLevel2D(level,error);require(valid,error);
         const auto canonical=encodeDetLevel2D(level);
         const std::filesystem::path destination=argv[11];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
+    }
+
+    if(command=="add-path") {
+        // argv0, command, source, actor, new path, dx, dy, ticks, playback, output.
+        // Level forbids orphan policies, so creation and binding are one edit.
+        require(argc==10,"add-path requires source, actor ID, new path ID, relative offset, travel ticks, playback and fresh output");
+        const std::filesystem::path source=argv[2];ordinary(source);
+        DetLevel2D level;std::string error;
+        const bool loaded=loadDetLevel2D(source,level,error);require(loaded,error);
+        const auto actor=editActorId(argv[3]);
+        const auto id=authorPathWord(argv[4],1,UINT32_MAX,"Path identity");
+        const auto dx=editDecimal(argv[5]),dy=editDecimal(argv[6]);
+        const auto ticks=authorPathWord(argv[7],1,65535,"Travel ticks");
+        const auto playback=authorPathPlayback(argv[8]);
+        require(level.paths.size()<8,"Level path count limit");
+        const auto insertion=std::lower_bound(level.paths.begin(),level.paths.end(),id,
+            [](const DetLevelPath2D& path,std::uint32_t identity){return path.id<identity;});
+        require(insertion==level.paths.end() || insertion->id!=id,"Path identity is already authored in this level");
+        DetLevelPath2D path;path.id=id;path.playback=playback;
+        DetPathWaypoint2D first,last;first.travelTicks=ticks;last.travelTicks=ticks;
+        last.offset={dx,dy};path.waypoints={first,last};
+        // Both travel durations are explicit and equal; dwell defaults to0.
+        // first.offset is canonical positive zero, not a parsed signed zero.
+        authorBindOrdinaryPath(level,actor,path);
+        level.paths.insert(insertion,std::move(path));
+        const bool valid=validateDetLevel2D(level,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[9];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
+    }
+    if(command=="bind-path") {
+        require(argc==6,"bind-path requires source, actor ID, existing path ID and fresh output");
+        const std::filesystem::path source=argv[2];ordinary(source);
+        DetLevel2D level;std::string error;
+        const bool loaded=loadDetLevel2D(source,level,error);require(loaded,error);
+        const auto actor=editActorId(argv[3]);
+        const auto path=authorPathWord(argv[4],1,UINT32_MAX,"Path identity");
+        authorBindOrdinaryPath(level,actor,authorExistingPath(level,path));
+        const bool valid=validateDetLevel2D(level,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[5];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
+    }
+    if(command=="edit-waypoint") {
+        // Index is zero-based. No insertion/removal, role switch or cursor import.
+        require(argc==10,"edit-waypoint requires source, path ID, point index, relative offset, travel ticks, dwell ticks and fresh output");
+        const std::filesystem::path source=argv[2];ordinary(source);
+        DetLevel2D level;std::string error;
+        const bool loaded=loadDetLevel2D(source,level,error);require(loaded,error);
+        const auto id=authorPathWord(argv[3],1,UINT32_MAX,"Path identity");
+        const auto index=authorPathWord(argv[4],0,23,"Waypoint index");
+        const auto dx=editDecimal(argv[5]),dy=editDecimal(argv[6]);
+        const auto ticks=authorPathWord(argv[7],1,65535,"Travel ticks");
+        const auto dwell=authorPathWord(argv[8],0,65535,"Dwell ticks");
+        auto& path=authorExistingPath(level,id);
+        require(index<path.waypoints.size(),"Waypoint index is not authored in this path");
+        if(index==0)require(dx.bits()==0 && dy.bits()==0,
+            "The first waypoint offset must remain canonical positive zero");
+        path.waypoints[index]={{dx,dy},ticks,dwell};
+        // The existing movingTrigger role, actor bindings and every permission
+        // table are retained. Shared path users all receive the edited policy.
+        const bool valid=validateDetLevel2D(level,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[9];writeFresh(destination,canonical);
         inspect(level,destination);return 0;
     }
 

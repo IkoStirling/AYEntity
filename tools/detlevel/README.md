@@ -463,3 +463,55 @@ and physical I/O failure may leave a partial new file. No removal/shape replacem
 running-state writer, editor, Tilemap import or durability promise is added.
 
 Actual local MSVC Release AYEntity_LevelToolChecks passed in 3.41s; the standard tool build completed in 6.188s. This finite gate exercised create/add/place/resize/preview, selected dyadic actor bits and actual filled-polygon points, sorted identities, full unselected canonical policy/original actors and canonical stability, legal mask0, a valid 64-body source and 16 protected normal refusals. The recorded source snapshots matched; the actual executable and artifacts are hash-bound. Evidence is out/detcontent36-40-20261011/stage63-actual-freeze.json and stage63-tool1/result.json. No Sim advance, future walkability, whole-checkpoint golden, authentication, new content Pak execution, broad matrix or native VM acceptance is claimed; native final VM remains Deferred. No production/oracle repair or prior gate reuse was needed for this actual invocation.
+
+## Stage64: create, share and edit named paths (local verified; native VM Deferred)
+
+```text
+aydetlevel add-path <source.dlt> <actor-id> <new-path-id> <dx-decimal> <dy-decimal> <travel-ticks> <once|loop|pingpong> <fresh.dlt>
+aydetlevel bind-path <source.dlt> <actor-id> <existing-path-id> <fresh.dlt>
+aydetlevel edit-waypoint <source.dlt> <path-id> <point-index> <dx-decimal> <dy-decimal> <travel-ticks> <dwell-ticks> <fresh.dlt>
+```
+
+argc including argv0 is10/6/10. IDs are full-token unsigned decimals: actor
+nonzero UInt64, path nonzero UInt32. Offsets use actual finite software decimals,
+travel1..65535 and dwell0..65535 logical ticks. Point-index0..23 must exist.
+Point0 must keep exact +0,+0 bits; -0 is refused there.
+
+For example, after the Stage63 terrain/static authoring commands:
+
+```text
+aydetlevel add-path solids.dlt 200 30 2 1 64 pingpong route.dlt
+aydetlevel bind-path route.dlt 100 30 shared.dlt
+aydetlevel edit-waypoint shared.dlt 30 1 -1 2 32 3 revised.dlt
+aydetlevel preview revised.dlt layout.svg
+```
+
+These names/IDs are example content, never engine permissions. add-path emits two
+points (generated +0 origin and the supplied relative offset), equal explicit
+travel counts and zero dwell, together with one binding. Level requires all named
+paths used, so it cannot publish an orphan table. New path IDs are inserted sorted.
+bind-path adds an existing unbound ordinary solid Static to an ordinary Path1:
+mode becomes MovingObstacle and initial velocity zero, retaining shape/pose/half/
+offset/layer/mask. Characters, triggers, one-way, Kinematic/already-bound actors
+are refused. A wedge requires source movingSlopes already selected. Path2's
+moving-trigger role is not granted by this ordinary binding command.
+
+edit-waypoint changes only one existing offset/travel/dwell record; it preserves
+point count, playback, bindings and any existing Path2 role. All sharing actors
+receive the policy edit. Each route origin is its actor.position, not body.offset;
+absolute Respawn spawns stay fixed. Forward uses outgoing duration, reverse the
+lower point, Loop its real last-to-first leg, and dwell later full stationary
+ticks. PingPong turns without an extra move. Preview renders authored points.
+
+Every valid current source format1..11 retains explicit app/input/step/options
+and unrelated tables; no auto Actions control, role/policy/version upgrade or
+mutable cursor is generated. Inserting a path can change sorted-index-derived
+registration IDs, creating a new complete identity rather than restore migration.
+Actual fullvalidate/fresh seal/encode finishes before exclusive fresh output.
+8paths/2..24points/64bodies (or lower configured count),64KiB text/8KiB semantics
+and actual joint namespaces still apply. Syntax/role/capacity/geometry refusal
+creates no file; physical I/O may retain a partial new file. Finite authoring is
+not runtime exact-sample reachability, safe future motion or a matching Host input
+recipe. No simulation is executed.
+
+Actual local MSVC Release AYEntity_LevelToolChecks passed in 4.32962s; the standard tool build completed in 5.938s. The finite authoring gate checked Once/Loop/PingPong spellings, shared per-actor origins versus body offsets, one-point edits and previews, an explicitly enabled moving wedge, existing Path2 role preservation, complete modern Level11 tables, canonical stability, a valid eight-path source and 20 protected normal refusals. Source snapshots matched; the actual executable and raw artifacts are hash-bound in out/detcontent36-40-20261011/stage64-actual-freeze.json and stage64-tool1/result.json. No production/oracle repair or old gate reuse was needed for this actual invocation. No Sim tick, executed trajectory, future sampled reachability, collision safety, whole-checkpoint golden, Host/Pak/matrix, history authentication or native VM acceptance is implied; native final VM Deferred.

@@ -227,3 +227,32 @@ The finite actual gate composes create/add/place/resize/preview, verifies exact
 selected polygon points and shape IDs, complete nonactor policy lines/original
 actors, sorted new IDs, canonical stability/mask0 and necessary protected failures.
 Actual local MSVC Release AYEntity_LevelToolChecks passed in 3.41s; the standard tool build completed in 6.188s. This finite gate exercised create/add/place/resize/preview, selected dyadic actor bits and actual filled-polygon points, sorted identities, full unselected canonical policy/original actors and canonical stability, legal mask0, a valid 64-body source and 16 protected normal refusals. The recorded source snapshots matched; the actual executable and artifacts are hash-bound. Evidence is out/detcontent36-40-20261011/stage63-actual-freeze.json and stage63-tool1/result.json. No Sim advance, future walkability, whole-checkpoint golden, authentication, new content Pak execution, broad matrix or native VM acceptance is claimed; native final VM remains Deferred. No production/oracle repair or prior gate reuse was needed for this actual invocation.
+
+## §11 Stage64 — atomic finite path edits (local verified; native VM Deferred)
+
+Exact fixed command layouts
+are argc10/6/10 including argv0. Full unsigned ID parsing, software finite offsets
+and bounded travel/dwell counts precede any local edit.
+
+add-path creates/binds one complete two-point ordinary policy rather than writing
+an orphan forbidden by Level. First offset is canonical positive zero, both travel
+counts explicit/equal and both dwell counts zero. bind-path reuses ordinary Path1.
+The common binder permits only unbound ordinary solid Static: it changes mode,
+initial zero velocity and path ID, leaving every geometric/authority field intact.
+Wedges require already selected movingSlopes; no policy inference or Path2/Actions
+permission is introduced. edit-waypoint preserves count/playback/role/bindings,
+including existing Path2, and keeps exact +0 first-point lanes. Shared policy
+changes resolve per-actor pose origins; body.offset and absolute spawns are separate.
+
+Complete actual Level prepare/fresh seal validates every used path and dependency,
+then canonical encoding completes before fresh exclusive file creation. Current
+valid1..11 versions and app/input/step/tables are preserved. New sorted indices
+can produce new registration IDs, so this is content identity, not hot reload or
+old-checkpoint compatibility. Existing8paths/24points/64bodies/text64KiB/semantic
+8KiB and real combined namespaces remain. No filesystem transaction beyond
+fresh-only protection is claimed; physical partial output remains possible.
+
+Actual finite existing CLI checks cover all three playback spellings, actor-origin
+versus body-offset, sharing and preserved tables/roles/current formats, canonical
+stability, explicit moving-wedge policy, existing Path2 edits and protected limits.
+Actual local MSVC Release AYEntity_LevelToolChecks passed in 4.32962s; the standard tool build completed in 5.938s. The finite authoring gate checked Once/Loop/PingPong spellings, shared per-actor origins versus body offsets, one-point edits and previews, an explicitly enabled moving wedge, existing Path2 role preservation, complete modern Level11 tables, canonical stability, a valid eight-path source and 20 protected normal refusals. Source snapshots matched; the actual executable and raw artifacts are hash-bound in out/detcontent36-40-20261011/stage64-actual-freeze.json and stage64-tool1/result.json. No production/oracle repair or old gate reuse was needed for this actual invocation. No Sim tick, executed trajectory, future sampled reachability, collision safety, whole-checkpoint golden, Host/Pak/matrix, history authentication or native VM acceptance is implied; native final VM Deferred.

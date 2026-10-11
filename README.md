@@ -1492,3 +1492,25 @@ no runtime motion writer or new simulation profile is added. Count64/configured
 lower limits/text64KiB/canonical8KiB/joint budgets remain.
 
 Actual local MSVC Release AYEntity_LevelToolChecks passed in 3.41s; the standard tool build completed in 6.188s. This finite gate exercised create/add/place/resize/preview, selected dyadic actor bits and actual filled-polygon points, sorted identities, full unselected canonical policy/original actors and canonical stability, legal mask0, a valid 64-body source and 16 protected normal refusals. The recorded source snapshots matched; the actual executable and artifacts are hash-bound. Evidence is out/detcontent36-40-20261011/stage63-actual-freeze.json and stage63-tool1/result.json. No Sim advance, future walkability, whole-checkpoint golden, authentication, new content Pak execution, broad matrix or native VM acceptance is claimed; native final VM remains Deferred. No production/oracle repair or prior gate reuse was needed for this actual invocation.
+
+## Stage64: named-path authoring (local verified; native VM Deferred)
+
+The offline tool's add-path/bind-path/edit-waypoint commands prepare
+initial full Level content through the existing Path facade; no runtime API or
+profile is added. add-path creates a two-point Path1 and binds one unbound ordinary
+solid Static in the same edit, because Level requires every path to be used.
+bind-path shares an existing ordinary path. The body becomes MovingObstacle with
+zero initial velocity; geometry/pose/layers/masks and other tables remain. Wedges
+need explicit source movingSlopes, and ordinary binding grants no moving-trigger
+or Actions authority.
+
+edit-waypoint retains count/playback/role/bindings and changes the immutable table
+for every user. Origin is each actor.position, independently of body.offset;
+absolute spawns remain. Exact +0 is required at point0. Software finite decimals,
+travel1..65535/dwell0..65535 and existing8paths/24points/64bodies plus full joint
+budgets remain. Current valid formats1..11 are preserved; sorted path insertion
+creates a newly resolved identity, not old-checkpoint compatibility.
+
+See [tool usage](tools/detlevel/README.md). Complete validation/seal/encoding
+precedes fresh exclusive output; no tick is executed or future motion proved.
+Actual local MSVC Release AYEntity_LevelToolChecks passed in 4.32962s; the standard tool build completed in 5.938s. The finite authoring gate checked Once/Loop/PingPong spellings, shared per-actor origins versus body offsets, one-point edits and previews, an explicitly enabled moving wedge, existing Path2 role preservation, complete modern Level11 tables, canonical stability, a valid eight-path source and 20 protected normal refusals. Source snapshots matched; the actual executable and raw artifacts are hash-bound in out/detcontent36-40-20261011/stage64-actual-freeze.json and stage64-tool1/result.json. No production/oracle repair or old gate reuse was needed for this actual invocation. No Sim tick, executed trajectory, future sampled reachability, collision safety, whole-checkpoint golden, Host/Pak/matrix, history authentication or native VM acceptance is implied; native final VM Deferred.
