@@ -353,6 +353,35 @@ std::vector<DetLevelActor2D> stampActors(const DetLevel2D& donor,const DetLevel2
     return additions;
 }
 
+// Stage67 private finite offline body-filter and one-way authoring. Reuse real
+// editActorId/editDecimal/solidWord, Level validation and exclusive writeFresh.
+void authorFilterBody(DetLevel2D& level,SimEntityId id,std::uint32_t layer,std::uint32_t mask) {
+    const auto actor=std::lower_bound(level.actors.begin(),level.actors.end(),id,
+        [](const DetLevelActor2D& body,SimEntityId identity){return body.id<identity;});
+    require(actor!=level.actors.end() && actor->id==id,"Actor identity is not authored in this level");
+    // Keep every authority table, selected profile and other initial field.
+    // The real full Level validator decides allowed masks/roles/references.
+    actor->body.layer=layer;actor->body.mask=mask;
+}
+void authorAddOneWay(DetLevel2D& level,SimEntityId id,ayt::math::DetVec2 position,
+    ayt::math::DetVec2 half,std::uint32_t layer,std::uint32_t mask) {
+    require(level.character.advanced && level.character.collision.extended
+        && level.character.collision.oneWayPlatforms,
+        "One-way authoring requires the source's explicit advanced/extended/oneWayPlatforms policy; use create dash for a new starter");
+    require(half.x>ayt::math::DetFloat32{} && half.y>ayt::math::DetFloat32{},
+        "One-way half extents must be strictly positive");
+    require(level.actors.size()<64,"Level actor count limit");
+    const auto insertion=std::lower_bound(level.actors.begin(),level.actors.end(),id,
+        [](const DetLevelActor2D& actor,SimEntityId identity){return actor.id<identity;});
+    require(insertion==level.actors.end() || insertion->id!=id,"Actor identity is already authored in this level");
+    DetLevelActor2D actor;actor.id=id;actor.position=position;
+    actor.body.mode=DetBodyMode2D::Static;actor.body.shape=DetCollisionShape2D::Aabb;
+    actor.body.half=half;actor.body.layer=layer;actor.body.mask=mask;actor.body.oneWay=true;
+    // Defaults: no trigger/Character/path/ignored identity; zero offset/velocity.
+    // Existing version/policy/authority remain exact; this is initial content.
+    level.actors.insert(insertion,std::move(actor));
+}
+
 void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
     const auto config=detLevelSessionConfig(level);
     std::cout<<"{\"schema\":1,\"status\":\"passed\",\"source\":"<<json(source.generic_string())
@@ -386,7 +415,11 @@ void inspect(const DetLevel2D& level,const std::filesystem::path& source) {
             <<"],\"offsetBits\":["<<json(bits(actor.body.offset.x.bits()))<<','<<json(bits(actor.body.offset.y.bits()))
             <<"],\"mode\":"<<static_cast<std::uint32_t>(actor.body.mode)<<",\"shape\":"
             <<static_cast<std::uint32_t>(actor.body.shape)<<",\"character\":"<<(actor.character?"true":"false")
-            <<",\"trigger\":"<<(actor.body.trigger?"true":"false")<<",\"layer\":"<<actor.body.layer
+            <<",\"trigger\":"<<(actor.body.trigger?"true":"false")
+// Append immediately after the existing actor.trigger inspect JSON member;
+// this is an additive offline Tool record field, not an engine profile change.
+            <<",\"oneWay\":"<<(actor.body.oneWay?"true":"false")
+            <<",\"layer\":"<<actor.body.layer
             <<",\"mask\":"<<actor.body.mask<<",\"path\":"<<actor.path<<'}';
     }
     std::cout<<"],\"paths\":[";first=true;
@@ -492,6 +525,8 @@ int run(int argc,char** argv) {
             "aydetlevel bind-path <source.dlt> <actor-id> <existing-path-u32> <fresh.dlt>\n"
             "aydetlevel edit-waypoint <source.dlt> <path-u32> <index0> <dx> <dy> <travel-ticks> <dwell-ticks> <fresh.dlt>\n"
             "aydetlevel stamp-solids <donor.dlt> <target.dlt> <shift-x> <shift-y> <old:new[,old:new...]> <fresh.dlt>\n"
+            "aydetlevel edit-filter <source.dlt> <actor-id> <layer-u32> <mask-u32> <fresh.dlt>\n"
+            "aydetlevel add-oneway <source.dlt> <new-id> <x> <y> <half-x> <half-y> <layer-u32> <mask-u32> <fresh.dlt>\n"
             "aydetlevel preview <level.dlt> <fresh.svg>\n"
             "aydetlevel place <source.dlt> <actor-id> <x> <y> <fresh.dlt>\n"
             "aydetlevel resize-half <source.dlt> <actor-id> <half-x> <half-y> <fresh.dlt>\n"
@@ -671,6 +706,35 @@ int run(int argc,char** argv) {
         const auto canonical=encodeDetLevel2D(target);
         const std::filesystem::path destination=argv[7];writeFresh(destination,canonical);
         inspect(target,destination);return 0;
+    }
+
+    if(command=="edit-filter") {
+        // program0, command1, source2, actor3, layer4, mask5, destination6.
+        require(argc==7,"edit-filter requires source, existing actor ID, layer, mask and fresh output");
+        const std::filesystem::path source=argv[2];ordinary(source);
+        DetLevel2D level;std::string error;
+        const bool loaded=loadDetLevel2D(source,level,error);require(loaded,error);
+        authorFilterBody(level,editActorId(argv[3]),solidWord(argv[4]),solidWord(argv[5]));
+        const bool valid=validateDetLevel2D(level,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[6];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
+    }
+    if(command=="add-oneway") {
+        // program0, command1, source2, ID3, X4, Y5, halfX6, halfY7,
+        // layer8, mask9, destination10: exactly eleven arguments.
+        require(argc==11,"add-oneway requires source, new actor ID, position, half extents, layer, mask and fresh output");
+        const std::filesystem::path source=argv[2];ordinary(source);
+        DetLevel2D level;std::string error;
+        const bool loaded=loadDetLevel2D(source,level,error);require(loaded,error);
+        const auto id=editActorId(argv[3]);
+        const auto x=editDecimal(argv[4]),y=editDecimal(argv[5]);
+        const auto halfX=editDecimal(argv[6]),halfY=editDecimal(argv[7]);
+        authorAddOneWay(level,id,{x,y},{halfX,halfY},solidWord(argv[8]),solidWord(argv[9]));
+        const bool valid=validateDetLevel2D(level,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[10];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
     }
 
     if(command=="create") {

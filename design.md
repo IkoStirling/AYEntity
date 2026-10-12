@@ -3173,3 +3173,61 @@ The subsequent corrected-content Workshop attempt also remains failed: its selec
 The first genuine composite gate is retained: the original Control case passed while Workshop failed its selected hand check at CP41. Diagnostics showed legitimate ordinary-floor X/Y corner contact at fraction0 resolving with the existing fixed X priority; Session had no execution fault. The content revision preserves the original explicitly selected continuousTerrain/terrain8 policy and every kernel/oracle rule. It changes only the new floor layout and stable authored ID so initial strict-X overlap and the intended carrier priority are explicit. The corrected complete template, independently authored expected text and seven-command recipe are bound to the final actual descriptors, not the original failed content hashes. A necessary sole Workshop continuation is new content validation; the already passed original Control case is not repeated, and its composite remains overall failed.
 
 The earlier private pre-test CTest path-discovery refusal is retained in the resumedPreTestFailure receipt. Its completed authoring/configure/build steps and unchanged executable were reused after correcting only the OUT evidence discovery; no product gate or successful tool recipe was repeated.
+
+## Stage67 finite filter/one-way authoring adapter (local verified; native VM Deferred)
+
+These are private offline Tool operations over real Level acquisition/validation,
+not new Sim authority. Selected initial fields enter the existing literal content
+identity, retaining every selected profile and downstream fixed permission.
+
+edit-filter source.dlt actor-id layer mask fresh.dlt has argc7;
+add-oneway source.dlt new-id x y halfX halfY layer mask fresh.dlt has argc11,
+including argv0 and command. IDs are fully consumed nonzero decimal UInt64;
+layer/mask are fully consumed decimal UInt32. Floats use the actual finite
+software binary32 decimal parser, including normal rounding/signed-zero rules.
+Half extents must be represented strictly positive; nonfinite/overflow or an
+underflow-to-zero half extent is refused.
+
+edit-filter changes only one existing actor's initial body.layer/mask, preserving
+its mode/shape/geometry/offset/velocity/trigger/oneWay/character/path, all selected
+policies/tables and source format/app/input/step. Active layer0 is invalid; mask0
+remains active geometric content, not Disabled.
+Retained proxy geometry does not promise an unconditional filtered query hit:
+reciprocal collision/raycast filters still exclude a mask0 body.
+Full actual Level validation checks authored permissions: an Actions-controlled
+initial mask can only0 or its
+existing literal collisionMask. Another mask is refused; authority is never
+rewritten to make an edit succeed.
+
+add-oneway requires the source's explicit advanced+extended+oneWayPlatforms
+policy. Existing create dash supplies it; ordinary character and terrain
+starters do not. There is no automatic policy/version upgrade and no artificial
+format>=10 restriction on otherwise valid explicit-policy content. The sorted
+new unique body is ordinary nontrigger Static AABB, oneWay=true, with zero
+offset/velocity, no Character/path/ignored identity. No wedge, trigger, moving
+platform or gameplay permission is inferred. Runtime one-way response remains
+the existing relative downward top-face crossing with strict X overlap; side,
+bottom and already-inside motion is allowed, queries inspect complete AABB
+geometry. Existing one-way inside and Static/Static overlap semantics remain;
+the authoring tool does not promise general overlap rejection or repair.
+
+Both commands load/validate complete ordinary source content, edit local
+authoring only, then actual full initial Session validation and canonical
+encoding precede exclusive fresh output. Bodies64/configured lower capacity,
+source64KiB/canonical8KiB, represented geometry and joint namespace/authority
+bounds remain binding. Existing source/protected output are never replaced;
+normal refusals create no destination, physical I/O failure may leave a partial
+fresh file under the existing writer contract. All unselected fields/tables and
+versions persist. Full existing content identity includes the changed body.
+
+inspect appends actor.oneWay Bool; old fields remain. Preview already renders
+true box/top line and one-way role without simulation advance. A mask0 platform
+still appears in geometric preview. Adding one-way does not supply a drop-through
+timer/input or grant Actions collision-control permission for that role.
+No new capability/format/facade, physics profile, Scene/runtime writer, editor,
+hot reload, replay migration or future movement/walkability guarantee is added.
+Existing .dlt/.dlc acquisition and canonical bits remain the current recipe.
+
+The finite CLI checks select independent dyadic body/box/top fields, full untouched
+policy/actors, canonical stability, mask0 active role and actual authorized-door
+refusals. They do not execute movement/replay or authenticate history. Actual local MSVC Release AYEntity_LevelToolChecks passed in 6.08132s; the standard tool build completed in 6.485s. The finite offline gate verified selected dyadic box/top fields and role flags, full unselected policy/actors, canonical stability, mask0 active geometric content with reciprocal filters, actual authorized-door refusal, bounded-body capacity and protected argument/role refusals. Matching source snapshots, the actual executable, raw CLI artifacts and genuine JUnit/LastTest log are bound in out/detcontent36-40-20261011/stage67-actual-freeze.json. The document reader does not run product tests. No Sim tick, Host/movement/replay execution, whole-checkpoint golden, unknown application/historical authentication or native VM acceptance is implied; native final VM Deferred.
