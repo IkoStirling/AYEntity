@@ -1637,3 +1637,9 @@ hot reload, replay migration or future movement/walkability guarantee is added.
 Existing .dlt/.dlc acquisition and canonical bits remain the current recipe.
 
 Actual local MSVC Release AYEntity_LevelToolChecks passed in 6.08132s; the standard tool build completed in 6.485s. The finite offline gate verified selected dyadic box/top fields and role flags, full unselected policy/actors, canonical stability, mask0 active geometric content with reciprocal filters, actual authorized-door refusal, bounded-body capacity and protected argument/role refusals. Matching source snapshots, the actual executable, raw CLI artifacts and genuine JUnit/LastTest log are bound in out/detcontent36-40-20261011/stage67-actual-freeze.json. The document reader does not run product tests. No Sim tick, Host/movement/replay execution, whole-checkpoint golden, unknown application/historical authentication or native VM acceptance is implied; native final VM Deferred.
+
+## §1 制作入门
+
+[确定性关卡制作入门](tools/detlevel/AUTHORING.md)给出实际执行过的矩形、坡面、编辑、共享路径、实体组
+复用与单向平台步骤。27条finite制作命令均通过，完整源码与工具身份相同。
+它制作初始内容；运行与恢复证据由组合Host示例提供，native最终VM仍延期。
