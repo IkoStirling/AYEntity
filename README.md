@@ -1647,3 +1647,33 @@ Actual local MSVC Release AYEntity_LevelToolChecks passed in 6.08132s; the stand
 ## §2 Stage69 registered collectible progression
 
 Stage69 LocalPassed / NativeDeferred: one actual standard Host gate AYEntity_ChallengeHostExample in 14.3985s. Live128 plus actual CP97 restore31 (159 advances), and Record128. Real collision Enter is queued at CP97; processing tick97 applies collectible-disable Action sequence1, counter1/objective1 and gate-disable sequence2. CP98 retains the pre-Flow Brain sight observation. Final claimed stamp97, counter1, objective true and both masks0 were read from registered authority. Complete actual CP97/final checkpoint/trace compare between Live and Record; 31 complete restored suffix checkpoints compare inside Host. Independent motion bits stop at CP120; thereafter actual two Kinematic actors maintain Y1.5, X separation.5 and nondecreasing previousPosition. HP/Attack use actual observations, not copied future counts. Record existence is not playback or authentication; no new numeric/backend matrix, runtime profile, native VM or long campaign. Evidence: D:\Aliyat\AliyatEngine\out\detcontent36-40-20261011\stage69-challenge1\result.json.
+
+## Stage70: finite content property edits (local verified; native VM Deferred)
+
+The argument counts including argv0 are7 and6. Source must be a complete
+valid current Level1..11. IDs are full-token nonzero unsigned decimal: actor
+UInt64 and path UInt32. Offsets use the existing finite ASCII software FloatText
+parser, including preserved signed zero; no native float intermediate is used.
+
+edit-offset changes only the selected body's geometry offset. Its pose, shape,
+half/layers/mask/role, path binding, all waypoint offsets and absolute respawn
+spawns remain. A bound path still starts at actor.position, never body.offset.
+The represented initial geometry can become invalid or overlap other solids;
+actual full validation decides before any output is created. Preview shows exact
+software endpoints of that new initial geometry, not a current checkpoint.
+
+edit-playback changes only one existing immutable path playback field, for every
+sharing actor. It preserves path ID/count/points/travel/dwell/movingTrigger role,
+all bindings and full permission tables, including an already authored Path2.
+Once/Loop/PingPong are the actual existing Path modes; Loop includes its real
+last-to-first leg rather than a promised teleport. This does not execute a path,
+restart/import its cursor, authorize Actions or prove future sampled reachability.
+
+Format/application/input/step and all unrelated content remain explicit. A real
+fresh Session/manifest validates the edited complete Level and canonical encoding
+finishes before exclusive fresh output. Changed content resolves a new full
+contentHash/manifest, not old-checkpoint compatibility or live hot reload.
+Existing64-body/8-path/24-point,64KiB text/8KiB semantic and joint Session limits
+still apply; no table size or capacity is upgraded. Normal validation/argument
+rejection creates no output. Physical I/O failure can leave a partial new file.
+No core/wire/API module or capability entry is added. Actual local MSVC Release AYEntity_LevelToolChecks passed in 6.84019s; the standard tool build completed in 6.141s. Eight successful property CLI calls and eleven normal refusals checked selected independent software geometry/offset fields, path sharing and playback edits, complete unselected source policy/actors, canonical stability and protected normal refusals were checked by that finite offline gate. Source snapshots, the executable, raw CLI outputs and genuine JUnit/LastTest log are bound in out/detcontent36-40-20261011/stage70-actual-freeze.json. The document reader executes no product. No Sim tick, current checkpoint, Host/path movement, restart/reachability, unknown application or historical authentication is implied. No new capability, entry, module, wire/profile or test target is added; native final VM Deferred.

@@ -524,6 +524,8 @@ int run(int argc,char** argv) {
             "aydetlevel add-path <source.dlt> <actor-id> <new-path-u32> <dx> <dy> <travel-ticks> <once|loop|pingpong> <fresh.dlt>\n"
             "aydetlevel bind-path <source.dlt> <actor-id> <existing-path-u32> <fresh.dlt>\n"
             "aydetlevel edit-waypoint <source.dlt> <path-u32> <index0> <dx> <dy> <travel-ticks> <dwell-ticks> <fresh.dlt>\n"
+            "aydetlevel edit-offset <source.dlt> <actor-id> <offset-x> <offset-y> <fresh.dlt>\n"
+            "aydetlevel edit-playback <source.dlt> <path-u32> <once|loop|pingpong> <fresh.dlt>\n"
             "aydetlevel stamp-solids <donor.dlt> <target.dlt> <shift-x> <shift-y> <old:new[,old:new...]> <fresh.dlt>\n"
             "aydetlevel edit-filter <source.dlt> <actor-id> <layer-u32> <mask-u32> <fresh.dlt>\n"
             "aydetlevel add-oneway <source.dlt> <new-id> <x> <y> <half-x> <half-y> <layer-u32> <mask-u32> <fresh.dlt>\n"
@@ -617,6 +619,40 @@ int run(int argc,char** argv) {
         const bool valid=validateDetLevel2D(level,error);require(valid,error);
         const auto canonical=encodeDetLevel2D(level);
         const std::filesystem::path destination=argv[11];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
+    }
+
+    if(command=="edit-offset") {
+        // Geometry-only offset. The actor pose/path origin and absolute spawns
+        // are separate authored fields and remain unchanged.
+        require(argc==7,"edit-offset requires source, actor ID, two finite decimals and fresh output");
+        const std::filesystem::path source=argv[2];ordinary(source);
+        DetLevel2D level;std::string error;
+        const bool loaded=loadDetLevel2D(source,level,error);require(loaded,error);
+        const auto id=editActorId(argv[3]);
+        const auto x=editDecimal(argv[4]),y=editDecimal(argv[5]);
+        const auto found=std::find_if(level.actors.begin(),level.actors.end(),
+            [id](const auto& actor){return actor.id==id;});
+        require(found!=level.actors.end(),"Actor identity is not authored in this level");
+        found->body.offset={x,y};
+        const bool valid=validateDetLevel2D(level,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[6];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
+    }
+    if(command=="edit-playback") {
+        // The existing full path policy changes for every sharing actor, while
+        // its role, points, actor bindings and allowed Actions table remain.
+        require(argc==6,"edit-playback requires source, path ID, once/loop/pingpong and fresh output");
+        const std::filesystem::path source=argv[2];ordinary(source);
+        DetLevel2D level;std::string error;
+        const bool loaded=loadDetLevel2D(source,level,error);require(loaded,error);
+        const auto id=authorPathWord(argv[3],1,UINT32_MAX,"Path identity");
+        const auto playback=authorPathPlayback(argv[4]);
+        authorExistingPath(level,id).playback=playback;
+        const bool valid=validateDetLevel2D(level,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[5];writeFresh(destination,canonical);
         inspect(level,destination);return 0;
     }
 

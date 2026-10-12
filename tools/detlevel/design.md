@@ -386,3 +386,35 @@ Actual local MSVC Release AYEntity_LevelToolChecks passed in 6.08132s; the stand
 [确定性关卡制作入门](AUTHORING.md)给出实际执行过的矩形、坡面、编辑、共享路径、实体组
 复用与单向平台步骤。27条finite制作命令均通过，完整源码与工具身份相同。
 它制作初始内容；运行与恢复证据由组合Host示例提供，native最终VM仍延期。
+
+## §16 Stage70 — guarded complete property edits (local verified; native VM Deferred)
+
+Use the next available numeric section at additive installation, retaining every earlier section/evidence byte. The private two branches have no new include/facade/parser. Full-token IDs and finite software decimals are read before the selected-row edit.
+
+The argument counts including argv0 are7 and6. Source must be a complete
+valid current Level1..11. IDs are full-token nonzero unsigned decimal: actor
+UInt64 and path UInt32. Offsets use the existing finite ASCII software FloatText
+parser, including preserved signed zero; no native float intermediate is used.
+
+edit-offset changes only the selected body's geometry offset. Its pose, shape,
+half/layers/mask/role, path binding, all waypoint offsets and absolute respawn
+spawns remain. A bound path still starts at actor.position, never body.offset.
+The represented initial geometry can become invalid or overlap other solids;
+actual full validation decides before any output is created. Preview shows exact
+software endpoints of that new initial geometry, not a current checkpoint.
+
+edit-playback changes only one existing immutable path playback field, for every
+sharing actor. It preserves path ID/count/points/travel/dwell/movingTrigger role,
+all bindings and full permission tables, including an already authored Path2.
+Once/Loop/PingPong are the actual existing Path modes; Loop includes its real
+last-to-first leg rather than a promised teleport. This does not execute a path,
+restart/import its cursor, authorize Actions or prove future sampled reachability.
+
+Format/application/input/step and all unrelated content remain explicit. A real
+fresh Session/manifest validates the edited complete Level and canonical encoding
+finishes before exclusive fresh output. Changed content resolves a new full
+contentHash/manifest, not old-checkpoint compatibility or live hot reload.
+Existing64-body/8-path/24-point,64KiB text/8KiB semantic and joint Session limits
+still apply; no table size or capacity is upgraded. Normal validation/argument
+rejection creates no output. Physical I/O failure can leave a partial new file.
+No core/wire/API module or capability entry is added. Actual local MSVC Release AYEntity_LevelToolChecks passed in 6.84019s; the standard tool build completed in 6.141s. Eight successful property CLI calls and eleven normal refusals checked selected independent software geometry/offset fields, path sharing and playback edits, complete unselected source policy/actors, canonical stability and protected normal refusals were checked by that finite offline gate. Source snapshots, the executable, raw CLI outputs and genuine JUnit/LastTest log are bound in out/detcontent36-40-20261011/stage70-actual-freeze.json. The document reader executes no product. No Sim tick, current checkpoint, Host/path movement, restart/reachability, unknown application or historical authentication is implied. No new capability, entry, module, wire/profile or test target is added; native final VM Deferred.
