@@ -133,3 +133,50 @@ $tool = '你的构建目录/AYRuntime/AYEntity/aydetlevel.exe'
 两处共享路径绑定、规范化字节以及mask0单向角色均检查通过。此处验证初始内容
 制作流程；组合内容运行另见[workshop示例](../../examples/detcontrol/README.md)。
 SVG不是运行可达性的证明，native最终虚拟机验收仍延期。
+
+
+## §9 调整几何偏移、播放方式和清理地形
+
+接着使用前面的 `11-shared.dlt`。几何偏移只移动碰撞形状，实体 position、
+路径原点和其他实体保留原值：
+
+```powershell
+& $tool edit-offset 11-shared.dlt 201 0.25 0 16-offset.dlt
+& $tool preview 16-offset.dlt 16-offset.svg
+```
+
+201 的中心 position 仍为 `(-2,1)`，半尺寸仍为 `(1,0.25)`；形状 offset 变为
+`(0.25,0)`，初始 box 端点为 `(-2.75,0.75)` 到 `(-0.75,1.25)`。它与 202 共享
+路径 30；路径标记仍从各自 position `(-2,1)`、`(-4,3)` 出发，不加 body.offset。
+
+已有共享路径可以改成 `once`、`loop` 或 `pingpong`，不用重建绑定和路点：
+
+```powershell
+& $tool edit-playback 16-offset.dlt 30 loop 17-loop.dlt
+& $tool preview 17-loop.dlt 17-loop.svg
+```
+
+此次修改同时影响 201 和 202 使用的路径 30，只改变播放方式。路点和持续时间
+保留原值；预览只画初始路径，不能证明完整运动过程或自动跨过障碍。
+
+另从前面的 `12-reused.dlt` 删除不再需要的 120：
+
+```powershell
+& $tool remove-solid 12-reused.dlt 120 18-cleanup.dlt
+& $tool preview 18-cleanup.dlt 18-cleanup.svg
+```
+
+120 是未绑定、未被权限或规则引用的普通静态矩形。删除只移除该实体，保留其余
+地形和全部内容表。角色、移动体、触发区、单向平台或任何仍被内容引用的实体
+不能这样删除；工具不会自动修复引用、转移权限或提升格式版本。
+
+这三种操作都先加载、完整验证并编码，再独占写入 fresh 输出。实际编辑更新
+contentHash；需要运行时使用匹配的新内容身份。SVG 展示初始作者布局，检查点
+则属于真实运行中的注册状态。
+
+自动化时可用 [run-recipe.py](run-recipe.py) 的闭合命令集。现有三个有限配方分别
+展示[地形与共享平台](recipes/terrain-platforms.json)、[单向与过滤](recipes/oneway-filter.json)
+和[偏移、共享播放及几何清理](recipes/shared-properties.json)。配方不会选择任意
+程序或 shell；调用方明确指定实际工具路径和 SHA，失败保留已完成前缀。
+
+本节新增六条命令已通过必要本机制作检查；完整未选表、共享路径原点、规范化字节及实际 SVG 标记均保持预期。§8 的原27条结果保持原记录，未重复执行；最终 native VM 验收仍延期。
