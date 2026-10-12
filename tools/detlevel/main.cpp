@@ -353,6 +353,20 @@ std::vector<DetLevelActor2D> stampActors(const DetLevel2D& donor,const DetLevel2
     return additions;
 }
 
+// Stage73 offline removal: actor-reference closure is shared with stamp-solids.
+void authorRemoveSolid(DetLevel2D& level,SimEntityId id) {
+    const auto actor=std::lower_bound(level.actors.begin(),level.actors.end(),id,
+        [](const DetLevelActor2D& body,SimEntityId identity){return body.id<identity;});
+    require(actor!=level.actors.end() && actor->id==id,"Actor identity is not authored in this level");
+    require(actor->body.mode==DetBodyMode2D::Static && !actor->character
+        && !actor->body.trigger && !actor->body.oneWay && !actor->body.ignoredOneWay.value
+        && !actor->path,"Only ordinary nontrigger non-one-way unbound Static solids may be removed");
+    require(!stampActorReferenced(level,id),"Selected solid has authored gameplay authority/references");
+    // No reference repair, ID reassignment, policy promotion or other table edits.
+    // Numeric equality in counter/path namespaces is not an actor reference.
+    level.actors.erase(actor);
+}
+
 // Stage67 private finite offline body-filter and one-way authoring. Reuse real
 // editActorId/editDecimal/solidWord, Level validation and exclusive writeFresh.
 void authorFilterBody(DetLevel2D& level,SimEntityId id,std::uint32_t layer,std::uint32_t mask) {
@@ -526,6 +540,7 @@ int run(int argc,char** argv) {
             "aydetlevel edit-waypoint <source.dlt> <path-u32> <index0> <dx> <dy> <travel-ticks> <dwell-ticks> <fresh.dlt>\n"
             "aydetlevel edit-offset <source.dlt> <actor-id> <offset-x> <offset-y> <fresh.dlt>\n"
             "aydetlevel edit-playback <source.dlt> <path-u32> <once|loop|pingpong> <fresh.dlt>\n"
+            "aydetlevel remove-solid <source.dlt> <actor-id> <fresh.dlt>\n"
             "aydetlevel stamp-solids <donor.dlt> <target.dlt> <shift-x> <shift-y> <old:new[,old:new...]> <fresh.dlt>\n"
             "aydetlevel edit-filter <source.dlt> <actor-id> <layer-u32> <mask-u32> <fresh.dlt>\n"
             "aydetlevel add-oneway <source.dlt> <new-id> <x> <y> <half-x> <half-y> <layer-u32> <mask-u32> <fresh.dlt>\n"
@@ -718,6 +733,21 @@ int run(int argc,char** argv) {
         const bool valid=validateDetLevel2D(level,error);require(valid,error);
         const auto canonical=encodeDetLevel2D(level);
         const std::filesystem::path destination=argv[9];writeFresh(destination,canonical);
+        inspect(level,destination);return 0;
+    }
+
+    if(command=="remove-solid") {
+        // argv0/command/source/actor/fresh = exactly5.
+        require(argc==5,"remove-solid requires source, existing ordinary Static actor ID and fresh output");
+        const std::filesystem::path source=argv[2];ordinary(source);
+        DetLevel2D level;std::string error;
+        const bool loaded=loadDetLevel2D(source,level,error);require(loaded,error);
+        authorRemoveSolid(level,editActorId(argv[3]));
+        // Full real factories/scratch seal validate the remaining initial scene.
+        // Removal is offline authoring, never a promise about future simulation.
+        const bool valid=validateDetLevel2D(level,error);require(valid,error);
+        const auto canonical=encodeDetLevel2D(level);
+        const std::filesystem::path destination=argv[4];writeFresh(destination,canonical);
         inspect(level,destination);return 0;
     }
 
