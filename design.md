@@ -3237,3 +3237,7 @@ refusals. They do not execute movement/replay or authenticate history. Actual lo
 [确定性关卡制作入门](tools/detlevel/AUTHORING.md)给出实际执行过的矩形、坡面、编辑、共享路径、实体组
 复用与单向平台步骤。27条finite制作命令均通过，完整源码与工具身份相同。
 它制作初始内容；运行与恢复证据由组合Host示例提供，native最终VM仍延期。
+
+## §2 Stage69 registered collectible progression
+
+Stage69 LocalPassed / NativeDeferred: one actual standard Host gate AYEntity_ChallengeHostExample in 14.3985s. Live128 plus actual CP97 restore31 (159 advances), and Record128. Real collision Enter is queued at CP97; processing tick97 applies collectible-disable Action sequence1, counter1/objective1 and gate-disable sequence2. CP98 retains the pre-Flow Brain sight observation. Final claimed stamp97, counter1, objective true and both masks0 were read from registered authority. Complete actual CP97/final checkpoint/trace compare between Live and Record; 31 complete restored suffix checkpoints compare inside Host. Independent motion bits stop at CP120; thereafter actual two Kinematic actors maintain Y1.5, X separation.5 and nondecreasing previousPosition. HP/Attack use actual observations, not copied future counts. Record existence is not playback or authentication; no new numeric/backend matrix, runtime profile, native VM or long campaign. Evidence: D:\Aliyat\AliyatEngine\out\detcontent36-40-20261011\stage69-challenge1\result.json.

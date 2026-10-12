@@ -43,13 +43,13 @@ std::uint64_t integer(std::string_view text){std::uint64_t value=0;const auto [e
 void asciiPath(std::string_view value){require(!value.empty(),"Empty path");for(unsigned char ch:value)require(ch>=32 && ch<127,"Example paths must be printable ASCII");}
 std::string quoted(std::string_view value){std::string result="\"";for(char ch:value){if(ch=='\\' || ch=='\"')result+='\\';result+=ch;}return result+'\"';}
 struct Options {DetHostMode mode=DetHostMode::Live;std::string level="AYRuntime/AYEntity/examples/detcontrol/content.dlt",output,replay,save,load;
-    std::uint64_t ticks=64,seek=0,saveAt=0;bool interactive=false,features=false,seekSet=false,saveAtSet=false,workshop=false,verifyRestore=false;};
+    std::uint64_t ticks=64,seek=0,saveAt=0;bool interactive=false,features=false,seekSet=false,saveAtSet=false,workshop=false,challenge=false,verifyRestore=false;};
 Options options(int argc,char** argv){Options opts;std::set<std::string> seen;bool modeSet=false;
     for(int n=1;n<argc;++n){const std::string key=argv[n];require(seen.insert(key).second,"Duplicate option: "+key);
         if(key=="--interactive"){opts.interactive=true;continue;}if(key=="--require-features"){opts.features=true;continue;}
         if(key=="--verify-restore"){opts.verifyRestore=true;continue;}
         require(n+1<argc,"Missing option value: "+key);const std::string value=argv[++n];
-        if(key=="--scenario"){require(value=="workshop","Unknown scenario; omit for original control or choose workshop");opts.workshop=true;}
+        if(key=="--scenario"){require(value=="workshop" || value=="challenge","Unknown scenario; omit for original control or choose workshop/challenge");opts.workshop=value=="workshop";opts.challenge=value=="challenge";}
         else if(key=="--ticks")opts.ticks=integer(value);else if(key=="--seek"){opts.seek=integer(value);opts.seekSet=true;}
         else if(key=="--save-at"){opts.saveAt=integer(value);opts.saveAtSet=true;}
         else if(key=="--level" || key=="--output" || key=="--save" || key=="--load"){
@@ -63,8 +63,13 @@ Options options(int argc,char** argv){Options opts;std::set<std::string> seen;bo
         require(opts.ticks==128 && opts.mode!=DetHostMode::Replay && opts.load.empty() && !opts.seekSet && !opts.saveAtSet,
             "Workshop uses128 ticks and Live/Record; no old save/load/seek mapping");
         require(!opts.features || !opts.interactive,"Workshop selected hand checks require its script");}
-    require(!opts.verifyRestore || (opts.workshop && opts.mode==DetHostMode::Live && !opts.interactive),
-        "--verify-restore is workshop scripted Live only");
+    if(opts.challenge){if(!seen.contains("--ticks"))opts.ticks=128;
+        if(!seen.contains("--level"))opts.level="AYRuntime/AYEntity/examples/detcontrol/workshop-challenge.dlt";
+        require(opts.ticks==128 && opts.mode!=DetHostMode::Replay && opts.load.empty() && !opts.seekSet && !opts.saveAtSet,
+            "Challenge uses128 ticks and Live/Record; no old save/load/seek mapping");
+        require(!opts.features || !opts.interactive,"Challenge selected hand checks require its script");}
+    require(!opts.verifyRestore || ((opts.workshop || opts.challenge) && opts.mode==DetHostMode::Live && !opts.interactive),
+        "--verify-restore is workshop/challenge scripted Live only");
     require(opts.ticks>=1 && opts.ticks<=65536,"Ticks must be in1..65536");
     require(!opts.interactive || opts.mode!=DetHostMode::Replay,"Interactive acquisition cannot run during Replay");
     require(!opts.seekSet || (opts.mode==DetHostMode::Replay && opts.seek<=opts.ticks),"Seek requires Replay and seek<=ticks");
@@ -114,7 +119,43 @@ bool configureWorkshop(DeterministicSession& session,const DetLevel2D& level){
     if(!configured)throw std::runtime_error("Workshop content setup: "+error);return true;
 }
 
-bool configure(DeterministicSession& session,const DetLevel2D& level,const DetProgress2DConfig&,bool workshop=false){
+// Stage69 is an application protocol, not a new gameplay facade or wire profile.
+constexpr std::uint32_t challengePolicySchema=401,challengeProfile=87;
+DetTypedStateSchema challengePolicy(){return {challengePolicySchema,1,{
+    {1,std::uint32_t{69}},{2,std::uint32_t{9}},{3,std::uint32_t{9}},
+    {4,std::uint64_t{10}},{5,std::uint64_t{20}},{6,std::uint64_t{101}},
+    {7,std::uint64_t{300}},{8,std::uint64_t{310}},{9,std::uint32_t{1}},
+    {10,std::uint32_t{1}},{11,std::uint32_t{1}},{12,std::uint32_t{1}},
+    {13,std::uint32_t{4}},{14,std::uint32_t{8}},{15,false},
+    {16,std::uint32_t{97}},{17,std::uint32_t{98}},{18,std::uint32_t{128}}}};}
+bool configureChallenge(DeterministicSession& session,const DetLevel2D& level){
+    const auto policy=challengePolicy();const DetStateLayout layout(policy);
+    if(!session.registerTypedSchema(policy) || !session.registerGlobalState(policy.id)
+        || !session.registerLogicProfile(challengeProfile,1,0x44574348414c3031ULL))return false;
+    if(!session.registerValidator(challengeProfile,1,[layout](const DetSessionCheckpoint& cp,std::string& error){
+        try {if(cp.globals.at(challengePolicySchema)!=layout.defaults()){error="Challenge immutable protocol globals";return false;}
+            for(const auto& [id,actor]:cp.actors)if(actor.blocks.at(challengePolicySchema)!=layout.defaults()){
+                error="Challenge immutable actor protocol copies";return false;}return true;
+        }catch(const std::exception& e){error=e.what();return false;}
+    }))return false;
+    const auto control=detLevelCharacterControlConfig2D(level);const auto attack=detLevelAttackConfig2D(level);
+    if(!session.registerSystem(inputSystem,level.character.collision.priority,[control,attack](DetTickContext& context){
+        const auto& commands=context.input().commands;if(commands.size()!=1)return false;const auto& command=commands.front();
+        if(command.source!=player || command.sequence!=0 || command.type!=9 || command.payload.size()!=9 || command.payload[0]>4)return false;
+        for(unsigned n=1;n<8;++n)if(command.payload[n]>1)return false;
+        // Same nine-byte protocol, but the complete challenge policy forbids manual door authority.
+        if(command.payload[8]!=0)return false;
+        detCharacterControlInput2D(context,control,player,{{D::fromInt(int(command.payload[0])-2),command.payload[1]!=0,
+            command.payload[2]!=0,command.payload[3]!=0},command.payload[6]!=0,command.payload[5]!=0,command.payload[7]!=0});
+        detSetAttackInput2D(context,attack,player,{command.payload[4]!=0,command.payload[5]!=0});return true;
+    }))return false;
+    // configureDetLevel owns Actions -> Progress -> Flow and all authored gameplay installation.
+    std::string error;const bool configured=configureDetLevel2D(session,level,error);
+    if(!configured)throw std::runtime_error("Challenge content setup: "+error);return true;
+}
+
+bool configure(DeterministicSession& session,const DetLevel2D& level,const DetProgress2DConfig&,bool workshop=false,bool challenge=false){
+    if(challenge)return configureChallenge(session,level);
     if(workshop)return configureWorkshop(session,level);
     if(!session.registerLogicProfile(appProfile,1,0x444353484f535431ULL))return false;
     if(!session.registerSystem(inputSystem,level.character.collision.priority,[character=level.character,attack=detLevelAttackConfig2D(level),control=detLevelCharacterControlConfig2D(level)](DetTickContext& context){
@@ -137,15 +178,16 @@ public:
             auto& modules=runtime_.modules();require(modules.emplace<EntityComponentModule>().succeeded(),"Add Core component module");
             require(modules.emplace<EntityRuntimeModule>().succeeded(),"Add Entity runtime module");
             DetHostedSceneRecipe recipe;recipe.config=detLevelSessionConfig(level);recipe.mode=opts.mode;recipe.replayPath=opts.replay;recipe.checkpointInterval=4;
-            recipe.configure=[level,progress,workshop=opts.workshop](DeterministicSession& session){return configure(session,level,progress,workshop);};
+            recipe.configure=[level,progress,workshop=opts.workshop,challenge=opts.challenge](DeterministicSession& session){return configure(session,level,progress,workshop,challenge);};
             // Input is already acquired by the external caller before this callback. Sim sees bytes only.
-            recipe.input=[&input,workshop=opts.workshop](const DetHostInputRequest& request,DetTickInput& packet){
+            recipe.input=[&input,workshop=opts.workshop,challenge=opts.challenge](const DetHostInputRequest& request,DetTickInput& packet){
                 if(request.tick!=input.tick || input.sample.speed<-2 || input.sample.speed>2)return false;
                 packet={request.tick,request.version,{{static_cast<std::uint32_t>(player),0,7,{static_cast<std::uint8_t>(input.sample.speed+2),
                     static_cast<std::uint8_t>(input.sample.jump),static_cast<std::uint8_t>(input.sample.crouch),static_cast<std::uint8_t>(input.sample.drop),
                     static_cast<std::uint8_t>(input.sample.held),static_cast<std::uint8_t>(input.sample.facing),
                     static_cast<std::uint8_t>(input.sample.dash),static_cast<std::uint8_t>(input.sample.cancel)}}}};
-                if(workshop){if(request.version!=9 || input.sample.doorOp>2)return false;
+                if(challenge && input.sample.doorOp!=0)return false;
+                if(workshop || challenge){if(request.version!=9 || input.sample.doorOp>2)return false;
                     packet.commands.front().type=9;packet.commands.front().payload.push_back(input.sample.doorOp);}
                 ++input.calls;return true;
             };
@@ -154,7 +196,7 @@ public:
             const auto prepared=runtime_.prepare();require(prepared.succeeded(),prepared.message());runtime_.context().componentRegistry().seal();
             const auto installed=runtime_.install();require(installed.succeeded(),installed.message());
             require(loop_.prepareHostedSession(),"Host preparation failed");scope_.refresh();
-            scene_=std::make_unique<ayt::scene::Scene>(ayt::scene::SceneMode::Play,opts.workshop?"det-workshop-example":"det-control-example");host_.scenes()->setCurrent(scene_.get());
+            scene_=std::make_unique<ayt::scene::Scene>(ayt::scene::SceneMode::Play,opts.challenge?"det-challenge-example":opts.workshop?"det-workshop-example":"det-control-example");host_.scenes()->setCurrent(scene_.get());
             controller_=deterministicHost(host_);require(controller_ && controller_->session(),"Missing standard Host Session");
             require(controller_->state()!=DetHostState::Faulted,controller_->error());
         }catch(...){close();throw;}
@@ -343,7 +385,187 @@ int runWorkshop(const Options& opts){
     status(final,attack,brain,control);std::cout<<summary.str();return 0;
 }
 
-int run(const Options& opts){if(opts.workshop)return runWorkshop(opts);
+Sample challengeSample(std::uint64_t tick){Sample sample;sample.speed=tick<32?0:2;sample.dash=tick==48;return sample;}
+void challengeHand(const DetSessionCheckpoint& cp,const DetLevel2D& level,const DetCharacterControl2DConfig& control){
+    const auto n=cp.nextTick;require(n>=1 && n<=128,"Challenge selected hand range");const auto t=n-1;
+    const auto state=detCharacterControlState2D(cp,control,player);
+    const auto phase=t>=48 && t<56?DetCharacterControlPhase2D::Active:
+        t>=56 && t<72?DetCharacterControlPhase2D::Cooldown:DetCharacterControlPhase2D::Ready;
+    require(state.phase==phase && state.decisionCount==n && state.requestCount==(t<48?0u:1u)
+        && state.startCount==(t<48?0u:1u) && state.deniedCount==0 && state.cancelCount==0,"Challenge finite dash edge/window");
+    if(t>=48)require(state.readyTick==72,"Challenge original dash ready deadline");
+    D x;if(n<=32)x=D::fromInt(-1)+D::fromInt(static_cast<int>(n))/D::fromInt(32);
+    else if(n<=48)x=D::fromInt(static_cast<int>(n-32))/D::fromInt(32);
+    else if(n<=56)x=D::fromInt(1)/D::fromInt(2)+D::fromInt(static_cast<int>(n-48))/D::fromInt(8);
+    else if(n<=112)x=D::fromInt(3)/D::fromInt(2)+D::fromInt(static_cast<int>(n-56))/D::fromInt(32);
+    else x=D::fromInt(13)/D::fromInt(4)+D::fromInt(static_cast<int>(std::min<std::uint64_t>(n-112,8)))/D::fromInt(32);
+    const auto half=D::fromInt(1)/D::fromInt(2),quarter=D::fromInt(1)/D::fromInt(4),low=D::fromInt(3)/D::fromInt(4);
+    D foot{};if(x>low)foot=(x-low)/D::fromInt(2);if(foot>D::fromInt(1))foot=D::fromInt(1);
+    if(n<=120)require(cp.actors.at(player).pose.position[0]==x.bits() && cp.actors.at(player).pose.position[1]==(foot+half).bits(),
+        "Challenge dyadic actual carry/ramp/cap/gate/sentry position CP"+std::to_string(n)
+        +" actual="+std::to_string(cp.actors.at(player).pose.position[0])+","+std::to_string(cp.actors.at(player).pose.position[1])
+        +" expected="+std::to_string(x.bits())+","+std::to_string((foot+half).bits()));
+    else {
+        // Both participants are Kinematic. The solver may move both poses;
+        // zero Enemy intent does not make it an immovable static wall.
+        const auto& hero=cp.actors.at(player).pose;const auto& enemy=cp.actors.at(patient).pose;
+        const auto hx=D::fromBits(hero.position[0]),ex=D::fromBits(enemy.position[0]);
+        require(hero.position[1]==(D::fromInt(1)+half).bits() && enemy.position[1]==(D::fromInt(1)+half).bits()
+            && ex-hx==half && hx>=D::fromBits(hero.previousPosition[0]) && ex>=D::fromBits(enemy.previousPosition[0]),
+            "Challenge real two-Kinematic contact separation and monotone motion");
+    }
+    const auto carrierX=D::fromInt(-1)+D::fromInt(static_cast<int>(std::min<std::uint64_t>(n,32)))/D::fromInt(32);
+    require(cp.actors.at(300).pose.position[0]==carrierX.bits() && cp.actors.at(300).pose.position[1]==(-quarter/ D::fromInt(2)).bits(),
+        "Challenge real Once32 prescribed platform");
+    const auto path=detLevelPathConfig2D(level,1);const auto pathSchema=detPathMotionStateSchema2D(path);
+    require(readDetState<bool>(pathSchema,cp.actors.at(300).blocks.at(pathSchema.id),DetPathFinished)==(n>=32),"Challenge actual Once finish");
+    const auto body=detCollisionBodySchema2D(level.character.collision);
+    require(readDetState<std::uint32_t>(body,cp.actors.at(101).blocks.at(body.id),DetBodyMask)==(n<98?9u:0u),"Challenge exact Flow gate action boundary");
+    if(n<=32){const auto schema=detCharacterStateSchema2D(level.character);
+        require(readDetState<DetEntityRef>(schema,cp.actors.at(player).blocks.at(schema.id),DetCharacterSupport).value==300,
+            "Challenge initial carrier is real support");}
+    if(n==98)require(detBrainState2D(cp,detLevelBrainConfig2D(level),patient).mode==DetBrainMode2D::SightBlocked,
+        "Brain sampled gate before Flow97, not CP98 current mask");
+    const auto progress=detLevelProgressConfig2D(level);const auto flow=detLevelProgressFlowConfig2D(level);
+    const auto collectible=detCollectibleState2D(cp,progress,1);
+    const auto claim=detProgressFlowClaim2D(cp,flow,1);const auto objective=detProgressFlowObjective2D(cp,flow,1);
+    const auto actions=detLevelActionsConfig2D(level);
+    const auto actionCount=readDetState<std::uint64_t>(detActionsStateSchema2D(actions),cp.globals.at(actions.stateSchema),DetActionsTotalCount);
+    const auto pickupMask=readDetState<std::uint32_t>(body,cp.actors.at(310).blocks.at(body.id),DetBodyMask);
+    const bool collected=n>=98;
+    require(detProgressCounter2D(cp,progress,1)==(collected?1u:0u)
+        && detProgressObjective2D(cp,progress,1)==collected && collectible.claimed==collected
+        && pickupMask==(collected?0u:1u) && actionCount==(collected?2u:0u),"Challenge hand claim/counter/objective/two masks/actions");
+    if(collected)require(collectible.tick==97 && claim.attemptCount==1 && claim.lastTick==97 && claim.progressSequence==1
+        && claim.actionAttemptCount==1 && claim.lastResult==DetProgressCode2D::Applied && claim.lastActionCode==DetActionCode2D::Applied
+        && claim.lastActionSequence==1 && objective.previousSatisfied && objective.onceConsumed && objective.attemptCount==1
+        && objective.lastTick==97 && objective.lastResult==DetActionCode2D::Applied && objective.actionSequence==2,
+        "Challenge hand actual claim before objective action at tick97");
+    else require(claim.attemptCount==0 && objective.attemptCount==0 && !objective.previousSatisfied && !objective.onceConsumed,
+        "Challenge must not collect on endpoint touch or before delivered Enter");
+    if(n==97){bool enter=false;for(const auto& event:cp.pendingEvents){
+        if(event.source!=level.character.collision.systemId || event.type!=level.character.collision.eventType)continue;
+        DetTriggerEvent2D decoded;require(decodeDetTriggerEvent2D(event.payload,decoded),"Challenge malformed pending collision event");
+        if(decoded.phase==DetTriggerPhase2D::Enter && decoded.pair.first==10 && decoded.pair.second==310)enter=true;}
+        require(enter,"CP97 must contain actual next-tick collectible Enter");}
+}
+
+int runChallenge(const Options& opts){
+    require(std::filesystem::is_regular_file(opts.level) && !std::filesystem::is_symlink(opts.level),"Level must be an ordinary file");
+    DetLevel2D level;std::string error;const bool loaded=loadDetLevel2D(opts.level,level,error);require(loaded,error);
+    require(level.formatVersion==11 && level.applicationVersion==69 && level.inputVersion==9
+        && level.stepNumerator==1 && level.stepDenominator==64 && level.brainLineOfSight,"Challenge requires explicit format11/app69/input9/sight/1:64");
+    require(level.actors.size()==8 && level.paths.size()==1 && level.paths[0].id==1 && !level.paths[0].movingTrigger
+        && level.paths[0].playback==DetPathPlayback2D::Once,"Challenge full fixed eight-body/Once content");
+    const auto progress=detLevelVitalityProgressConfig2D(level);
+    const auto vitality=detLevelVitalityConfig2D(level);const auto attack=detLevelAttackConfig2D(level);
+    const auto brain=detLevelBrainConfig2D(level);const auto control=detLevelCharacterControlConfig2D(level);
+    require(control.owners.size()==1 && control.owners[0].actor==player && brain.owners.size()==1
+        && brain.owners[0].actor==patient && brain.lineOfSight && attack.owners.size()==2,"Challenge disjoint real input owners");
+    require(!opts.output.empty(),"Challenge requires a fresh output prefix");
+    for(const auto* suffix:{".state",".trace",".summary.json",".restore.state",".restore.trace",".boundary97.state"})
+        require(!std::filesystem::exists(opts.output+suffix),"Output already exists");
+    if(opts.mode==DetHostMode::Record){auto path=opts.replay;if(!std::filesystem::path(path).has_extension())path+=".rpl";
+        require(!std::filesystem::exists(path) && !std::filesystem::exists(ayt::replay::FileReplayRecorder::rotationPathFor(path,0)),"Record destination exists");}
+    auto trace=freshOutput(opts.output+".trace");InputBoundary boundary;StandardHost host(opts,level,progress,boundary);
+    auto& controller=host.controller();const auto recording=controller.recordingPath();
+    const auto checkpoint=[&]{const auto cp=controller.checkpoint();require(cp.has_value(),controller.error());return *cp;};
+    require(controller.session()->nextTick()==0,"Challenge starts from authored initial content");
+    require(controller.resume(),controller.error());std::uint64_t frames=0,rows=0,restoreRows=0;
+    std::optional<DetSessionCheckpoint> boundary97;std::vector<std::vector<std::uint8_t>> originals;
+    if(opts.verifyRestore)originals.reserve(128);
+    const auto step=[&](Sample sample,bool restored){const auto before=controller.session()->nextTick();boundary.tick=before;boundary.sample=sample;
+        require(++frames<=159,"Challenge finite frame budget");host.frame(frames);
+        require(controller.state()!=DetHostState::Faulted,controller.error());
+        require(controller.session()->nextTick()==before+1,"Challenge Host did not advance exactly one tick");
+        auto cp=checkpoint();if(opts.features)challengeHand(cp,level,control);
+        if(!restored){trace<<cp.nextTick<<' '<<detCheckpointHash(cp)<<'\n';++rows;
+            if(cp.nextTick==97)boundary97=cp;if(opts.verifyRestore)originals.push_back(encodeDetCheckpoint(cp));}
+        else {require(encodeDetCheckpoint(cp)==originals.at(static_cast<std::size_t>(cp.nextTick-1)),"Real Host restore97 full checkpoint suffix differs");++restoreRows;}
+        return cp;
+    };
+    if(opts.interactive){int speed=0;bool facing=true;std::string line;
+        std::cout<<"Challenge commands: right [ticks], left [ticks], idle [ticks], dashright, dashleft, status, help, quit. Collect the pickup to open the gate; manual door commands are forbidden.\n";
+        while(controller.session()->nextTick()<opts.ticks && std::cout<<"> " && std::getline(std::cin,line)){
+            std::istringstream in(line);std::string command,arg,extra;in>>command>>arg>>extra;if(command.empty())continue;
+            try {require(extra.empty(),"Too many command arguments");
+                if(command=="quit" || command=="status" || command=="help"){require(arg.empty(),"Command takes no argument");
+                    if(command=="quit")break;if(command=="status")status(checkpoint(),attack,brain,control);
+                    else std::cout<<"right/left/idle N; dashright/dashleft; collect pickup to open gate; status; quit\n";continue;}
+                Sample sample;sample.speed=speed;sample.facing=facing;std::uint64_t ticks=1;
+                if(command=="right" || command=="left" || command=="idle"){
+                    sample.speed=command=="right"?2:command=="left"?-2:0;
+                    if(sample.speed)sample.facing=sample.speed>0;ticks=arg.empty()?1:integer(arg);
+                }else {require(arg.empty(),"Single-tick command takes no argument");
+                    if(command=="dashright" || command=="dashleft"){sample.dash=true;sample.facing=command=="dashright";}
+                    else if(command=="open" || command=="close")throw std::runtime_error("Challenge forbids manual door commands; collect the pickup");
+                    else throw std::runtime_error("Unknown challenge command");}
+                require(ticks>=1 && ticks<=opts.ticks-controller.session()->nextTick(),"Command exceeds challenge tick budget");
+                speed=sample.speed;facing=sample.facing;
+                for(std::uint64_t n=0;n<ticks;++n){step(sample,false);sample.dash=false;sample.doorOp=0;}
+                status(checkpoint(),attack,brain,control);
+            }catch(const std::exception& e){if(controller.state()==DetHostState::Faulted)throw;std::cout<<"Command rejected: "<<e.what()<<'\n';}
+        }
+    }else while(controller.session()->nextTick()<opts.ticks)step(challengeSample(controller.session()->nextTick()),false);
+    const auto final=checkpoint();const auto originalCalls=boundary.calls;
+    if(boundary97){auto pending=freshOutput(opts.output+".boundary97.state");const auto pendingBytes=encodeDetCheckpoint(*boundary97);
+        pending.write(reinterpret_cast<const char*>(pendingBytes.data()),static_cast<std::streamsize>(pendingBytes.size()));pending.close();
+        require(bool(pending),"Challenge actual CP97 write failed");}
+    if(opts.verifyRestore){require(boundary97.has_value() && originals.size()==128,"Missing actual registered CP97/128 original rows");
+        auto suffix=freshOutput(opts.output+".restore.trace");controller.pause();
+        require(controller.restore(*boundary97),controller.error());require(controller.resume(),controller.error());
+        while(controller.session()->nextTick()<128){const auto cp=step(challengeSample(controller.session()->nextTick()),true);suffix<<cp.nextTick<<' '<<detCheckpointHash(cp)<<'\n';}
+        require(encodeDetCheckpoint(checkpoint())==encodeDetCheckpoint(final),"Restored final complete bytes differ");
+        auto restored=freshOutput(opts.output+".restore.state");const auto bytes=encodeDetCheckpoint(checkpoint());
+        restored.write(reinterpret_cast<const char*>(bytes.data()),static_cast<std::streamsize>(bytes.size()));restored.close();suffix.close();
+        require(bool(restored) && bool(suffix),"Restore artifact write failed");}
+    if(opts.mode==DetHostMode::Record)require(controller.stop(),controller.error());
+    const auto hero=detVitalityState2D(final,vitality,player),enemy=detVitalityState2D(final,vitality,patient);
+    const auto movement=detCharacterControlState2D(final,control,player);
+    const auto decision=detBrainState2D(final,brain,patient);
+    const auto foe=detAttackState2D(final,attack,patient);
+    const auto hit=detAttackResult2D(final,attack,patient);
+    const auto body=detCollisionBodySchema2D(level.character.collision);
+    const auto mask=readDetState<std::uint32_t>(body,final.actors.at(101).blocks.at(body.id),DetBodyMask);
+    const auto actions=detLevelActionsConfig2D(level);const auto actionCount=readDetState<std::uint64_t>(
+        detActionsStateSchema2D(actions),final.globals.at(actions.stateSchema),DetActionsTotalCount);
+    if(opts.features)require(final.nextTick==128 && !hero.dead && !enemy.dead && hero.hurtCount>0 && hero.hurtCount<=10 && hero.hp==20-2*hero.hurtCount
+        && enemy.hp==20 && movement.startCount==1 && movement.deniedCount==0 && decision.attackPulseCount>0
+        && hit.attemptCount>0 && mask==0 && actionCount==2,"Challenge real content features missing");
+    const auto gameProgress=detLevelProgressConfig2D(level);const auto flow=detLevelProgressFlowConfig2D(level);
+    const auto collectible=detCollectibleState2D(final,gameProgress,1);
+    const auto claim=detProgressFlowClaim2D(final,flow,1);const auto objective=detProgressFlowObjective2D(final,flow,1);
+    const auto pickupMask=readDetState<std::uint32_t>(body,final.actors.at(310).blocks.at(body.id),DetBodyMask);
+    const auto counter=detProgressCounter2D(final,gameProgress,1);const bool satisfied=detProgressObjective2D(final,gameProgress,1);
+    if(opts.features)require(counter==1 && satisfied && collectible.claimed && collectible.tick==97 && pickupMask==0
+        && claim.attemptCount==1 && claim.lastResult==DetProgressCode2D::Applied && objective.onceConsumed
+        && objective.attemptCount==1 && objective.lastResult==DetActionCode2D::Applied,"Challenge automatic content features missing");
+    auto state=freshOutput(opts.output+".state");const auto bytes=encodeDetCheckpoint(final);
+    state.write(reinterpret_cast<const char*>(bytes.data()),static_cast<std::streamsize>(bytes.size()));state.close();trace.close();
+    require(bool(state) && bool(trace),"Challenge state/trace write failed");
+    std::ostringstream summary;summary<<"{\"schema\":1,\"status\":\"passed\",\"scenario\":\"challenge\",\"mode\":"
+        <<quoted(opts.mode==DetHostMode::Live?"live":"record")<<",\"interactive\":"<<(opts.interactive?"true":"false")<<",\"initialTick\":0,\"nextTick\":"<<final.nextTick
+        <<",\"traceRows\":"<<rows<<",\"originalInputCallbacks\":"<<originalCalls<<",\"inputCallbacks\":"<<boundary.calls
+        <<",\"advanceCalls\":"<<frames<<",\"restoreBoundary\":"<<(opts.verifyRestore?97:0)<<",\"restoreCPComparisons\":"<<restoreRows
+        <<",\"featureChecks\":"<<(opts.features?"true":"false")<<",\"inputPayloadBytes\":9,\"levelProfile\":11,\"brainProfile\":2"
+        <<",\"finalHash\":"<<quoted(std::to_string(detCheckpointHash(final)))<<",\"contentHash\":"<<quoted(std::to_string(detLevelSessionConfig(level).contentHash))
+        <<",\"recordingPath\":"<<quoted(recording)<<",\"heroHP\":"<<hero.hp<<",\"heroHurts\":"<<hero.hurtCount
+        <<",\"enemyHP\":"<<enemy.hp<<",\"attackStarts\":"<<foe.attackCount<<",\"attackAttempts\":"<<hit.attemptCount
+        <<",\"brainDecisions\":"<<decision.decisionCount<<",\"brainPulses\":"<<decision.attackPulseCount
+        <<",\"controlStarts\":"<<movement.startCount<<",\"controlRequests\":"<<movement.requestCount
+        <<",\"gateMask\":"<<mask<<",\"actionAttempts\":"<<actionCount
+        <<",\"pickupMask\":"<<pickupMask<<",\"counter\":"<<counter<<",\"objectiveSatisfied\":"<<(satisfied?"true":"false")
+        <<",\"claimed\":"<<(collectible.claimed?"true":"false")<<",\"claimTick\":"<<collectible.tick
+        <<",\"flowClaimAttempts\":"<<claim.attemptCount<<",\"flowClaimCode\":"<<static_cast<std::uint32_t>(claim.lastResult)
+        <<",\"flowClaimActionSequence\":"<<claim.lastActionSequence<<",\"flowObjectiveAttempts\":"<<objective.attemptCount
+        <<",\"flowObjectiveCode\":"<<static_cast<std::uint32_t>(objective.lastResult)<<",\"flowObjectiveActionSequence\":"<<objective.actionSequence
+        <<",\"onceConsumed\":"<<(objective.onceConsumed?"true":"false")<<",\"manualDoorAllowed\":false}\n";
+    auto report=freshOutput(opts.output+".summary.json");report<<summary.str();report.close();require(bool(report),"Challenge summary write failed");
+    status(final,attack,brain,control);std::cout<<summary.str();return 0;
+}
+
+
+int run(const Options& opts){if(opts.challenge)return runChallenge(opts);if(opts.workshop)return runWorkshop(opts);
     require(std::filesystem::is_regular_file(opts.level) && !std::filesystem::is_symlink(opts.level),"Level must be an ordinary file");
     DetLevel2D level;std::string error;require(loadDetLevel2D(opts.level,level,error),error);
     require(level.formatVersion==10 && level.applicationVersion==56 && level.inputVersion==7 && level.stepNumerator==1 && level.stepDenominator==64,"Control content requires format10/app56/input7/step1/64");
@@ -444,6 +666,7 @@ int run(const Options& opts){if(opts.workshop)return runWorkshop(opts);
 int main(int argc,char** argv){if(argc==2 && std::string_view(argv[1])=="--help"){
     std::cout<<"AYEntity_DetControlExample --level content.dlt [--ticks 64] [--interactive] [--require-features] [--output freshPrefix]"
         " [--save-at 4 --save fresh.dsv] [--load file.dsv] [--record fresh.rpl | --replay actual_000.rpl] [--seek 4]\n"
-        "Opt-in: --scenario workshop --level workshop.dlt --ticks 128 --output freshPrefix [--verify-restore] [--record fresh.rpl].\n";return 0;}
+        "Opt-in: --scenario workshop --level workshop.dlt --ticks 128 --output freshPrefix [--verify-restore] [--record fresh.rpl].\n"
+        "Challenge: --scenario challenge --level workshop-challenge.dlt --ticks 128 --output freshPrefix [--verify-restore] [--record fresh.rpl]; collect to open, manual door forbidden.\n";return 0;}
     Options opts;try{opts=options(argc,argv);}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 2;}
     try{return run(opts);}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}
