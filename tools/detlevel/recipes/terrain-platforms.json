@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "sources": [],
+  "steps": [
+    {
+      "id": "terrain",
+      "command": "create",
+      "params": {
+        "starter": "terrain"
+      },
+      "output": "terrain.dlt"
+    },
+    {
+      "id": "ramp",
+      "command": "add-solid",
+      "params": {
+        "input": {
+          "step": "terrain"
+        },
+        "actor": "200",
+        "shape": "slope-right",
+        "x": "4",
+        "y": "0.5",
+        "halfX": "1",
+        "halfY": "0.5",
+        "layer": "2",
+        "mask": "1"
+      },
+      "output": "ramp.dlt"
+    },
+    {
+      "id": "platformA",
+      "command": "add-solid",
+      "params": {
+        "input": {
+          "step": "ramp"
+        },
+        "actor": "300",
+        "shape": "aabb",
+        "x": "8",
+        "y": "2",
+        "halfX": "0.5",
+        "halfY": "0.125",
+        "layer": "2",
+        "mask": "1"
+      },
+      "output": "platform-a.dlt"
+    },
+    {
+      "id": "platformB",
+      "command": "add-solid",
+      "params": {
+        "input": {
+          "step": "platformA"
+        },
+        "actor": "301",
+        "shape": "aabb",
+        "x": "10",
+        "y": "2",
+        "halfX": "0.5",
+        "halfY": "0.125",
+        "layer": "2",
+        "mask": "1"
+      },
+      "output": "platform-b.dlt"
+    },
+    {
+      "id": "path",
+      "command": "add-path",
+      "params": {
+        "input": {
+          "step": "platformB"
+        },
+        "actor": "300",
+        "path": "1",
+        "dx": "0",
+        "dy": "1",
+        "travelTicks": 8,
+        "playback": "pingpong"
+      },
+      "output": "path.dlt"
+    },
+    {
+      "id": "shared",
+      "command": "bind-path",
+      "params": {
+        "input": {
+          "step": "path"
+        },
+        "actor": "301",
+        "path": "1"
+      },
+      "output": "shared.dlt"
+    },
+    {
+      "id": "beforePreview",
+      "command": "preview",
+      "params": {
+        "input": {
+          "step": "shared"
+        }
+      },
+      "output": "shared-before.svg"
+    },
+    {
+      "id": "canonical",
+      "command": "canonicalize",
+      "params": {
+        "input": {
+          "step": "shared"
+        }
+      },
+      "output": "shared-canonical.dlt"
+    },
+    {
+      "id": "preview",
+      "command": "preview",
+      "params": {
+        "input": {
+          "step": "canonical"
+        }
+      },
+      "output": "shared.svg"
+    }
+  ]
+}

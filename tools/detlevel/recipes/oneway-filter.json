@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "sources": [
+    {
+      "id": "base",
+      "path": "filter-source.dlt",
+      "bytes": 1156,
+      "sha256": "5f7497a2d0f682fa049526e7451d7c2a1700627acdc23da03d7e35e45cf39be0"
+    }
+  ],
+  "steps": [
+    {
+      "id": "validated",
+      "command": "validate",
+      "params": {
+        "input": {
+          "source": "base"
+        }
+      }
+    },
+    {
+      "id": "oneway",
+      "command": "add-oneway",
+      "params": {
+        "input": {
+          "source": "base"
+        },
+        "actor": "200",
+        "x": "12",
+        "y": "2",
+        "halfX": "1",
+        "halfY": "0.125",
+        "layer": "2",
+        "mask": "1"
+      },
+      "output": "oneway.dlt"
+    },
+    {
+      "id": "filtered",
+      "command": "edit-filter",
+      "params": {
+        "input": {
+          "step": "oneway"
+        },
+        "actor": "200",
+        "layer": "2",
+        "mask": "0"
+      },
+      "output": "filtered.dlt"
+    },
+    {
+      "id": "beforePreview",
+      "command": "preview",
+      "params": {
+        "input": {
+          "step": "filtered"
+        }
+      },
+      "output": "filtered-before.svg"
+    },
+    {
+      "id": "canonical",
+      "command": "canonicalize",
+      "params": {
+        "input": {
+          "step": "filtered"
+        }
+      },
+      "output": "filtered-canonical.dlt"
+    },
+    {
+      "id": "preview",
+      "command": "preview",
+      "params": {
+        "input": {
+          "step": "canonical"
+        }
+      },
+      "output": "filtered.svg"
+    }
+  ]
+}
