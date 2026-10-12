@@ -12,6 +12,9 @@ COMMANDS={
  'create':({'starter'},True),
  'place':({'input','actor','x','y'},True),
  'resize-half':({'input','actor','halfX','halfY'},True),
+ 'edit-offset':({'input','actor','x','y'},True),
+ 'edit-playback':({'input','path','playback'},True),
+ 'remove-solid':({'input','actor'},True),
  'add-solid':({'input','actor','shape','x','y','halfX','halfY','layer','mask'},True),
  'add-oneway':({'input','actor','x','y','halfX','halfY','layer','mask'},True),
  'edit-filter':({'input','actor','layer','mask'},True),
@@ -125,7 +128,9 @@ def argv_for(step,run,sources,produced):
     elif c=='add-solid':args=[c,ref('input'),p['actor'],p['shape'],p['x'],p['y'],p['halfX'],p['halfY'],p['layer'],p['mask']]
     elif c=='add-oneway':args=[c,ref('input'),p['actor'],p['x'],p['y'],p['halfX'],p['halfY'],p['layer'],p['mask']]
     elif c=='edit-filter':args=[c,ref('input'),p['actor'],p['layer'],p['mask']]
-    elif c=='place':args=[c,ref('input'),p['actor'],p['x'],p['y']]
+    elif c in ('place','edit-offset'):args=[c,ref('input'),p['actor'],p['x'],p['y']]
+    elif c=='edit-playback':args=[c,ref('input'),p['path'],p['playback']]
+    elif c=='remove-solid':args=[c,ref('input'),p['actor']]
     elif c=='resize-half':args=[c,ref('input'),p['actor'],p['halfX'],p['halfY']]
     elif c=='add-path':args=[c,ref('input'),p['actor'],p['path'],p['dx'],p['dy'],str(p['travelTicks']),p['playback']]
     elif c=='bind-path':args=[c,ref('input'),p['actor'],p['path']]

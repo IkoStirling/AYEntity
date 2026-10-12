@@ -1,0 +1,162 @@
+{
+  "schema": 1,
+  "sources": [],
+  "steps": [
+    {
+      "id": "terrain",
+      "command": "create",
+      "params": {
+        "starter": "terrain"
+      },
+      "output": "terrain.dlt"
+    },
+    {
+      "id": "unused",
+      "command": "add-solid",
+      "params": {
+        "input": {
+          "step": "terrain"
+        },
+        "actor": "201",
+        "shape": "aabb",
+        "x": "14",
+        "y": "2",
+        "halfX": "0.5",
+        "halfY": "0.125",
+        "layer": "2",
+        "mask": "1"
+      },
+      "output": "unused.dlt"
+    },
+    {
+      "id": "platformA",
+      "command": "add-solid",
+      "params": {
+        "input": {
+          "step": "unused"
+        },
+        "actor": "300",
+        "shape": "aabb",
+        "x": "8",
+        "y": "2",
+        "halfX": "0.5",
+        "halfY": "0.125",
+        "layer": "2",
+        "mask": "1"
+      },
+      "output": "platform-a.dlt"
+    },
+    {
+      "id": "platformB",
+      "command": "add-solid",
+      "params": {
+        "input": {
+          "step": "platformA"
+        },
+        "actor": "301",
+        "shape": "aabb",
+        "x": "10",
+        "y": "2",
+        "halfX": "0.5",
+        "halfY": "0.125",
+        "layer": "2",
+        "mask": "1"
+      },
+      "output": "platform-b.dlt"
+    },
+    {
+      "id": "bound",
+      "command": "add-path",
+      "params": {
+        "input": {
+          "step": "platformB"
+        },
+        "actor": "300",
+        "path": "1",
+        "dx": "0",
+        "dy": "1",
+        "travelTicks": 8,
+        "playback": "pingpong"
+      },
+      "output": "bound.dlt"
+    },
+    {
+      "id": "shared",
+      "command": "bind-path",
+      "params": {
+        "input": {
+          "step": "bound"
+        },
+        "actor": "301",
+        "path": "1"
+      },
+      "output": "shared.dlt"
+    },
+    {
+      "id": "offset",
+      "command": "edit-offset",
+      "params": {
+        "input": {
+          "step": "shared"
+        },
+        "actor": "300",
+        "x": "0.25",
+        "y": "0.125"
+      },
+      "output": "offset.dlt"
+    },
+    {
+      "id": "loop",
+      "command": "edit-playback",
+      "params": {
+        "input": {
+          "step": "offset"
+        },
+        "path": "1",
+        "playback": "loop"
+      },
+      "output": "loop.dlt"
+    },
+    {
+      "id": "removed",
+      "command": "remove-solid",
+      "params": {
+        "input": {
+          "step": "loop"
+        },
+        "actor": "201"
+      },
+      "output": "removed.dlt"
+    },
+    {
+      "id": "beforePreview",
+      "command": "preview",
+      "params": {
+        "input": {
+          "step": "removed"
+        }
+      },
+      "output": "edited-before.svg"
+    },
+    {
+      "id": "canonical",
+      "command": "canonicalize",
+      "params": {
+        "input": {
+          "step": "removed"
+        }
+      },
+      "output": "edited-canonical.dlt"
+    },
+    {
+      "id": "preview",
+      "command": "preview",
+      "params": {
+        "input": {
+          "step": "canonical"
+        }
+      },
+      "output": "edited.svg"
+    }
+  ]
+}
