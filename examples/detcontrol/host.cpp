@@ -1,10 +1,11 @@
-// design reference: AYEntity/design.md Stage56; finite dash input ownership, actual wall/jump and disjoint enemy Brain.
+// design reference: AYEntity/design.md Stage56 original Control; Stage66 opt-in authored terrain workshop (acceptance Pending).
 #include <AYApplication/EngineModuleRuntime.h>
 #include <AYApplication/EngineRuntimeScope.h>
 #include <AYApplication/IEngineHost.h>
 #include <AYEntity/DeterministicHost.h>
 #include <AYEntity/DeterministicLevel2D.h>
 #include <AYEntity/DeterministicProgress2D.h>
+#include <AYEntity/DeterministicActions2D.h>
 #include <AYEntity/DeterministicSave.h>
 #include <AYEntity/DeterministicCharacterRespawnFlow2D.h>
 #include <AYEntity/DeterministicVitality2D.h>
@@ -17,7 +18,11 @@
 #include <AYReplay/FileReplayRecorder.h>
 #include <AYScene.h>
 #include <AYScene/SceneManager.h>
+#include <algorithm>
 #include <charconv>
+#include <cstdint>
+#include <optional>
+#include <vector>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -38,12 +43,14 @@ std::uint64_t integer(std::string_view text){std::uint64_t value=0;const auto [e
 void asciiPath(std::string_view value){require(!value.empty(),"Empty path");for(unsigned char ch:value)require(ch>=32 && ch<127,"Example paths must be printable ASCII");}
 std::string quoted(std::string_view value){std::string result="\"";for(char ch:value){if(ch=='\\' || ch=='\"')result+='\\';result+=ch;}return result+'\"';}
 struct Options {DetHostMode mode=DetHostMode::Live;std::string level="AYRuntime/AYEntity/examples/detcontrol/content.dlt",output,replay,save,load;
-    std::uint64_t ticks=64,seek=0,saveAt=0;bool interactive=false,features=false,seekSet=false,saveAtSet=false;};
+    std::uint64_t ticks=64,seek=0,saveAt=0;bool interactive=false,features=false,seekSet=false,saveAtSet=false,workshop=false,verifyRestore=false;};
 Options options(int argc,char** argv){Options opts;std::set<std::string> seen;bool modeSet=false;
     for(int n=1;n<argc;++n){const std::string key=argv[n];require(seen.insert(key).second,"Duplicate option: "+key);
         if(key=="--interactive"){opts.interactive=true;continue;}if(key=="--require-features"){opts.features=true;continue;}
+        if(key=="--verify-restore"){opts.verifyRestore=true;continue;}
         require(n+1<argc,"Missing option value: "+key);const std::string value=argv[++n];
-        if(key=="--ticks")opts.ticks=integer(value);else if(key=="--seek"){opts.seek=integer(value);opts.seekSet=true;}
+        if(key=="--scenario"){require(value=="workshop","Unknown scenario; omit for original control or choose workshop");opts.workshop=true;}
+        else if(key=="--ticks")opts.ticks=integer(value);else if(key=="--seek"){opts.seek=integer(value);opts.seekSet=true;}
         else if(key=="--save-at"){opts.saveAt=integer(value);opts.saveAtSet=true;}
         else if(key=="--level" || key=="--output" || key=="--save" || key=="--load"){
             asciiPath(value);if(key=="--level")opts.level=value;else if(key=="--output")opts.output=value;else if(key=="--save")opts.save=value;else opts.load=value;
@@ -51,6 +58,13 @@ Options options(int argc,char** argv){Options opts;std::set<std::string> seen;bo
             opts.replay=value;opts.mode=key=="--record"?DetHostMode::Record:DetHostMode::Replay;
         }else throw std::runtime_error("Unknown option: "+key);
     }
+    if(opts.workshop){if(!seen.contains("--ticks"))opts.ticks=128;
+        if(!seen.contains("--level"))opts.level="AYRuntime/AYEntity/examples/detcontrol/workshop.dlt";
+        require(opts.ticks==128 && opts.mode!=DetHostMode::Replay && opts.load.empty() && !opts.seekSet && !opts.saveAtSet,
+            "Workshop uses128 ticks and Live/Record; no old save/load/seek mapping");
+        require(!opts.features || !opts.interactive,"Workshop selected hand checks require its script");}
+    require(!opts.verifyRestore || (opts.workshop && opts.mode==DetHostMode::Live && !opts.interactive),
+        "--verify-restore is workshop scripted Live only");
     require(opts.ticks>=1 && opts.ticks<=65536,"Ticks must be in1..65536");
     require(!opts.interactive || opts.mode!=DetHostMode::Replay,"Interactive acquisition cannot run during Replay");
     require(!opts.seekSet || (opts.mode==DetHostMode::Replay && opts.seek<=opts.ticks),"Seek requires Replay and seek<=ticks");
@@ -59,7 +73,49 @@ Options options(int argc,char** argv){Options opts;std::set<std::string> seen;bo
     require(opts.load.empty() || opts.mode==DetHostMode::Live,"Persistent load requires Live");
     return opts;
 }
-bool configure(DeterministicSession& session,const DetLevel2D& level,const DetProgress2DConfig&){
+// Stage66: immutable sample protocol. Level still owns all motion/gameplay facades.
+constexpr std::uint32_t workshopPolicySchema=400,workshopProfile=86;
+DetTypedStateSchema workshopPolicy(){return {workshopPolicySchema,1,{
+    {1,std::uint32_t{66}},{2,std::uint32_t{9}},{3,std::uint32_t{9}},
+    {4,std::uint64_t{10}},{5,std::uint64_t{20}},{6,std::uint64_t{101}},
+    {7,std::uint64_t{300}},{8,std::uint32_t{1}},{9,std::uint32_t{1}},
+    {10,std::uint32_t{4}},{11,std::uint32_t{0}},{12,std::uint32_t{1}},{13,std::uint32_t{2}}}};}
+bool configureWorkshop(DeterministicSession& session,const DetLevel2D& level){
+    const auto policy=workshopPolicy();const DetStateLayout layout(policy);
+    if(!session.registerTypedSchema(policy) || !session.registerGlobalState(policy.id)
+        || !session.registerLogicProfile(workshopProfile,1,0x445753484f505031ULL))return false;
+    if(!session.registerValidator(workshopProfile,1,[layout](const DetSessionCheckpoint& cp,std::string& error){
+        try {if(cp.globals.at(workshopPolicySchema)!=layout.defaults()){error="Workshop immutable protocol globals";return false;}
+            for(const auto& [id,actor]:cp.actors)if(actor.blocks.at(workshopPolicySchema)!=layout.defaults()){
+                error="Workshop immutable actor protocol copies";return false;}return true;
+        }catch(const std::exception& e){error=e.what();return false;}
+    }))return false;
+    const auto control=detLevelCharacterControlConfig2D(level);
+    const auto attack=detLevelAttackConfig2D(level);
+    const auto actions=detLevelActionsConfig2D(level);
+    if(!session.registerSystem(inputSystem,level.character.collision.priority,[control,attack,actions](DetTickContext& context){
+        const auto& commands=context.input().commands;if(commands.size()!=1)return false;const auto& command=commands.front();
+        if(command.source!=player || command.sequence!=0 || command.type!=9 || command.payload.size()!=9 || command.payload[0]>4)return false;
+        for(unsigned n=1;n<8;++n)if(command.payload[n]>1)return false;
+        if(command.payload[8]>2)return false;
+        detCharacterControlInput2D(context,control,player,{{D::fromInt(int(command.payload[0])-2),command.payload[1]!=0,
+            command.payload[2]!=0,command.payload[3]!=0},command.payload[6]!=0,command.payload[5]!=0,command.payload[7]!=0});
+        detSetAttackInput2D(context,attack,player,{command.payload[4]!=0,command.payload[5]!=0});
+        if(command.payload[8]){
+            // One explicit command is one normal attempt. No denial queue/retry.
+            const auto result=executeDetAction2D(context,actions,{101,command.payload[8]==1?
+                DetActionKind2D::CollisionDisable:DetActionKind2D::CollisionEnable});
+            if(result.code!=DetActionCode2D::Applied && result.code!=DetActionCode2D::Unchanged
+                && result.code!=DetActionCode2D::Occupied)return false;
+        }
+        return true;
+    }))return false;
+    std::string error;const bool configured=configureDetLevel2D(session,level,error);
+    if(!configured)throw std::runtime_error("Workshop content setup: "+error);return true;
+}
+
+bool configure(DeterministicSession& session,const DetLevel2D& level,const DetProgress2DConfig&,bool workshop=false){
+    if(workshop)return configureWorkshop(session,level);
     if(!session.registerLogicProfile(appProfile,1,0x444353484f535431ULL))return false;
     if(!session.registerSystem(inputSystem,level.character.collision.priority,[character=level.character,attack=detLevelAttackConfig2D(level),control=detLevelCharacterControlConfig2D(level)](DetTickContext& context){
         const auto& commands=context.input().commands;if(commands.size()!=1)return false;const auto& command=commands.front();
@@ -70,7 +126,7 @@ bool configure(DeterministicSession& session,const DetLevel2D& level,const DetPr
     }))return false;
     std::string error;if(!configureDetLevel2D(session,level,error))throw std::runtime_error("Content setup: "+error);return true;
 }
-struct Sample {int speed=0;bool jump=false,crouch=false,drop=false,held=false,facing=true,dash=false,cancel=false;};
+struct Sample {int speed=0;bool jump=false,crouch=false,drop=false,held=false,facing=true,dash=false,cancel=false;std::uint8_t doorOp=0;};
 struct InputBoundary {std::uint64_t tick=0,calls=0;Sample sample;};
 class StandardHost {
 public:
@@ -81,14 +137,16 @@ public:
             auto& modules=runtime_.modules();require(modules.emplace<EntityComponentModule>().succeeded(),"Add Core component module");
             require(modules.emplace<EntityRuntimeModule>().succeeded(),"Add Entity runtime module");
             DetHostedSceneRecipe recipe;recipe.config=detLevelSessionConfig(level);recipe.mode=opts.mode;recipe.replayPath=opts.replay;recipe.checkpointInterval=4;
-            recipe.configure=[level,progress](DeterministicSession& session){return configure(session,level,progress);};
+            recipe.configure=[level,progress,workshop=opts.workshop](DeterministicSession& session){return configure(session,level,progress,workshop);};
             // Input is already acquired by the external caller before this callback. Sim sees bytes only.
-            recipe.input=[&input](const DetHostInputRequest& request,DetTickInput& packet){
+            recipe.input=[&input,workshop=opts.workshop](const DetHostInputRequest& request,DetTickInput& packet){
                 if(request.tick!=input.tick || input.sample.speed<-2 || input.sample.speed>2)return false;
                 packet={request.tick,request.version,{{static_cast<std::uint32_t>(player),0,7,{static_cast<std::uint8_t>(input.sample.speed+2),
                     static_cast<std::uint8_t>(input.sample.jump),static_cast<std::uint8_t>(input.sample.crouch),static_cast<std::uint8_t>(input.sample.drop),
                     static_cast<std::uint8_t>(input.sample.held),static_cast<std::uint8_t>(input.sample.facing),
                     static_cast<std::uint8_t>(input.sample.dash),static_cast<std::uint8_t>(input.sample.cancel)}}}};
+                if(workshop){if(request.version!=9 || input.sample.doorOp>2)return false;
+                    packet.commands.front().type=9;packet.commands.front().payload.push_back(input.sample.doorOp);}
                 ++input.calls;return true;
             };
             DetHostOptions selection{[recipe](const auto&)->std::optional<DetHostedSceneRecipe>{return recipe;}};
@@ -96,7 +154,7 @@ public:
             const auto prepared=runtime_.prepare();require(prepared.succeeded(),prepared.message());runtime_.context().componentRegistry().seal();
             const auto installed=runtime_.install();require(installed.succeeded(),installed.message());
             require(loop_.prepareHostedSession(),"Host preparation failed");scope_.refresh();
-            scene_=std::make_unique<ayt::scene::Scene>(ayt::scene::SceneMode::Play,"det-control-example");host_.scenes()->setCurrent(scene_.get());
+            scene_=std::make_unique<ayt::scene::Scene>(ayt::scene::SceneMode::Play,opts.workshop?"det-workshop-example":"det-control-example");host_.scenes()->setCurrent(scene_.get());
             controller_=deterministicHost(host_);require(controller_ && controller_->session(),"Missing standard Host Session");
             require(controller_->state()!=DetHostState::Faulted,controller_->error());
         }catch(...){close();throw;}
@@ -144,7 +202,149 @@ void status(const DetSessionCheckpoint& cp,const DetAttack2DConfig& attack,const
         <<" dash="<<static_cast<std::uint32_t>(movement.phase)<<" starts="<<movement.startCount<<" ready="<<movement.readyTick<<'\n';
 }
 void help(){std::cout<<"Commands: right [ticks], left [ticks], idle [ticks], jump, drop, attackright, attackleft, dashright, dashleft, canceldash, faceleft, faceright, crouch [ticks], stand [ticks], status, save FRESH.dsv, load FILE.dsv, help, quit. Movement/facing persist; attack commands hold for one tick. Enemy input is authored Brain-owned; Hero movement is Control-owned.\n";}
-int run(const Options& opts){require(std::filesystem::is_regular_file(opts.level) && !std::filesystem::is_symlink(opts.level),"Level must be an ordinary file");
+// Stage66's script is external input acquisition, not simulation state or a timer callback.
+Sample workshopSample(std::uint64_t tick){Sample sample;sample.speed=tick<32?0:2;
+    sample.dash=tick==48;sample.doorOp=tick==112?1:0;return sample;}
+void workshopHand(const DetSessionCheckpoint& cp,const DetLevel2D& level,const DetCharacterControl2DConfig& control){
+    const auto n=cp.nextTick;require(n>=1 && n<=128,"Workshop selected hand range");const auto t=n-1;
+    const auto state=detCharacterControlState2D(cp,control,player);
+    const auto phase=t>=48 && t<56?DetCharacterControlPhase2D::Active:
+        t>=56 && t<72?DetCharacterControlPhase2D::Cooldown:DetCharacterControlPhase2D::Ready;
+    require(state.phase==phase && state.decisionCount==n && state.requestCount==(t<48?0u:1u)
+        && state.startCount==(t<48?0u:1u) && state.deniedCount==0 && state.cancelCount==0,"Workshop finite dash edge/window");
+    if(t>=48)require(state.readyTick==72,"Workshop original dash ready deadline");
+    D x;if(n<=32)x=D::fromInt(-1)+D::fromInt(static_cast<int>(n))/D::fromInt(32);
+    else if(n<=48)x=D::fromInt(static_cast<int>(n-32))/D::fromInt(32);
+    else if(n<=56)x=D::fromInt(1)/D::fromInt(2)+D::fromInt(static_cast<int>(n-48))/D::fromInt(8);
+    else if(n<=112)x=D::fromInt(3)/D::fromInt(2)+D::fromInt(static_cast<int>(n-56))/D::fromInt(32);
+    else x=D::fromInt(13)/D::fromInt(4)+D::fromInt(static_cast<int>(std::min<std::uint64_t>(n-112,8)))/D::fromInt(32);
+    const auto half=D::fromInt(1)/D::fromInt(2),quarter=D::fromInt(1)/D::fromInt(4),low=D::fromInt(3)/D::fromInt(4);
+    D foot{};if(x>low)foot=(x-low)/D::fromInt(2);if(foot>D::fromInt(1))foot=D::fromInt(1);
+    if(n<=120)require(cp.actors.at(player).pose.position[0]==x.bits() && cp.actors.at(player).pose.position[1]==(foot+half).bits(),
+        "Workshop dyadic actual carry/ramp/cap/gate/sentry position CP"+std::to_string(n)
+        +" actual="+std::to_string(cp.actors.at(player).pose.position[0])+","+std::to_string(cp.actors.at(player).pose.position[1])
+        +" expected="+std::to_string(x.bits())+","+std::to_string((foot+half).bits()));
+    else {
+        // Both participants are Kinematic. The solver may move both poses;
+        // zero Enemy intent does not make it an immovable static wall.
+        const auto& hero=cp.actors.at(player).pose;const auto& enemy=cp.actors.at(patient).pose;
+        const auto hx=D::fromBits(hero.position[0]),ex=D::fromBits(enemy.position[0]);
+        require(hero.position[1]==(D::fromInt(1)+half).bits() && enemy.position[1]==(D::fromInt(1)+half).bits()
+            && ex-hx==half && hx>=D::fromBits(hero.previousPosition[0]) && ex>=D::fromBits(enemy.previousPosition[0]),
+            "Workshop real two-Kinematic contact separation and monotone motion");
+    }
+    const auto carrierX=D::fromInt(-1)+D::fromInt(static_cast<int>(std::min<std::uint64_t>(n,32)))/D::fromInt(32);
+    require(cp.actors.at(300).pose.position[0]==carrierX.bits() && cp.actors.at(300).pose.position[1]==(-quarter/ D::fromInt(2)).bits(),
+        "Workshop real Once32 prescribed platform");
+    const auto path=detLevelPathConfig2D(level,1);const auto pathSchema=detPathMotionStateSchema2D(path);
+    require(readDetState<bool>(pathSchema,cp.actors.at(300).blocks.at(pathSchema.id),DetPathFinished)==(n>=32),"Workshop actual Once finish");
+    const auto body=detCollisionBodySchema2D(level.character.collision);
+    require(readDetState<std::uint32_t>(body,cp.actors.at(101).blocks.at(body.id),DetBodyMask)==(n<=112?9u:0u),"Workshop exact gate action boundary");
+    if(n<=32){const auto schema=detCharacterStateSchema2D(level.character);
+        require(readDetState<DetEntityRef>(schema,cp.actors.at(player).blocks.at(schema.id),DetCharacterSupport).value==300,
+            "Workshop initial carrier is real support");}
+    if(n==113)require(detBrainState2D(cp,detLevelBrainConfig2D(level),patient).mode==DetBrainMode2D::SightBlocked,
+        "Brain captured gate before Input112, not CP113 current mask");
+}
+int runWorkshop(const Options& opts){
+    require(std::filesystem::is_regular_file(opts.level) && !std::filesystem::is_symlink(opts.level),"Level must be an ordinary file");
+    DetLevel2D level;std::string error;const bool loaded=loadDetLevel2D(opts.level,level,error);require(loaded,error);
+    require(level.formatVersion==11 && level.applicationVersion==66 && level.inputVersion==9
+        && level.stepNumerator==1 && level.stepDenominator==64 && level.brainLineOfSight,"Workshop requires explicit format11/app66/input9/sight/1:64");
+    require(level.actors.size()==7 && level.paths.size()==1 && level.paths[0].id==1 && !level.paths[0].movingTrigger
+        && level.paths[0].playback==DetPathPlayback2D::Once,"Workshop full fixed seven-body/Once content");
+    const auto progress=detLevelVitalityProgressConfig2D(level);
+    const auto vitality=detLevelVitalityConfig2D(level);const auto attack=detLevelAttackConfig2D(level);
+    const auto brain=detLevelBrainConfig2D(level);const auto control=detLevelCharacterControlConfig2D(level);
+    require(control.owners.size()==1 && control.owners[0].actor==player && brain.owners.size()==1
+        && brain.owners[0].actor==patient && brain.lineOfSight && attack.owners.size()==2,"Workshop disjoint real input owners");
+    require(!opts.output.empty(),"Workshop requires a fresh output prefix");
+    for(const auto* suffix:{".state",".trace",".summary.json",".restore.state",".restore.trace"})
+        require(!std::filesystem::exists(opts.output+suffix),"Output already exists");
+    if(opts.mode==DetHostMode::Record){auto path=opts.replay;if(!std::filesystem::path(path).has_extension())path+=".rpl";
+        require(!std::filesystem::exists(path) && !std::filesystem::exists(ayt::replay::FileReplayRecorder::rotationPathFor(path,0)),"Record destination exists");}
+    auto trace=freshOutput(opts.output+".trace");InputBoundary boundary;StandardHost host(opts,level,progress,boundary);
+    auto& controller=host.controller();const auto recording=controller.recordingPath();
+    const auto checkpoint=[&]{const auto cp=controller.checkpoint();require(cp.has_value(),controller.error());return *cp;};
+    require(controller.session()->nextTick()==0,"Workshop starts from authored initial content");
+    require(controller.resume(),controller.error());std::uint64_t frames=0,rows=0,restoreRows=0;
+    std::optional<DetSessionCheckpoint> boundary64;std::vector<std::vector<std::uint8_t>> originals;
+    if(opts.verifyRestore)originals.reserve(128);
+    const auto step=[&](Sample sample,bool restored){const auto before=controller.session()->nextTick();boundary.tick=before;boundary.sample=sample;
+        require(++frames<=256,"Workshop finite frame budget");host.frame(frames);
+        require(controller.state()!=DetHostState::Faulted,controller.error());
+        require(controller.session()->nextTick()==before+1,"Workshop Host did not advance exactly one tick");
+        auto cp=checkpoint();if(opts.features)workshopHand(cp,level,control);
+        if(!restored){trace<<cp.nextTick<<' '<<detCheckpointHash(cp)<<'\n';++rows;
+            if(opts.verifyRestore){originals.push_back(encodeDetCheckpoint(cp));if(cp.nextTick==64)boundary64=cp;}}
+        else {require(encodeDetCheckpoint(cp)==originals.at(static_cast<std::size_t>(cp.nextTick-1)),"Real Host restore64 full checkpoint suffix differs");++restoreRows;}
+        return cp;
+    };
+    if(opts.interactive){int speed=0;bool facing=true;std::string line;
+        std::cout<<"Workshop commands: right [ticks], left [ticks], idle [ticks], dashright, dashleft, open, close, status, help, quit. One door operation has no automatic retry.\n";
+        while(controller.session()->nextTick()<opts.ticks && std::cout<<"> " && std::getline(std::cin,line)){
+            std::istringstream in(line);std::string command,arg,extra;in>>command>>arg>>extra;if(command.empty())continue;
+            try {require(extra.empty(),"Too many command arguments");
+                if(command=="quit" || command=="status" || command=="help"){require(arg.empty(),"Command takes no argument");
+                    if(command=="quit")break;if(command=="status")status(checkpoint(),attack,brain,control);
+                    else std::cout<<"right/left/idle N; dashright/dashleft; open/close; status; quit\n";continue;}
+                Sample sample;sample.speed=speed;sample.facing=facing;std::uint64_t ticks=1;
+                if(command=="right" || command=="left" || command=="idle"){
+                    sample.speed=command=="right"?2:command=="left"?-2:0;
+                    if(sample.speed)sample.facing=sample.speed>0;ticks=arg.empty()?1:integer(arg);
+                }else {require(arg.empty(),"Single-tick command takes no argument");
+                    if(command=="dashright" || command=="dashleft"){sample.dash=true;sample.facing=command=="dashright";}
+                    else if(command=="open" || command=="close")sample.doorOp=command=="open"?1:2;
+                    else throw std::runtime_error("Unknown workshop command");}
+                require(ticks>=1 && ticks<=opts.ticks-controller.session()->nextTick(),"Command exceeds workshop tick budget");
+                speed=sample.speed;facing=sample.facing;
+                for(std::uint64_t n=0;n<ticks;++n){step(sample,false);sample.dash=false;sample.doorOp=0;}
+                status(checkpoint(),attack,brain,control);
+            }catch(const std::exception& e){if(controller.state()==DetHostState::Faulted)throw;std::cout<<"Command rejected: "<<e.what()<<'\n';}
+        }
+    }else while(controller.session()->nextTick()<opts.ticks)step(workshopSample(controller.session()->nextTick()),false);
+    const auto final=checkpoint();const auto originalCalls=boundary.calls;
+    if(opts.verifyRestore){require(boundary64.has_value() && originals.size()==128,"Missing actual registered CP64/128 original rows");
+        auto suffix=freshOutput(opts.output+".restore.trace");controller.pause();
+        require(controller.restore(*boundary64),controller.error());require(controller.resume(),controller.error());
+        while(controller.session()->nextTick()<128){const auto cp=step(workshopSample(controller.session()->nextTick()),true);suffix<<cp.nextTick<<' '<<detCheckpointHash(cp)<<'\n';}
+        require(encodeDetCheckpoint(checkpoint())==encodeDetCheckpoint(final),"Restored final complete bytes differ");
+        auto restored=freshOutput(opts.output+".restore.state");const auto bytes=encodeDetCheckpoint(checkpoint());
+        restored.write(reinterpret_cast<const char*>(bytes.data()),static_cast<std::streamsize>(bytes.size()));restored.close();suffix.close();
+        require(bool(restored) && bool(suffix),"Restore artifact write failed");}
+    if(opts.mode==DetHostMode::Record)require(controller.stop(),controller.error());
+    const auto hero=detVitalityState2D(final,vitality,player),enemy=detVitalityState2D(final,vitality,patient);
+    const auto movement=detCharacterControlState2D(final,control,player);
+    const auto decision=detBrainState2D(final,brain,patient);
+    const auto foe=detAttackState2D(final,attack,patient);
+    const auto hit=detAttackResult2D(final,attack,patient);
+    const auto body=detCollisionBodySchema2D(level.character.collision);
+    const auto mask=readDetState<std::uint32_t>(body,final.actors.at(101).blocks.at(body.id),DetBodyMask);
+    const auto actions=detLevelActionsConfig2D(level);const auto actionCount=readDetState<std::uint64_t>(
+        detActionsStateSchema2D(actions),final.globals.at(actions.stateSchema),DetActionsTotalCount);
+    if(opts.features)require(final.nextTick==128 && !hero.dead && !enemy.dead && hero.hurtCount>0 && hero.hurtCount<=10 && hero.hp==20-2*hero.hurtCount
+        && enemy.hp==20 && movement.startCount==1 && movement.deniedCount==0 && decision.attackPulseCount>0
+        && hit.attemptCount>0 && mask==0 && actionCount==1,"Workshop real content features missing");
+    auto state=freshOutput(opts.output+".state");const auto bytes=encodeDetCheckpoint(final);
+    state.write(reinterpret_cast<const char*>(bytes.data()),static_cast<std::streamsize>(bytes.size()));state.close();trace.close();
+    require(bool(state) && bool(trace),"Workshop state/trace write failed");
+    std::ostringstream summary;summary<<"{\"schema\":1,\"status\":\"passed\",\"scenario\":\"workshop\",\"mode\":"
+        <<quoted(opts.mode==DetHostMode::Live?"live":"record")<<",\"interactive\":"<<(opts.interactive?"true":"false")<<",\"initialTick\":0,\"nextTick\":"<<final.nextTick
+        <<",\"traceRows\":"<<rows<<",\"originalInputCallbacks\":"<<originalCalls<<",\"inputCallbacks\":"<<boundary.calls
+        <<",\"advanceCalls\":"<<frames<<",\"restoreBoundary\":"<<(opts.verifyRestore?64:0)<<",\"restoreCPComparisons\":"<<restoreRows
+        <<",\"featureChecks\":"<<(opts.features?"true":"false")<<",\"inputPayloadBytes\":9,\"levelProfile\":11,\"brainProfile\":2"
+        <<",\"finalHash\":"<<quoted(std::to_string(detCheckpointHash(final)))<<",\"contentHash\":"<<quoted(std::to_string(detLevelSessionConfig(level).contentHash))
+        <<",\"recordingPath\":"<<quoted(recording)<<",\"heroHP\":"<<hero.hp<<",\"heroHurts\":"<<hero.hurtCount
+        <<",\"enemyHP\":"<<enemy.hp<<",\"attackStarts\":"<<foe.attackCount<<",\"attackAttempts\":"<<hit.attemptCount
+        <<",\"brainDecisions\":"<<decision.decisionCount<<",\"brainPulses\":"<<decision.attackPulseCount
+        <<",\"controlStarts\":"<<movement.startCount<<",\"controlRequests\":"<<movement.requestCount
+        <<",\"gateMask\":"<<mask<<",\"actionAttempts\":"<<actionCount<<"}\n";
+    auto report=freshOutput(opts.output+".summary.json");report<<summary.str();report.close();require(bool(report),"Workshop summary write failed");
+    status(final,attack,brain,control);std::cout<<summary.str();return 0;
+}
+
+int run(const Options& opts){if(opts.workshop)return runWorkshop(opts);
+    require(std::filesystem::is_regular_file(opts.level) && !std::filesystem::is_symlink(opts.level),"Level must be an ordinary file");
     DetLevel2D level;std::string error;require(loadDetLevel2D(opts.level,level,error),error);
     require(level.formatVersion==10 && level.applicationVersion==56 && level.inputVersion==7 && level.stepNumerator==1 && level.stepDenominator==64,"Control content requires format10/app56/input7/step1/64");
     const auto progress=detLevelVitalityProgressConfig2D(level);
@@ -243,6 +443,7 @@ int run(const Options& opts){require(std::filesystem::is_regular_file(opts.level
 } // namespace
 int main(int argc,char** argv){if(argc==2 && std::string_view(argv[1])=="--help"){
     std::cout<<"AYEntity_DetControlExample --level content.dlt [--ticks 64] [--interactive] [--require-features] [--output freshPrefix]"
-        " [--save-at 4 --save fresh.dsv] [--load file.dsv] [--record fresh.rpl | --replay actual_000.rpl] [--seek 4]\n";return 0;}
+        " [--save-at 4 --save fresh.dsv] [--load file.dsv] [--record fresh.rpl | --replay actual_000.rpl] [--seek 4]\n"
+        "Opt-in: --scenario workshop --level workshop.dlt --ticks 128 --output freshPrefix [--verify-restore] [--record fresh.rpl].\n";return 0;}
     Options opts;try{opts=options(argc,argv);}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 2;}
     try{return run(opts);}catch(const std::exception& e){std::cerr<<e.what()<<'\n';return 1;}}

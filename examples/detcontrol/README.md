@@ -103,3 +103,43 @@ Default hand checks passed actual wall clipping, ordinary jump, consumed denied
 edges, facing lock, cancel retainingready33 and finalactive ready73. No new Level10
 Accepted-motion/recovery combination, actual new content Pak, long/native matrix
 or independent whole-CP golden is claimed. Ten-hour content task remains Active.
+
+## Stage66 optional terrain workshop (local verified; native VM Deferred)
+
+`--scenario workshop` selects a separate complete Level11 resource and app66/input9
+protocol. Omitting it keeps the original Control sample and its existing checks.
+This variant rides a real Once32 platform, walks and dashes over a filled wedge,
+opens an authorized gate and observes Brain sight and real HP damage. Every
+motion/HP/path/action decision belongs to the existing registered facades.
+
+The source `workshop-template.dlt` already authors all gameplay tables. The
+machine-readable `authoring-recipe.json` uses current create/add/stamp/place/resize/
+path/preview commands to create a fresh final level; it checks that entire output
+against independently authored `workshop.dlt`. Tools do not create new gameplay
+permissions. The SVG is a static initial-content preview.
+
+```text
+python run-authoring-recipe.py --tool ACTUAL_AYDETLEVEL --output-parent EXISTING_PARENT
+AYEntity_DetControlExample --scenario workshop --level FRESH_GENERATED_PLAYABLE.dlt --output FRESH_PREFIX --require-features --verify-restore
+AYEntity_DetControlExample --scenario workshop --level FRESH_GENERATED_PLAYABLE.dlt --output ANOTHER_FRESH_PREFIX --require-features --record FRESH_RECORD.rpl
+```
+
+The default script is128 ticks; the Live restore option adds64 actual continuation
+ticks from captured CP64. Live and Record agree on all original tick hashes and
+final checkpoint bytes; Live's restored suffix compares every actual full CP.
+The actual recording file is closed and checked for existence, without playback
+or authentication in this focused gate. Damage timing/counts come from actual
+registered observations; only selected dyadic motion/windows/mask/sight facts are
+hand checked. The actual finite gate receipt is bound below.
+
+Interactive usage accepts right/left/idle N, dashright/dashleft, open/close and
+status. A door denial has no hidden retry. Interactive usage is not another
+automated gate or a real-time renderer.
+
+Actual local MSVC Release AYEntity_WorkshopHostExample passed in 11.1761s; the affected original AYEntity_ControlHostExample passed in 13.4204s. Seven actual offline authoring commands succeeded and the entire generated canonical content equaled independently authored workshop.dlt before Host acquisition. Live128 plus captured CP64 continuation64 and Record128 performed320 actual advances; final complete CP bytes, every original tick trace and all64 restored suffix CP comparisons agreed. The committed workshop summary records heroHP=18, heroHurts=1, attackStarts=2, attackAttempts=1, brainPulses=2 and finalHash=10463999747462011456 (diagnostic UInt64 string). Original Control complete-byte compatibility was separately checked. Source snapshots were stable within their separate real execution episodes. Final Workshop executable bytes were unchanged; the earlier Control executable SHA remains an honest historical pre-test observation whose path was subsequently relinked, not a current-file byte verification. Exact raw authoring/Host/legacy evidence is in out/detcontent36-40-20261011/stage66-actual-freeze.json. The native-encoded LastTest.log is retained as raw bytes, not JSON/UTF-8 authority. Selected hand observations plus full CP execution equality are not independent whole-CP goldens; closed recording existence is not playback/seek/history authentication. No new interactive, broad matrix, Pak or native VM acceptance is claimed; native final VM Deferred.
+
+The subsequent corrected-content Workshop attempt also remains failed: its selected absolute-X hand check rejected at CP121 (JUnit3.71437s). The earlier expected static cap was a false premise because Enemy is the existing actual Kinematic body, not Static. The only final Host change corrected this narrow hand oracle: absolute XY is checked through CP120; CP121..128 instead check both Y=1.5, EnemyX minus HeroX=0.5 and monotone Hero movement against actual previousPosition. No kernel, Enemy role, permission, profile or runtime behavior was changed. Its already successful seven-command recipe and configure were reused unchanged; only the necessary final Host build and sole Workshop gate continued. The directed earlier CP41 diagnostic retains 40 complete tick-trace rows (1..40), then reports the CP41 mismatch; it is a failed diagnostic prefix, not an extra passed41-tick gate. Both original failure episodes and diagnostic bytes remain bound separately from the final passing execution; no soak or native acceptance is inferred.
+
+The first genuine composite gate is retained: the original Control case passed while Workshop failed its selected hand check at CP41. Diagnostics showed legitimate ordinary-floor X/Y corner contact at fraction0 resolving with the existing fixed X priority; Session had no execution fault. The content revision preserves the original explicitly selected continuousTerrain/terrain8 policy and every kernel/oracle rule. It changes only the new floor layout and stable authored ID so initial strict-X overlap and the intended carrier priority are explicit. The corrected complete template, independently authored expected text and seven-command recipe are bound to the final actual descriptors, not the original failed content hashes. A necessary sole Workshop continuation is new content validation; the already passed original Control case is not repeated, and its composite remains overall failed.
+
+The earlier private pre-test CTest path-discovery refusal is retained in the resumedPreTestFailure receipt. Its completed authoring/configure/build steps and unchanged executable were reused after correcting only the OUT evidence discovery; no product gate or successful tool recipe was repeated.

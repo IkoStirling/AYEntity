@@ -1,0 +1,140 @@
+{
+  "schema": 1,
+  "status": "recipe-v1",
+  "template": {
+    "path": "workshop-template.dlt",
+    "bytes": 1339,
+    "sha256": "ae789fc090e71d44087a3c0ba73394548da2a3f005607d812e5323dbf569df92"
+  },
+  "expectedCanonical": {
+    "path": "workshop.dlt",
+    "bytes": 1507,
+    "sha256": "484249f8b9d6532cc4cacd80b7b717c36c8126cd32d0e24114904fdda6fa6d7d"
+  },
+  "expectedSource": "independently authored complete ASCII/LF Level11 authoring target; byte binding is not a runtime checkpoint or authentication",
+  "identityPreserved": {
+    "formatVersion": 11,
+    "applicationVersion": 66,
+    "inputVersion": 9,
+    "stepNumerator": 1,
+    "stepDenominator": 64
+  },
+  "steps": [
+    {
+      "id": "create-donor",
+      "argv": [
+        "create",
+        "terrain",
+        "@RUN/00-donor.dlt"
+      ],
+      "output": "@RUN/00-donor.dlt",
+      "expectedExitCode": 0,
+      "scope": "full Level validation and exclusive fresh output by actual ayDetLevel"
+    },
+    {
+      "id": "add-donor-ramp",
+      "argv": [
+        "add-solid",
+        "@RUN/00-donor.dlt",
+        "90",
+        "slope-right",
+        "2",
+        "0.5",
+        "1",
+        "0.5",
+        "2",
+        "9",
+        "@RUN/01-donor-ramp.dlt"
+      ],
+      "output": "@RUN/01-donor-ramp.dlt",
+      "expectedExitCode": 0,
+      "scope": "full Level validation and exclusive fresh output by actual ayDetLevel"
+    },
+    {
+      "id": "stamp-ramp",
+      "argv": [
+        "stamp-solids",
+        "@RUN/01-donor-ramp.dlt",
+        "@TEMPLATE",
+        "0",
+        "0",
+        "90:90",
+        "@RUN/02-ramp.dlt"
+      ],
+      "output": "@RUN/02-ramp.dlt",
+      "expectedExitCode": 0,
+      "scope": "full Level validation and exclusive fresh output by actual ayDetLevel"
+    },
+    {
+      "id": "place-gate",
+      "argv": [
+        "place",
+        "@RUN/02-ramp.dlt",
+        "101",
+        "3.625",
+        "1.5",
+        "@RUN/03-gate.dlt"
+      ],
+      "output": "@RUN/03-gate.dlt",
+      "expectedExitCode": 0,
+      "scope": "full Level validation and exclusive fresh output by actual ayDetLevel"
+    },
+    {
+      "id": "resize-gate",
+      "argv": [
+        "resize-half",
+        "@RUN/03-gate.dlt",
+        "101",
+        "0.125",
+        "0.75",
+        "@RUN/04-gate-half.dlt"
+      ],
+      "output": "@RUN/04-gate-half.dlt",
+      "expectedExitCode": 0,
+      "scope": "full Level validation and exclusive fresh output by actual ayDetLevel"
+    },
+    {
+      "id": "path-and-bind",
+      "argv": [
+        "add-path",
+        "@RUN/04-gate-half.dlt",
+        "300",
+        "1",
+        "1",
+        "0",
+        "32",
+        "once",
+        "@RUN/05-playable.dlt"
+      ],
+      "output": "@RUN/05-playable.dlt",
+      "expectedExitCode": 0,
+      "scope": "full Level validation and exclusive fresh output by actual ayDetLevel"
+    },
+    {
+      "id": "initial-preview",
+      "argv": [
+        "preview",
+        "@RUN/05-playable.dlt",
+        "@RUN/workshop.svg"
+      ],
+      "output": "@RUN/workshop.svg",
+      "expectedExitCode": 0,
+      "scope": "full Level validation and exclusive fresh output by actual ayDetLevel"
+    }
+  ],
+  "execution": {
+    "runner": "run-authoring-recipe.py",
+    "maxInvocations": 7,
+    "timeoutSecondsPerCommand": 30,
+    "freshChildUnderExistingParent": true,
+    "fullCanonicalByteComparison": true,
+    "previewGeometryChecks": 3,
+    "hostResourceOverride": "AYENTITY_WORKSHOP_LEVEL=<receipt.playable> or RunWorkshopExample.cmake -DLEVEL=<receipt.playable>",
+    "runsSimulation": false
+  },
+  "limitations": [
+    "Tables and profile flags are authored in the complete template; geometry commands never grant new permissions or upgrade its format.",
+    "The generated .dlt must match every immutable expected byte before Host use. The authoring recipe itself is not a runtime proof.",
+    "The SVG shows initial authored geometry and path offsets, not ticks, checkpoint state, reachable trajectories or authoritative pixels."
+  ]
+}
