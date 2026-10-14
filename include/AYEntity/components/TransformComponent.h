@@ -35,6 +35,16 @@ struct Transform : public IComponent {
     math::FQuaternion previousRotation{};
     bool hasPreviousSimulationPose = false;
 
+    /// Immediate presentation/teleport pose: discard Sim interpolation history.
+    /// Camera teleports additionally notify the lens component's camera-cut generation.
+    void setPresentationPose(const math::FVector3& newPosition,
+                             const math::FQuaternion& newRotation) noexcept {
+        position = previousPosition = newPosition;
+        rotation = previousRotation = newRotation;
+        hasPreviousSimulationPose = false;
+        ++revision;
+    }
+
     // Monotonic write counter. Incremented by every mutator below; direct
     // field writes bypass it, so sync layers keep poseEquals as a fallback.
     // Not serialized (runtime-only).

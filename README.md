@@ -15,15 +15,22 @@ AYEntity 是 AY Engine 的实体组件系统。`AYEntityCore` 负责 Entity/Comp
 关闭 Script 集成时，组件用例验证工厂明确拒绝未注册的 ScriptComponent，
 并继续运行其余用例；意外的空组件不会导致测试程序解引用崩溃。
 
-## 3D 游戏相机（2026-10-03）
+## 游戏相机与表现控制（2026-10-14）
 
 `Transform + PerspectiveCameraComponent` 是推荐入口；使用 `createComponent` 显式实例 API。
 Core 注册可保存的 FOV（度）、near/far、active、priority，支持 Headless 求值和 Scene 往返。
 安装 RenderIntegration 后自动选最高优先级活动相机，在提取几何前同步；同分按 Entity id
 和持久组件 id 排序。Transform 的 scale 不影响镜头，朝向为 LH / Y-up / 本地 +Z。
 Editor/Host 覆盖优先，清除覆盖恢复游戏相机；无有效相机回退默认镜头。
-瞬移调用 `requestCameraCut()`；换 World/相机/覆盖来源会重置时域历史。
-不含 split-screen、3D layer mask 或镜头混合。纯 CPU 回归入口 `AYEntity_PerspectiveCameraTests`。
+3D 组件新增正交投影、局部 pose、layerMask、viewportId 和 blendDuration；2D 也支持
+viewportId、过渡与 teleport。teleport 同时清除 pose 插值和 render cut；单独
+requestCameraCut 只标记渲染历史。换 World/相机/覆盖来源仍重置时域历史。
+CameraControllerComponent 提供跟随、死区、预判、中心边界、环绕、自由移动和震屏；
+碰撞使用宿主球扫掠 callback。CameraRuntimeSystem 由 Core/2D/Render bootstrap 幂等安装，
+World 拥有其表现状态；CameraFrame 提供统一未抖动屏幕/世界/射线查询。
+分屏由 RendererSubSystem 的显式 Forward view recipe 提供，最多16视图；Deferred 多视图
+不在当前契约内。用法与验证见 [相机系统](../../AYDocs/CAMERA-SYSTEM.md)。
+核心回归入口 `AYEntity_PerspectiveCameraTests`，2D 提交回归在 `AYEntityTest`。
 
 ## 公开接口
 

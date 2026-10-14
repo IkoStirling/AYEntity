@@ -1,5 +1,18 @@
 # AYEntity Design
 
+## 2026-10-14 — 相机控制、查询与视口
+
+Core 新增 CameraFrame/CameraRuntime/CameraControllerComponent，无 Renderer/Physics 链接依赖。
+priority399 的 World-owned Present system 生成跟随/环绕/自由姿态；目标逐帧解析并采样
+World presentation alpha，identity/generation 变化清除速度历史。震屏仅施加到快照。
+镜头过渡按 viewportId/domain 隔离，单表现 tick 单次推进；中断以当前呈现姿态继续，
+CameraCut 和投影类型变化硬切。3D 镜头补局部姿态/正交/layerMask，2D/3D 补 viewportId
+与 blendDuration/teleport，新增 Scene 字段使用缺省值兼容，不改变文件后缀或 schema4。
+查询使用左上像素/视口偏移/LH深度[0,1]，double带主元求解检测失败；不依赖快速透视逆路径。
+Sprite/Tilemap 按实际 Overlay packet 矩阵裁剪，避免过渡/震屏/多视口误剔除。
+Renderer provider 在提取前采样当前 viewport；Host覆盖仍限主视口，World teardown撤销回调。
+详见 [相机系统与验收入口](../../AYDocs/CAMERA-SYSTEM.md)。
+
 ## 2026-10-05 — 生产 shader 清单闭包
 
 SkinnedMeshRenderSystem 的三段 rigid fallback 源仅机械迁移到 Renderer 的共享源码头，

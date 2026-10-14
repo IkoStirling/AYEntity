@@ -63,6 +63,7 @@ add_library(AYEntityCore STATIC
     src/AYComponentRegistry.cpp
     src/AYEntityReflection.cpp
     src/AYPerspectiveCameraSelection.cpp
+    src/AYCameraRuntime.cpp
     src/AYEntityCoreModule.cpp
     src/AYEntityComponentModule.cpp
     src/AYEntityRuntimeModule.cpp
@@ -645,7 +646,8 @@ if(BUILD_TESTING)
     target_link_libraries(AYEntity_DeterministicTests PRIVATE AYEntityCore AYTest)
     ay_add_test(AYEntity_DeterministicTests LABELS "ayentity;determinism" TIMEOUT 60 RUN_SERIAL)
     add_executable(AYEntity_PerspectiveCameraTests
-        unittest/PerspectiveCameraTestMain.cpp unittest/AYTest_PerspectiveCamera.cpp)
+        unittest/PerspectiveCameraTestMain.cpp unittest/AYTest_PerspectiveCamera.cpp
+        unittest/AYTest_CameraFeatures.cpp)
     target_link_libraries(AYEntity_PerspectiveCameraTests PRIVATE AYEntityCore AYTest)
     ay_add_test(AYEntity_PerspectiveCameraTests LABELS "ayentity;camera3d" TIMEOUT 60)
 endif()

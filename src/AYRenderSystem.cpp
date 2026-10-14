@@ -323,6 +323,7 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         item.world        = transformToWorldMatrix(*transform);
         // Temporal passes match this rigid draw to its previous transform.
         item.motionObjectId = temporalObjectIdentity(world, *entity);
+        item.cameraLayerMask = meshComp->layer >= 0 && meshComp->layer < 32 ? 1u << meshComp->layer : 0;
         item.shadowFlags  = ayt::render::makeShadowFlags(meshComp->castShadow,
                                                          meshComp->receiveShadow);
         item.outlineHull  = meshComp->outlineHull;

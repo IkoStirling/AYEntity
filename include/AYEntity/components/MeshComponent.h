@@ -47,21 +47,23 @@ struct MeshComponent : public IComponent {
     // uses alignas(C) placement-new so SIMD-aligned fields are safe.
     bool hasOutlineSourceScale = false;
     math::FVector3 outlineSourceScale = {1.0f, 1.0f, 1.0f};
-    int32_t layer = 0;
+    /// Camera visibility layer [0,31], serialized for scene authoring.
+    AY_PROPERTY(int32_t, layer, kAttrSerialize)
 
     MeshComponent() {
         // AY_PROPERTY expands to `Type name;` with no initializer, so
         // explicit ctor assignment is required to leave the field in
         // a defined state (uninitialized bool would read garbage).
         skinned = false;
+        layer = 0;
     }
 
     explicit MeshComponent(const char* path)
-        : meshPath(path ? path : "") {}
+        : meshPath(path ? path : ""), layer(0) { skinned = false; }
 
     MeshComponent(const char* mesh, const char* material)
         : meshPath(mesh ? mesh : ""),
-          materialPath(material ? material : "") {}
+          materialPath(material ? material : ""), layer(0) { skinned = false; }
 
     void setMesh(const char* path) { meshPath = path ? path : ""; }
     void setMaterial(const char* path) { materialPath = path ? path : ""; }

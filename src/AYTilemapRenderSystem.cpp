@@ -6,6 +6,7 @@
 #include "AYEntity/TilemapAnimationRuntime.h"
 #include "AYEntity/TilemapChunkGeometry.h"
 #include "AYEntity/TilemapVisibilityRuntime.h"
+#include "detail/CameraVisibility.h"
 #include "AYEntity/World.h"
 #include "AYEntity/components/TilemapComponent.h"
 #include "AYEntity/components/TransformComponent.h"
@@ -173,8 +174,11 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
     };
     std::vector<ChunkDraw> draws;
 
-    const TilemapCameraVisibility& visibility =
-        TilemapVisibilityRuntime::instance().current();
+    render::OverlayCamera2D hostCamera;
+    const bool haveHostCamera = rss->activeViewportId()==0 && rss->overlayCamera2DOverride(hostCamera);
+    const TilemapCameraVisibility visibility = scene.hasOverlayCamera2D() || haveHostCamera
+        ? detail::cameraVisibility2D(scene,haveHostCamera ? &hostCamera : nullptr) : (rss->cameraViewports().empty()
+            ? TilemapVisibilityRuntime::instance().current() : TilemapCameraVisibility{});
     World& world = World::instance();
     for (Entity* entity : world.query<Transform, TilemapComponent>()) {
         if (entity == nullptr) continue;
