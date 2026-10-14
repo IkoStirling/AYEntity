@@ -10,7 +10,7 @@ namespace {
 constexpr DetStateType types[]={DetStateType::Bool,DetStateType::Int8,DetStateType::UInt8,
     DetStateType::Int16,DetStateType::UInt16,DetStateType::Int32,DetStateType::UInt32,
     DetStateType::Int64,DetStateType::UInt64,DetStateType::Float32,DetStateType::Vec2,
-    DetStateType::Vec3,DetStateType::Quaternion,DetStateType::EntityRef};
+    DetStateType::Vec3,DetStateType::Quaternion,DetStateType::EntityRef,DetStateType::Float64};
 template<class T> T integer(std::span<const std::uint64_t> words) {
     using U=std::make_unsigned_t<T>;
     if(words.size()!=1 || (sizeof(T)<8 && words[0]>std::numeric_limits<U>::max()))
@@ -38,7 +38,7 @@ std::vector<std::uint64_t> encodeDetStateValue(const DetStateValue& value) {
         else if constexpr(std::same_as<T,DetEntityRef>)return {v.value};
         else {
             if(!v.isFinite())throw std::invalid_argument("Non-finite typed state");
-            if constexpr(std::same_as<T,math::DetFloat32>)return {v.bits()};
+            if constexpr(std::same_as<T,math::DetFloat32> || std::same_as<T,math::DetFloat64>)return {v.bits()};
             else {const auto bits=v.bits();return {bits.begin(),bits.end()};}
         }
     },value);
@@ -55,6 +55,7 @@ DetStateValue decodeDetStateValue(DetStateType type,std::span<const std::uint64_
     case DetStateType::Int64:return integer<std::int64_t>(words);
     case DetStateType::UInt64:return integer<std::uint64_t>(words);
     case DetStateType::EntityRef:if(words.size()!=1)throw std::invalid_argument("Entity reference shape");return DetEntityRef{words[0]};
+    case DetStateType::Float64:{if(words.size()!=1)throw std::invalid_argument("Binary64 state shape");auto v=math::DetFloat64::fromBits(words[0]);if(!v.isFinite())throw std::invalid_argument("Non-finite binary64 state");return v;}
     default:break;
     }
     const std::size_t width=type==DetStateType::Float32?1:type==DetStateType::Vec2?2:

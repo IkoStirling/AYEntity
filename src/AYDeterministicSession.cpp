@@ -66,11 +66,14 @@ struct DeterministicSession::Impl {
     }
     std::vector<std::uint8_t> buildManifest() const {
         const bool typed=!logicProfiles.empty() || !validators.empty() || std::any_of(schemas.begin(),schemas.end(),[](const auto& entry){return entry.second.typed.has_value();});
-        Writer w;w.u32(manifestMagic);w.u32(!logicProfiles.empty()?4:!validators.empty()?3:typed?2:1);
+        const bool binary64=std::any_of(schemas.begin(),schemas.end(),[](const auto& entry){
+            return entry.second.typed && std::any_of(entry.second.typed->fields.begin(),entry.second.typed->fields.end(),[](const auto& field){return detStateType(field.initial)==DetStateType::Float64;});});
+        Writer w;w.u32(manifestMagic);w.u32(binary64?5:!logicProfiles.empty()?4:!validators.empty()?3:typed?2:1);
         w.u32(config.applicationVersion);w.u32(config.inputVersion);w.u32(config.stepNumerator);w.u32(config.stepDenominator);w.u32(dt.bits());
         w.u32(1);w.u32(DetSimTransformComponent::kSnapshotVersion);w.u64(config.contentHash);
         w.u32(math::DetFloat32::kProfileVersion);w.u32(math::DetQuaternion::kRotationProfileVersion);
         w.u32(math::kDetMathProfileVersion);w.u32(math::DetQuaternion::kAngularIntegrationProfileVersion);
+        if(binary64)w.u32(math::DetFloat64::kProfileVersion);
         w.u32(static_cast<std::uint32_t>(schemas.size()));
         for(const auto& [id,s]:schemas){w.u32(id);w.u32(s.descriptor.version);w.u32(static_cast<std::uint32_t>(s.descriptor.fields.size()));
             for(std::size_t i=0;i<s.descriptor.fields.size();++i){w.u32(s.descriptor.fields[i]);
@@ -80,9 +83,9 @@ struct DeterministicSession::Impl {
         w.u32(static_cast<std::uint32_t>(systems.size()));for(const auto& s:systems){w.u32(s.id);w.u32(static_cast<std::uint32_t>(s.priority));}
         w.u32(static_cast<std::uint32_t>(seeds.size()));for(const auto& [id,seed]:seeds){w.u32(id);w.u64(seed);}
         w.u32(static_cast<std::uint32_t>(state.globals.size()));for(const auto& [id,v]:state.globals)w.u32(id);
-        if(!validators.empty() || !logicProfiles.empty()){w.u32(static_cast<std::uint32_t>(validators.size()));
+        if(binary64 || !validators.empty() || !logicProfiles.empty()){w.u32(static_cast<std::uint32_t>(validators.size()));
             for(const auto& [id,v]:validators){w.u32(id);w.u32(v.version);}}
-        if(!logicProfiles.empty()){w.u32(static_cast<std::uint32_t>(logicProfiles.size()));
+        if(binary64 || !logicProfiles.empty()){w.u32(static_cast<std::uint32_t>(logicProfiles.size()));
             for(const auto& [id,v]:logicProfiles){w.u32(id);w.u32(v.first);w.u64(v.second);}}
         return w.finish();
     }

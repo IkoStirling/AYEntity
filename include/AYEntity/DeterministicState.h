@@ -1,5 +1,6 @@
 #pragma once
 #include <AYMath/DetQuaternion.h>
+#include <AYMath/DetFloat64.h>
 #include <concepts>
 #include <cstdint>
 #include <span>
@@ -17,18 +18,18 @@ struct DetEntityRef {
 enum class DetStateType : std::uint32_t {
     Word=0, Bool=1, Int8=2, UInt8=3, Int16=4, UInt16=5,
     Int32=6, UInt32=7, Int64=8, UInt64=9, Float32=10,
-    Vec2=11, Vec3=12, Quaternion=13, EntityRef=14
+    Vec2=11, Vec3=12, Quaternion=13, EntityRef=14, Float64=15
 };
 using DetStateValue=std::variant<bool,std::int8_t,std::uint8_t,std::int16_t,std::uint16_t,
     std::int32_t,std::uint32_t,std::int64_t,std::uint64_t,math::DetFloat32,
-    math::DetVec2,math::DetVec3,math::DetQuaternion,DetEntityRef>;
+    math::DetVec2,math::DetVec3,math::DetQuaternion,DetEntityRef,math::DetFloat64>;
 template<class T> concept DetStateScalar =
     std::same_as<T,bool> || std::same_as<T,std::int8_t> || std::same_as<T,std::uint8_t> ||
     std::same_as<T,std::int16_t> || std::same_as<T,std::uint16_t> ||
     std::same_as<T,std::int32_t> || std::same_as<T,std::uint32_t> ||
     std::same_as<T,std::int64_t> || std::same_as<T,std::uint64_t> ||
     std::same_as<T,math::DetFloat32> || std::same_as<T,math::DetVec2> ||
-    std::same_as<T,math::DetVec3> || std::same_as<T,math::DetQuaternion> || std::same_as<T,DetEntityRef>;
+    std::same_as<T,math::DetVec3> || std::same_as<T,math::DetQuaternion> || std::same_as<T,DetEntityRef> || std::same_as<T,math::DetFloat64>;
 struct DetTypedStateField {
     std::uint32_t id=0;
     DetStateValue initial=false;
@@ -36,7 +37,8 @@ struct DetTypedStateField {
 /** @brief Fixed typed state layout, ordered by increasing nonzero stable field ID.
  * @note Schema IDs >=2 share the word-schema namespace. Version/default/type/field
  * changes invalidate the manifest; there is no implicit migration. Float/vector/
- * quaternion fields require finite binary32 values, preserving signed zero and
+ * quaternion fields require finite binary32 values; Float64 fields use one full
+ * binary64 lane (persistent type15). Both preserve signed zero and
  * subnormals. Raw quaternion state need not be a unit rotation. Native float,
  * pointers, arbitrary structs and variable-size containers are unsupported.
  */
@@ -46,7 +48,7 @@ struct DetTypedStateSchema {
 };
 /// Return the persistent type of this explicitly supported value.
 DetStateType detStateType(const DetStateValue& value);
-/// Canonical lanes: one zero-extended integer bit pattern or binary32 per word;
+/// Canonical lanes: one integer/binary32 pattern or full binary64 pattern per word;
 /// vectors use x,y[,z], quaternions x,y,z,w. Throws on invalid/nonfinite input.
 std::vector<std::uint64_t> encodeDetStateValue(const DetStateValue& value);
 /// Reject unknown types, incorrect widths, high unused bits and nonfinite lanes.

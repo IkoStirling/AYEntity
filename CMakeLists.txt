@@ -18,6 +18,7 @@ option(AY_ENTITY_BUILD_DET_ATTACK_EXAMPLE "Build deterministic authored attack c
 option(AY_ENTITY_BUILD_DET_BRAIN_EXAMPLE "Build deterministic authored enemy Brain content Host example" OFF)
 option(AY_ENTITY_BUILD_DET_CONTROL_EXAMPLE "Build deterministic authored dash control Host example" OFF)
 option(AY_ENTITY_BUILD_DET_SIGHT_EXAMPLE "Build authored deterministic enemy sight Host example" OFF)
+option(AY_ENTITY_BUILD_DET_RIGID3D_EXAMPLE "Build deterministic 3D rigid-body and Float64 standard Host example" OFF)
 option(AY_ENTITY_LEVEL_RESOURCES "Enable optional deterministic level Resource/import/cook adapters" OFF)
 
 # These defaults also allow AYEntity to be configured as a standalone
@@ -108,6 +109,7 @@ if(TARGET AYReplay)
     add_library(AYEntityDeterminismKernel STATIC
         src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp src/AYDeterministicState.cpp
         src/AYDeterministicCollision2D.cpp
+        src/AYDeterministicRigidBody3D.cpp
         src/AYDeterministicCharacterController2D.cpp
         src/AYDeterministicPathMotion2D.cpp
         src/AYDeterministicLevel2D.cpp
@@ -158,6 +160,9 @@ if(TARGET AYReplay)
     endif()
     add_library(AYEntityDeterminism STATIC src/AYDeterministicSessionWorld.cpp src/AYDeterministicReplay.cpp src/AYDeterministicRollbackReplay.cpp)
     add_library(AYEntity::Determinism ALIAS AYEntityDeterminism)
+    if(BUILD_TESTING)
+        include(unittest/RigidBody3D.cmake)
+    endif()
     ay_configure_entity_target(AYEntityDeterminism)
     target_link_libraries(AYEntityDeterminism PUBLIC AYEntityCore AYEntityDeterminismKernel AYReplay)
     add_executable(AYEntity_ReplayArchiveTool tools/detreplay/main.cpp)
@@ -241,6 +246,21 @@ function(ay_entity_add_determinism_host_integration)
     add_library(AYEntityDeterminismHost STATIC "${_root}/src/AYDeterministicHost.cpp")
     add_library(AYEntity::DeterminismHost ALIAS AYEntityDeterminismHost)
     target_link_libraries(AYEntityDeterminismHost PUBLIC AYEntityDeterminism AYApplication AYScene AYEventSystem)
+    if(AY_ENTITY_BUILD_DET_RIGID3D_EXAMPLE)
+        add_executable(AYEntity_DetRigid3DExample "${_root}/examples/detrigidbody3d/host.cpp")
+        target_link_libraries(AYEntity_DetRigid3DExample PRIVATE AYEntityDeterminismHost)
+        target_compile_features(AYEntity_DetRigid3DExample PRIVATE cxx_std_23)
+        if(MSVC)
+            target_compile_options(AYEntity_DetRigid3DExample PRIVATE /utf-8)
+        endif()
+        if(BUILD_TESTING)
+            add_test(NAME AYEntity_RigidBody3DHostExample COMMAND ${CMAKE_COMMAND}
+                "-DEXAMPLE=$<TARGET_FILE:AYEntity_DetRigid3DExample>" "-DROOT=${_root}/../.."
+                "-DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/rigid3d-host-example"
+                -P "${_root}/unittest/RunRigidBody3DHost.cmake")
+            set_tests_properties(AYEntity_RigidBody3DHostExample PROPERTIES TIMEOUT 360 LABELS "ayentity;host;rigid3d;binary64;replay")
+        endif()
+    endif()
     target_compile_options(AYEntityDeterminismHost PRIVATE
         $<$<CXX_COMPILER_ID:MSVC>:/W4>
         $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)

@@ -3291,3 +3291,25 @@ The current recipe1 wrapper accepts 17 closed commands; Stage71 initially expose
 The original Stage74 OUT checker had an incorrect open-path expectation for its third recipe's Loop preview. Before actual execution, the explicit closing first waypoint was restored only in that new expectation; old PingPong, runner, recipe inputs, kernel and authoring policy were unchanged. The original frozen proposal and narrow loop-expectation-revision remain preserved.
 
 No CTest or JUnit case is introduced; the existing validation target remains AYEntity_LevelToolChecks.
+
+## Stage76–78：binary64 注册闭包与 rigid3D profile1
+
+Typed state追加Float64=15，variant旧索引/类型码保持；finite二进制64字段独占一条
+完整lane。manifest5仅在存在binary64字段时生成，新增binary64 profile1，并保留
+validator/logic两表（可空）；旧manifest3/4非空语义及无Float64的旧字节分支保持。
+读侧拒绝未知profile、旧manifest的type15和无binary64 surface的manifest5。
+CP/input envelope1、Pose snapshot2、旧Numeric/2D/Replay字段没有提升或迁移。
+
+Rigid3D全部可变状态属于body/history注册字段，所有immutable config/joint表
+进入policy globals/default副本与logic identity。闭包验证shape/mass/惯量/姿态、
+budget、完整policy副本、固定joint端点和trigger frontier；没有mutable callback缓存。
+Scratch body数组稳定ID排序，重建world inertia/axes，固定子步做力/陀螺项/姿态积分，
+SAT/clipped-face/sphere几何后按pair/feature顺序求累计法向/切向冲量并投影摩擦圆盘。
+Distance/BallSocket/Fixed约束同样稳定排序；有限位置/角度校正。最终事件预算、几何和
+状态检查先于pose/typed/global提交，成功后清零force/torque；故障沿用Session与Rollback边界。
+
+Domain仍为有限binary32球/OBB，受角步<=1rad/substep和分量<=1e6限制。
+不借用Jolt，不补Capsule/Mesh/CCD/睡眠/动力学岛/跨tickwarm cache或一般3D角色。
+不将其它系统写pose自动沙箱化，应用承担sole-owner闭包约定。
+新标准Host示例同时注册Float64时钟，在同一manifest5状态中实际运行/录制/恢复/播放。
+验收和源码入口见[Stage76–78](../../AYDocs/DETERMINISTIC-PHYSICS-NUMERICS-STAGE76-78.md)。
