@@ -169,6 +169,25 @@ bool Entity::worldPose(math::FVector3& position, math::FQuaternion& rotation, fl
     }
     rotation = rotation.normalize(); return true;
 }
+bool Entity::setWorldPose(const math::FVector3& position, const math::FQuaternion& rotation,
+                          float alpha, std::string* error) {
+    if (!isSpatial() || !std::isfinite(position.x) || !std::isfinite(position.y)
+        || !std::isfinite(position.z) || !std::isfinite(rotation.dot(rotation))
+        || rotation.dot(rotation) < 1e-12f) return fail(error,"Invalid Spatial presentation pose");
+    auto localPosition = position; auto localRotation = rotation.normalize();
+    if (auto* parent = spatialParent()) {
+        Transform checked; const auto matrix = parent->worldMatrix(alpha);
+        math::FVector3 parentPosition; math::FQuaternion parentRotation;
+        if (!localTrs(matrix,checked) || !parent->worldPose(parentPosition,parentRotation,alpha))
+            return fail(error,"Presentation parent pose is singular or sheared");
+        const auto local = matrix.inverse() * math::FVector4{position.x,position.y,position.z,1};
+        localPosition = {local.x,local.y,local.z};
+        localRotation = (parentRotation.conjugate() * localRotation).normalize();
+        if (!std::isfinite(localPosition.x) || !std::isfinite(localPosition.y) || !std::isfinite(localPosition.z))
+            return fail(error,"Invalid world-to-local presentation position");
+    }
+    _transform->setPresentationPose(localPosition,localRotation); return true;
+}
 bool Entity::setWorldMatrix(const math::Float4x4& matrix, std::string* error) {
     if (!isSpatial()) return fail(error, "Data entities have no spatial pose");
     auto local = matrix;

@@ -73,6 +73,10 @@ public:
                    float interpolationAlpha = 1.0f) const;
     /// Checked world-to-local conversion; rejects singular/sheared local TRS.
     bool setWorldMatrix(const math::Float4x4& matrix, std::string* error = nullptr);
+    /// Presentation world pose converted through the parent's sampled pose. Preserves local scale.
+    /// Rejects invalid/singular/sheared parent poses without writing; orientation ignores scale.
+    bool setWorldPose(const math::FVector3& position, const math::FQuaternion& rotation,
+                      float interpolationAlpha = 1.0f, std::string* error = nullptr);
     /// Compatibility acquisition for old addComponent<Transform> callers only.
     Transform* acquireLegacyTransform();
     bool prepareSpatialComponent(bool requiresSpatial, std::string* error = nullptr);

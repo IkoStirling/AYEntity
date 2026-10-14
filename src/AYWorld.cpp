@@ -12,6 +12,7 @@
 #include <cstdio>
 #include <cstring>
 #include <utility>
+#include <cmath>
 
 namespace ayt::entity
 {
@@ -60,6 +61,7 @@ World* World::activeWorld() noexcept
 
 bool World::initialize() {
     if (_initialized) return true;
+    _presentationAlpha = 1.f;
     _initialized = true;
     ::printf("[World] Initialized\n");
     return true;
@@ -150,8 +152,10 @@ void World::fixedUpdate(math::DetFloat32 fixedDt) {
 }
 
 void World::updatePresentation(float dt, float interpolationAlpha) {
+    if (!std::isfinite(interpolationAlpha)) interpolationAlpha = 0.f;
     if (interpolationAlpha < 0.0f) interpolationAlpha = 0.0f;
     if (interpolationAlpha > 1.0f) interpolationAlpha = 1.0f;
+    _presentationAlpha = interpolationAlpha;
 
     // Bridge must publish float transforms before presentation systems submit
     // render work for this frame.

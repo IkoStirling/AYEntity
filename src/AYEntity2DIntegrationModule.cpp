@@ -2,6 +2,7 @@
 
 #include <AYEntity/EntityRuntimeModule.h>
 #include <AYEntity/OrthoCameraUpdateSystem.h>
+#include <AYEntity/CameraRuntime.h>
 #include <AYEntity/SpriteAnimationSystem.h>
 #include <AYEntity/SpriteRenderSystem.h>
 #include <AYEntity/TilemapAnimationTickSystem.h>
@@ -50,6 +51,7 @@ void ensureWorldLifecycleBridge()
 
 void registerEntity2DSystems()
 {
+    registerCameraRuntimeSystem();
     ensureWorldLifecycleBridge();
     World& world = World::instance();
     if (!hasSystemNamed(world, "OrthoCameraUpdateSystem")) {

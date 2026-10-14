@@ -149,7 +149,9 @@ public:
     DeterministicSession(const DeterministicSession&)=delete;
     DeterministicSession& operator=(const DeterministicSession&)=delete;
     bool registerSchema(DetStateSchema schema,std::vector<std::uint64_t> defaults={});
-    /// Register finite, bounded typed fields before actors/seal; manifest version 2.
+    /// Register finite, bounded typed fields before actors/seal; manifest2 by default.
+    /// Float64 type15 opts into manifest5 and seals its software binary64 profile1;
+    /// prior no-Float64 sessions retain their existing manifest1..4 branches.
     /// Defaults are automatically applied to actors and registered globals.
     bool registerTypedSchema(DetTypedStateSchema schema);
     bool registerSystem(std::uint32_t id,std::int32_t priority,System system);

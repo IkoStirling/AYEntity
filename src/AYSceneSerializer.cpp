@@ -6,6 +6,7 @@
 #include "AYEntity/ComponentRegistry.h"
 #include "AYEntity/EntityImpl.h"
 #include "AYEntity/World.h"
+#include <AYEntity/CameraRuntime.h>
 #include "AYEntity/ActorClassAsset.h"
 #include "AYEntity/components/ActorInstanceComponent.h"
 
@@ -499,8 +500,11 @@ bool loadScene(World& world, const std::string& path,
     }
     const std::string snapshot = backup->output();
     clearWorldEntities(world);
-    if (readSceneEnvelope(*serializer, world, path, actorAssetsRoot, outError))
+    if (readSceneEnvelope(*serializer, world, path, actorAssetsRoot, outError)) {
+        if (auto* runtime=world.findSystemByName("CameraRuntimeSystem"))
+            static_cast<CameraRuntimeSystem*>(runtime)->resetAllViews();
         return true;
+    }
     if (outError && outError->message.empty()) {
         *outError = serializer->lastError();
         if (outError->message.empty()) {

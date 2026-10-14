@@ -48,15 +48,22 @@ AYEntity 是 AY Engine 的实体组件系统。`AYEntityCore` 负责 Entity/Comp
 关闭 Script 集成时，组件用例验证工厂明确拒绝未注册的 ScriptComponent，
 并继续运行其余用例；意外的空组件不会导致测试程序解引用崩溃。
 
-## 3D 游戏相机（2026-10-03）
+## 游戏相机与表现控制（2026-10-14）
 
 `Transform + PerspectiveCameraComponent` 是推荐入口；使用 `createComponent` 显式实例 API。
 Core 注册可保存的 FOV（度）、near/far、active、priority，支持 Headless 求值和 Scene 往返。
 安装 RenderIntegration 后自动选最高优先级活动相机，在提取几何前同步；同分按 Entity id
 和持久组件 id 排序。Transform 的 scale 不影响镜头，朝向为 LH / Y-up / 本地 +Z。
 Editor/Host 覆盖优先，清除覆盖恢复游戏相机；无有效相机回退默认镜头。
-瞬移调用 `requestCameraCut()`；换 World/相机/覆盖来源会重置时域历史。
-不含 split-screen、3D layer mask 或镜头混合。纯 CPU 回归入口 `AYEntity_PerspectiveCameraTests`。
+3D 组件新增正交投影、局部 pose、layerMask、viewportId 和 blendDuration；2D 也支持
+viewportId、过渡与 teleport。teleport 同时清除 pose 插值和 render cut；单独
+requestCameraCut 只标记渲染历史。换 World/相机/覆盖来源仍重置时域历史。
+CameraControllerComponent 提供跟随、死区、预判、中心边界、环绕、自由移动和震屏；
+碰撞使用宿主球扫掠 callback。CameraRuntimeSystem 由 Core/2D/Render bootstrap 幂等安装，
+World 拥有其表现状态；CameraFrame 提供统一未抖动屏幕/世界/射线查询。
+分屏由 RendererSubSystem 的显式 Forward view recipe 提供，最多16视图；Deferred 多视图
+不在当前契约内。用法与验证见 [相机系统](../../AYDocs/CAMERA-SYSTEM.md)。
+核心回归入口 `AYEntity_PerspectiveCameraTests`，2D 提交回归在 `AYEntityTest`。
 
 ## 公开接口
 
@@ -1741,3 +1748,35 @@ The original Stage74 OUT checker had an incorrect open-path expectation for its 
 No CTest or JUnit case is introduced; the existing validation target remains AYEntity_LevelToolChecks.
 
 本次本地验证与限制见 [`空间实体实施记录`](../../AYDocs/ENTITY-SPATIAL-HIERARCHY.md#实际验证windowsmsvc-release2026-10-14)。
+## Stage76–78：Float64 状态与有界 3D 刚体
+
+`AYEntity::DeterminismKernel`新增`DeterministicRigidBody3D.h`，注册球/旋转盒的
+Static/Kinematic/Dynamic角色、质量/惯量、速度/转动/力累积器及关节/触发历史。
+既有会话、World/Host、检查点和回滚负责生命周期，没有新顶层模块或原生物理自动转换。
+先install、factory/addEntity，后seal；标准Host由recipe.configure配置并由Host封存。
+早于physics的规范输入通过detRigidBodyForce3D施加Dynamic力/世界力矩。
+physics独占其actor的位置与旋转，其他角色/原生物理不能同时写同一pose。
+
+软件binary32固定子步、真实sphere/OBB窄相（SAT/裁剪面）、累计接触冲量/摩擦和
+Distance/BallSocket/Fixed关节；32体/512scratch接触/32触发对/8关节等独立预算。
+离散检测，没有CCD、capsule/mesh、sleep/island/warm cache、关节马达/限位或3D内容导入。
+纯有限检查先于physics提交；一般Session故障仍显式restore，外部副作用不自动撤销。
+
+有限Float64字段为type15/一条64位lane，显式选manifest5并记录binary64 profile1。
+旧无Float64会话仍保持manifest1..4，checkpoint/input envelope1与旧格式分支不变。
+没有Float64 Sim pose或自动矩阵/原生double字段。
+
+`AYEntity_RigidBody3DChecks`与`AYEntity_Float64StateChecks`必要Release通过；
+默认关闭的`AY_ENTITY_BUILD_DET_RIGID3D_EXAMPLE`构建
+`AYEntity_DetRigid3DExample`，见[实际Host示例](examples/detrigidbody3d/README.md)。
+其Live96/Record64/Replay64、恢复/末尾seek及完整CP/trace比较通过；旧ControlHost兼容通过。
+全部新范围LocalPassed/NativeDeferred，完整边界见
+[Stage76–78](../../AYDocs/DETERMINISTIC-PHYSICS-NUMERICS-STAGE76-78.md)。
+
+## Camera / spatial hierarchy integration (2026-10-14)
+
+Camera controllers bind persistent Entity identity with a World-scoped runtime handle; explicit missing targets cannot rebind by name. Presentation control samples world-space ancestor poses and converts once back to local position/orientation through the same alpha, preserving local scale and refusing singular/sheared parents.
+
+Entity.PhysicsIntegration installs the default Jolt sphere-sweep adapter. Host custom queries override it; collisionEnabled explicitly disables per controller. The finite-volume query ignores sensors/self/target bodies, checks generation handles and reports initial penetration at zero center travel. Null/Mock/2D return Unsupported. Orbit distance plus collision radius/padding implement the camera arm and damped recovery. Explicit manager adapters must be detached before manager destruction.
+
+Editor has stable target selection, collision parameters, and undoable main-window hierarchy dragging. CameraRigProject is a portable visual/authoring fixture; its Wall is visual-only, while AYEntity_CameraRigIntegrationTests exercises actual Jolt wall avoidance, lens effects/blending, self-ignore and recovery. See ../../AYDocs/CAMERA-SYSTEM.md and the integration evidence in ../../AYDocs/ENTITY-SPATIAL-HIERARCHY.md. Native Computer Use acceptance is deferred by user request.

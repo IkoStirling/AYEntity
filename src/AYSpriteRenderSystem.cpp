@@ -17,6 +17,7 @@
 #include "AYEntity.h"
 #include "AYEntity/EntityModule.h"
 #include "AYEntity/OrthoCameraSelection.h"
+#include "detail/CameraVisibility.h"
 #include "AYRenderer/RendererSubSystem.h"
 #include "AYRenderer/TilemapShaderSources.h"
 #include "AYEntity/World.h"
@@ -126,7 +127,7 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
     uint32_t cameraLayerMask = 0xFFFFFFFFu;
     {
         World& world = World::instance();
-        const SelectedOrthoCamera2D selected = selectOrthoCamera2D(world);
+        const SelectedOrthoCamera2D selected = selectOrthoCamera2D(world,rss->activeViewportId());
         if (selected) {
             const float aspect = rss->viewportAspect();
             const math::FVector2 viewHalf =
@@ -145,6 +146,21 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             camHalfH = s * viewHalf.x + c * viewHalf.y;
             cameraLayerMask = selected.camera->layerMask;
             haveCamera = true;
+        }
+    }
+
+    // The selected lens may be transitioning or shaking; render packet matrices are authoritative.
+    render::OverlayCamera2D hostCamera;
+    const bool haveHostCamera = rss->activeViewportId()==0 && rss->overlayCamera2DOverride(hostCamera);
+    if (scene.hasOverlayCamera2D() || haveHostCamera) {
+        const auto visibility = detail::cameraVisibility2D(scene,haveHostCamera ? &hostCamera : nullptr);
+        haveCamera = visibility.valid;
+        if (haveCamera) {
+            camCx = (visibility.minX + visibility.maxX) * .5f;
+            camCy = (visibility.minY + visibility.maxY) * .5f;
+            camHalfW = (visibility.maxX - visibility.minX) * .5f;
+            camHalfH = (visibility.maxY - visibility.minY) * .5f;
+            cameraLayerMask = visibility.layerMask;
         }
     }
 

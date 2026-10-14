@@ -22,7 +22,7 @@ DetSimTransformComponent::Snapshot pose(Reader& r) {
 namespace detwire {
 ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
     if(bytes.size()>maxInputBytes)throw std::runtime_error("Manifest size limit");
-    auto r=checked(bytes,manifestMagic,4);ManifestLayout layout;
+    auto r=checked(bytes,manifestMagic,5);ManifestLayout layout;
     const auto app=r.u32(),input=r.u32(),numerator=r.u32(),denominator=r.u32(),dt=r.u32();
     const auto poseSchema=r.u32(),snapshot=r.u32();r.u64();
     if(!app || !input || !numerator || !denominator || poseSchema!=1 || snapshot!=DetSimTransformComponent::kSnapshotVersion
@@ -32,7 +32,8 @@ ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
     if(r.u32()!=math::DetFloat32::kProfileVersion || r.u32()!=math::DetQuaternion::kRotationProfileVersion
         || r.u32()!=math::kDetMathProfileVersion || r.u32()!=math::DetQuaternion::kAngularIntegrationProfileVersion)
         throw std::runtime_error("Unknown manifest numeric profile");
-    auto n=r.count(maxSchemas);std::uint32_t previous=1;
+    if(r.version==5 && r.u32()!=math::DetFloat64::kProfileVersion)throw std::runtime_error("Unknown binary64 profile");
+    auto n=r.count(maxSchemas);std::uint32_t previous=1;bool hasBinary64=false;
     for(unsigned i=0;i<n;++i) {
         const auto id=r.u32(),version=r.u32(),count=r.count(maxFields);
         if(id<=previous || id==UINT32_MAX || !version || !count)throw std::runtime_error("Invalid manifest schema");previous=id;
@@ -41,12 +42,15 @@ ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
         for(unsigned j=0;j<count;++j) {
             auto field=r.u32();if(field<=previousField)throw std::runtime_error("Invalid manifest field ID");previousField=field;
             const auto type=r.version==1?DetStateType::Word:static_cast<DetStateType>(r.u32());
+            if(type==DetStateType::Float64 && r.version<5)throw std::runtime_error("Binary64 requires manifest5");
+            hasBinary64|=type==DetStateType::Float64;
             const std::uint32_t width=type==DetStateType::Vec2?2:type==DetStateType::Vec3?3:type==DetStateType::Quaternion?4:1;
             std::vector<std::uint64_t> defaults;for(unsigned k=0;k<width;++k)defaults.push_back(r.u64());
             if(type!=DetStateType::Word)(void)decodeDetStateValue(type,defaults);
             fields.push_back({field,type,width});
         }
     }
+    if(r.version==5&&!hasBinary64)throw std::runtime_error("Empty manifest binary64 surface");
     n=r.count(maxSchemas);std::set<std::uint32_t> systems;std::optional<std::pair<std::int32_t,std::uint32_t>> lastSystem;
     for(unsigned i=0;i<n;++i){const auto id=r.u32();const auto priority=std::bit_cast<std::int32_t>(r.u32());
         const auto key=std::pair{priority,id};
@@ -62,7 +66,7 @@ ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
             if(id<=previous || !version)throw std::runtime_error("Invalid manifest validator ID/version");previous=id;
             layout.validatorVersions.emplace(id,version);}}
     if(r.version>=4){n=r.count(maxSchemas);previous=0;
-        if(!n)throw std::runtime_error("Empty manifest logic table");
+        if(!n && r.version==4)throw std::runtime_error("Empty manifest logic table");
         for(unsigned i=0;i<n;++i){const auto id=r.u32(),version=r.u32();const auto hash=r.u64();
             if(id<=previous || !version)throw std::runtime_error("Invalid manifest logic ID/version");previous=id;
             layout.logicProfiles.emplace(id,std::pair{version,hash});}}

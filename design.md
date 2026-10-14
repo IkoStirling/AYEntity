@@ -32,6 +32,18 @@
 两种关系深度均限制为256。现有 .act 格式仍表示空间 Actor；数据实体可使用可序列化逻辑组件。
 没有新增骨骼挂点、自动跟随约束或父子/owner 网络复制协议。
 
+## 2026-10-14 — 相机控制、查询与视口
+
+Core 新增 CameraFrame/CameraRuntime/CameraControllerComponent，无 Renderer/Physics 链接依赖。
+priority399 的 World-owned Present system 生成跟随/环绕/自由姿态；目标逐帧解析并采样
+World presentation alpha，identity/generation 变化清除速度历史。震屏仅施加到快照。
+镜头过渡按 viewportId/domain 隔离，单表现 tick 单次推进；中断以当前呈现姿态继续，
+CameraCut 和投影类型变化硬切。3D 镜头补局部姿态/正交/layerMask，2D/3D 补 viewportId
+与 blendDuration/teleport；层级整合后的 Scene writer 使用 schema5，并兼容旧字段缺省值。
+查询使用左上像素/视口偏移/LH深度[0,1]，double带主元求解检测失败；不依赖快速透视逆路径。
+Sprite/Tilemap 按实际 Overlay packet 矩阵裁剪，避免过渡/震屏/多视口误剔除。
+Renderer provider 在提取前采样当前 viewport；Host覆盖仍限主视口，World teardown撤销回调。
+详见 [相机系统与验收入口](../../AYDocs/CAMERA-SYSTEM.md)。
 
 ## 2026-10-05 — 生产 shader 清单闭包
 
@@ -3324,3 +3336,33 @@ The current recipe1 wrapper accepts 17 closed commands; Stage71 initially expose
 The original Stage74 OUT checker had an incorrect open-path expectation for its third recipe's Loop preview. Before actual execution, the explicit closing first waypoint was restored only in that new expectation; old PingPong, runner, recipe inputs, kernel and authoring policy were unchanged. The original frozen proposal and narrow loop-expectation-revision remain preserved.
 
 No CTest or JUnit case is introduced; the existing validation target remains AYEntity_LevelToolChecks.
+
+## Stage76–78：binary64 注册闭包与 rigid3D profile1
+
+Typed state追加Float64=15，variant旧索引/类型码保持；finite二进制64字段独占一条
+完整lane。manifest5仅在存在binary64字段时生成，新增binary64 profile1，并保留
+validator/logic两表（可空）；旧manifest3/4非空语义及无Float64的旧字节分支保持。
+读侧拒绝未知profile、旧manifest的type15和无binary64 surface的manifest5。
+CP/input envelope1、Pose snapshot2、旧Numeric/2D/Replay字段没有提升或迁移。
+
+Rigid3D全部可变状态属于body/history注册字段，所有immutable config/joint表
+进入policy globals/default副本与logic identity。闭包验证shape/mass/惯量/姿态、
+budget、完整policy副本、固定joint端点和trigger frontier；没有mutable callback缓存。
+Scratch body数组稳定ID排序，重建world inertia/axes，固定子步做力/陀螺项/姿态积分，
+SAT/clipped-face/sphere几何后按pair/feature顺序求累计法向/切向冲量并投影摩擦圆盘。
+Distance/BallSocket/Fixed约束同样稳定排序；有限位置/角度校正。最终事件预算、几何和
+状态检查先于pose/typed/global提交，成功后清零force/torque；故障沿用Session与Rollback边界。
+
+Domain仍为有限binary32球/OBB，受角步<=1rad/substep和分量<=1e6限制。
+不借用Jolt，不补Capsule/Mesh/CCD/睡眠/动力学岛/跨tickwarm cache或一般3D角色。
+不将其它系统写pose自动沙箱化，应用承担sole-owner闭包约定。
+新标准Host示例同时注册Float64时钟，在同一manifest5状态中实际运行/录制/恢复/播放。
+验收和源码入口见[Stage76–78](../../AYDocs/DETERMINISTIC-PHYSICS-NUMERICS-STAGE76-78.md)。
+
+## Camera / spatial hierarchy integration (2026-10-14)
+
+Camera controllers bind persistent Entity identity with a World-scoped runtime handle; explicit missing targets cannot rebind by name. Presentation control samples world-space ancestor poses and converts once back to local position/orientation through the same alpha, preserving local scale and refusing singular/sheared parents.
+
+Entity.PhysicsIntegration installs the default Jolt sphere-sweep adapter. Host custom queries override it; collisionEnabled explicitly disables per controller. The finite-volume query ignores sensors/self/target bodies, checks generation handles and reports initial penetration at zero center travel. Null/Mock/2D return Unsupported. Orbit distance plus collision radius/padding implement the camera arm and damped recovery. Explicit manager adapters must be detached before manager destruction.
+
+Editor has stable target selection, collision parameters, and undoable main-window hierarchy dragging. CameraRigProject is a portable visual/authoring fixture; its Wall is visual-only, while AYEntity_CameraRigIntegrationTests exercises actual Jolt wall avoidance, lens effects/blending, self-ignore and recovery. See ../../AYDocs/CAMERA-SYSTEM.md and the integration evidence in ../../AYDocs/ENTITY-SPATIAL-HIERARCHY.md. Native Computer Use acceptance is deferred by user request.

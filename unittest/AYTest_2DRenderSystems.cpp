@@ -26,6 +26,7 @@
 #include <AYEntity/2DUvMath.h>
 #include <AYEntity/OrthoCameraUpdateSystem.h>
 #include <AYEntity/OrthoCameraSelection.h>
+#include <AYEntity/CameraRuntime.h>
 #include <AYRenderer/RendererSubSystem.h>
 #include <AYEntity/SpriteAnimationSystem.h>
 #include <AYEntity/SpriteRenderSystem.h>
@@ -392,6 +393,28 @@ TEST_CASE(ortho_camera_instances_share_transform_but_keep_independent_poses)
     world.shutdown();
 }
 
+TEST_CASE(ortho_snapshot_viewports_blend_and_teleport_share_camera_query_contract)
+{
+    World& world=World::instance(); world.shutdown(); world.initialize();
+    Entity* a=world.createEntity(); auto* transform=a->addComponent<Transform>();
+    auto* camera=a->createComponent<OrthoCameraComponent>(); camera->viewSize=20; camera->zoom=2;
+    auto* secondary=a->createComponent<OrthoCameraComponent>(); secondary->viewportId=1; secondary->offsetX=10;
+    CHECK(selectOrthoCamera2D(world).camera==camera); CHECK(selectOrthoCamera2D(world,1).camera==secondary);
+    ayt::entity::CameraFrame frame; CHECK(evaluateOrthoCamera2D(world,2,1,frame));
+    ayt::math::FVector3 point; CHECK(screenToWorld(frame,{0,0,800,400},{800,200,.5f},point));
+    CHECK_FLOAT_EQ(point.x,10,1e-4f); CHECK_FLOAT_EQ(point.y,0,1e-4f);
+    auto& runtime=cameraRuntime(world); (void)runtime.present(frame,0,true,1,false);
+    Entity* b=world.createEntity(); auto* otherTransform=b->addComponent<Transform>(); otherTransform->position.x=20;
+    auto* other=b->createComponent<OrthoCameraComponent>(); other->priority=10; other->viewSize=20; other->zoom=2;
+    runtime.onUpdate(.5f); CHECK(evaluateOrthoCamera2D(world,2,1,frame));
+    auto presented=runtime.present(frame,0,true,1,false); CHECK_FLOAT_EQ(presented.position.x,10,1e-4f);
+    otherTransform->applySimulationPose({20,0,0},{0,0,0,1}); otherTransform->applySimulationPose({30,0,0},{0,0,0,1});
+    other->teleport(*otherTransform,{100,0,0},{0,0,0,1}); CHECK(evaluateOrthoCamera2D(world,2,0,frame));
+    presented=runtime.present(frame,0,true,1,false); CHECK_FLOAT_EQ(presented.position.x,100,0);
+    CHECK_FALSE(otherTransform->hasPreviousSimulationPose);
+    (void)transform; world.shutdown();
+}
+
 // ─── #2 — tilemap render closed loop (sticky-Noop). ───────────────
 TEST_CASE(cm3_tilemap_render_closed_loop)
 {
@@ -670,6 +693,13 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     scene.clear();
     system.buildRenderScene(scene);
     CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+    // Edit preview must cull against the Host camera, even when the Scene lens stays at origin.
+    rss->setOverlayCamera2DOverride(ayt::math::translate(-100.f,0,0),
+        ayt::math::lh::ortho(-5.f,5.f,-5.f,5.f,-1.f,1.f),1u);
+    scene.clear(); system.buildRenderScene(scene);
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()),1);
+    if (!scene.items().empty()) CHECK_FLOAT_EQ(scene.items()[0].world.row[0].w,100.f,1e-5f);
+    rss->clearOverlayCamera2DOverride(); scene.clear(); system.buildRenderScene(scene);
     CHECK(scene.items()[0].payload->packedSortKey
           == ayt::entity::drawSortKey(0, 5));
 

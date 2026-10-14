@@ -9,6 +9,7 @@
 #include "AYEntity/World.h"
 
 #include <AYGameLoop.h>
+#include <AYEntity/CameraRuntime.h>
 
 #include <cstdio>
 
@@ -37,23 +38,24 @@ void OrthoCameraUpdateSystem::onStart()
 void OrthoCameraUpdateSystem::buildCamera(ayt::render::RenderScene& scene)
 {
     World& world = World::instance();
-    const SelectedOrthoCamera2D selected = selectOrthoCamera2D(world);
-    if (!selected) return;
     const ayt::render::RendererSubSystem* renderer =
         ayt::render::RendererSubSystem::findRegistered();
+    const int32_t viewport = renderer ? renderer->activeViewportId() : 0;
+    const SelectedOrthoCamera2D selected = selectOrthoCamera2D(world,viewport);
+    auto* runtime = world.findSystemByName("CameraRuntimeSystem");
+    if (!selected) {
+        if (runtime) static_cast<CameraRuntimeSystem*>(runtime)->resetView(viewport,true);
+        return;
+    }
     const float aspect = renderer != nullptr
         ? renderer->viewportAspect() : selected.camera->viewportAspectOr();
     const float interpolationAlpha =
         ayt::game::GameLoop::instance().getInterpolationFactor();
-    math::FVector3 position; math::FQuaternion rotation;
-    if (!selected.entity->worldPose(position, rotation, interpolationAlpha)) return;
-    const float angle = rotation.toEulerAngles().z;
-    const auto center = selected.camera->worldCenter(position, angle);
-    scene.setOverlayCamera2D(
-        selected.camera->viewMatrix(
-            center.x, center.y, selected.camera->worldRotation(angle)),
-        selected.camera->projectionMatrix(aspect),
-        selected.camera->layerMask);
+    CameraFrame frame;
+    if (!evaluateOrthoCamera2D(world,aspect,interpolationAlpha,frame,viewport)) return;
+    if (runtime) frame = static_cast<CameraRuntimeSystem*>(runtime)->present(
+        frame,viewport,true,selected.camera->blendDuration);
+    scene.setOverlayCamera2D(frame.view,frame.projection,frame.layerMask);
 }
 
 void registerOrthoCameraUpdateSystem()

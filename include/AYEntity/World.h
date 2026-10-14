@@ -66,6 +66,8 @@ public:
     void fixedUpdate(math::DetFloat32 fixedDt);
     /// Run Bridge(alpha) before Present(dt), then component presentation ticks.
     void updatePresentation(float dt, float interpolationAlpha);
+    /// Alpha of the current presentation tick, shared by tracking cameras and Sim pose sampling.
+    float presentationInterpolationAlpha() const noexcept { return _presentationAlpha; }
 
     /// Legacy creation: initially Data and promotes on first spatial acquisition.
     /// New gameplay uses createSpatialEntity/createDataEntity explicitly.
@@ -157,6 +159,7 @@ private:
     std::unordered_map<std::string, uint32_t> _entityNameMap;
     uint32_t _nextEntityId = 1;
     bool _initialized = false;
+    float _presentationAlpha = 1.f;
 
     friend class Entity;
     // AYScene PR-1: Scene::Impl owns independent World instances to avoid

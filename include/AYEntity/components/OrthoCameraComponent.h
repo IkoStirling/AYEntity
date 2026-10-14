@@ -20,6 +20,7 @@
 #include <AYCore.h>
 #include <AYEntity/IEntity.h>
 #include <AYEntity/components/TransformComponent.h>
+#include <AYEntity/CameraFrame.h>
 
 #include <AYMath/MathTypes.h>
 #include <AYMath/MathUtils.h>
@@ -63,6 +64,17 @@ struct OrthoCameraComponent : public IComponent {
     AY_PROPERTY(float, offsetX, kAttrSerialize)
     AY_PROPERTY(float, offsetY, kAttrSerialize)
     AY_PROPERTY(float, localRotationRadians, kAttrSerialize)
+    AY_PROPERTY(int32_t, viewportId, kAttrSerialize)
+    AY_PROPERTY(float, blendDuration, kAttrSerialize)
+    uint64_t cutGeneration = 0;
+
+    /// Mark a discontinuous change; runtime-only, never persisted in a Scene.
+    void requestCameraCut() noexcept { ++cutGeneration; }
+    /// Set an immediate pose and discard both interpolation and render history.
+    void teleport(Transform& transform, const math::FVector3& position,
+                  const math::FQuaternion& orientation) noexcept {
+        transform.setPresentationPose(position, orientation); requestCameraCut();
+    }
 
     // Runtime-only compatibility gate. Serialized active/priority determine
     // normal selection; legacy hosts can still suppress a camera here.
@@ -86,6 +98,8 @@ struct OrthoCameraComponent : public IComponent {
         offsetX         = 0.0f;
         offsetY         = 0.0f;
         localRotationRadians = 0.0f;
+        viewportId = 0;
+        blendDuration = 0;
     }
 
     [[nodiscard]] float viewportAspectOr() const noexcept {

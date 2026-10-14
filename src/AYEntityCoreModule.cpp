@@ -2,6 +2,7 @@
 
 #include <AYEntity/SimToPresentBridgeSystem.h>
 #include <AYEntity/World.h>
+#include <AYEntity/CameraRuntime.h>
 
 #include <cstring>
 
@@ -32,6 +33,7 @@ void bootstrapEntityCore()
 
 void registerEntityCoreSystems()
 {
+    registerCameraRuntimeSystem();
     World& world = World::instance();
     if (!hasSystemNamed(world, "SimToPresentBridgeSystem")) {
         registerSimToPresentBridgeSystem();

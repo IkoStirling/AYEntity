@@ -1,5 +1,5 @@
 #pragma once
-#include <AYMath/MathTypes.h>
+#include <AYEntity/CameraFrame.h>
 #include <cstdint>
 
 namespace ayt::entity {
@@ -15,20 +15,14 @@ struct SelectedPerspectiveCamera3D {
     explicit operator bool() const noexcept { return entity && transform && camera; }
 };
 
-struct PerspectiveCameraFrame {
-    math::Float4x4 view = math::Float4x4::identity();
-    math::Float4x4 projection = math::Float4x4::identity();
-    math::FVector3 position{};
-    uint64_t identity = 0;
-    uint64_t cutGeneration = 0;
-};
+using PerspectiveCameraFrame = CameraFrame;
 
 /// Highest active priority wins; Entity id then persistent component id break
 /// ties. Borrowed selection is invalid after Entity/component/World destruction.
-[[nodiscard]] SelectedPerspectiveCamera3D selectPerspectiveCamera3D(World& world);
+[[nodiscard]] SelectedPerspectiveCamera3D selectPerspectiveCamera3D(World& world, int32_t viewportId = 0);
 /// Renderer-independent evaluation for hosts/tools. Invalid pose returns false
 /// and leaves output unchanged; projection parameters are safely sanitized.
 [[nodiscard]] bool evaluatePerspectiveCamera3D(World& world, float aspect,
                                                float interpolationAlpha,
-                                               PerspectiveCameraFrame& output);
+                                               PerspectiveCameraFrame& output, int32_t viewportId = 0);
 } // namespace ayt::entity

@@ -18,6 +18,7 @@ option(AY_ENTITY_BUILD_DET_ATTACK_EXAMPLE "Build deterministic authored attack c
 option(AY_ENTITY_BUILD_DET_BRAIN_EXAMPLE "Build deterministic authored enemy Brain content Host example" OFF)
 option(AY_ENTITY_BUILD_DET_CONTROL_EXAMPLE "Build deterministic authored dash control Host example" OFF)
 option(AY_ENTITY_BUILD_DET_SIGHT_EXAMPLE "Build authored deterministic enemy sight Host example" OFF)
+option(AY_ENTITY_BUILD_DET_RIGID3D_EXAMPLE "Build deterministic 3D rigid-body and Float64 standard Host example" OFF)
 option(AY_ENTITY_LEVEL_RESOURCES "Enable optional deterministic level Resource/import/cook adapters" OFF)
 
 # These defaults also allow AYEntity to be configured as a standalone
@@ -63,6 +64,7 @@ add_library(AYEntityCore STATIC
     src/AYComponentRegistry.cpp
     src/AYEntityReflection.cpp
     src/AYPerspectiveCameraSelection.cpp
+    src/AYCameraRuntime.cpp
     src/AYEntityCoreModule.cpp
     src/AYEntityComponentModule.cpp
     src/AYEntityRuntimeModule.cpp
@@ -109,6 +111,7 @@ if(TARGET AYReplay)
     add_library(AYEntityDeterminismKernel STATIC
         src/AYDeterministicSession.cpp src/AYDeterministicSessionWire.cpp src/AYDeterministicState.cpp
         src/AYDeterministicCollision2D.cpp
+        src/AYDeterministicRigidBody3D.cpp
         src/AYDeterministicCharacterController2D.cpp
         src/AYDeterministicPathMotion2D.cpp
         src/AYDeterministicLevel2D.cpp
@@ -159,6 +162,9 @@ if(TARGET AYReplay)
     endif()
     add_library(AYEntityDeterminism STATIC src/AYDeterministicSessionWorld.cpp src/AYDeterministicReplay.cpp src/AYDeterministicRollbackReplay.cpp)
     add_library(AYEntity::Determinism ALIAS AYEntityDeterminism)
+    if(BUILD_TESTING)
+        include(unittest/RigidBody3D.cmake)
+    endif()
     ay_configure_entity_target(AYEntityDeterminism)
     target_link_libraries(AYEntityDeterminism PUBLIC AYEntityCore AYEntityDeterminismKernel AYReplay)
     add_executable(AYEntity_ReplayArchiveTool tools/detreplay/main.cpp)
@@ -242,6 +248,21 @@ function(ay_entity_add_determinism_host_integration)
     add_library(AYEntityDeterminismHost STATIC "${_root}/src/AYDeterministicHost.cpp")
     add_library(AYEntity::DeterminismHost ALIAS AYEntityDeterminismHost)
     target_link_libraries(AYEntityDeterminismHost PUBLIC AYEntityDeterminism AYApplication AYScene AYEventSystem)
+    if(AY_ENTITY_BUILD_DET_RIGID3D_EXAMPLE)
+        add_executable(AYEntity_DetRigid3DExample "${_root}/examples/detrigidbody3d/host.cpp")
+        target_link_libraries(AYEntity_DetRigid3DExample PRIVATE AYEntityDeterminismHost)
+        target_compile_features(AYEntity_DetRigid3DExample PRIVATE cxx_std_23)
+        if(MSVC)
+            target_compile_options(AYEntity_DetRigid3DExample PRIVATE /utf-8)
+        endif()
+        if(BUILD_TESTING)
+            add_test(NAME AYEntity_RigidBody3DHostExample COMMAND ${CMAKE_COMMAND}
+                "-DEXAMPLE=$<TARGET_FILE:AYEntity_DetRigid3DExample>" "-DROOT=${_root}/../.."
+                "-DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/rigid3d-host-example"
+                -P "${_root}/unittest/RunRigidBody3DHost.cmake")
+            set_tests_properties(AYEntity_RigidBody3DHostExample PROPERTIES TIMEOUT 360 LABELS "ayentity;host;rigid3d;binary64;replay")
+        endif()
+    endif()
     target_compile_options(AYEntityDeterminismHost PRIVATE
         $<$<CXX_COMPILER_ID:MSVC>:/W4>
         $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>)
@@ -516,6 +537,7 @@ endif()
 if(AY_ENABLE_PHYSICS)
     add_library(AYEntityPhysicsIntegration STATIC
         src/AYEntityPhysicsIntegrationModule.cpp
+        src/AYCameraPhysicsCollision.cpp
         src/AYEntityPhysicsBridge.cpp
     )
     add_library(AYEntity::PhysicsIntegration ALIAS
@@ -629,11 +651,24 @@ if(BUILD_TESTING)
     target_link_libraries(AYEntity_SpatialTests PRIVATE AYEntityCore AYTest)
     ay_add_test(AYEntity_SpatialTests LABELS "ayentity;spatial" TIMEOUT 60)
     add_executable(AYEntity_PerspectiveCameraTests
-        unittest/PerspectiveCameraTestMain.cpp unittest/AYTest_PerspectiveCamera.cpp)
+        unittest/PerspectiveCameraTestMain.cpp unittest/AYTest_PerspectiveCamera.cpp
+        unittest/AYTest_CameraFeatures.cpp)
     target_link_libraries(AYEntity_PerspectiveCameraTests PRIVATE AYEntityCore AYTest)
     ay_add_test(AYEntity_PerspectiveCameraTests LABELS "ayentity;camera3d" TIMEOUT 60)
 endif()
 
+add_executable(AYEntity_CameraRigExample examples/camera-rig/main.cpp)
+target_link_libraries(AYEntity_CameraRigExample PRIVATE AYEntityCore)
+if(BUILD_TESTING AND TARGET AYEntityPhysicsIntegration)
+    add_executable(AYEntity_CameraRigIntegrationTests unittest/AYTest_CameraRigIntegration.cpp)
+    target_link_libraries(AYEntity_CameraRigIntegrationTests PRIVATE AYEntityPhysicsIntegration AYTest)
+    target_compile_definitions(AYEntity_CameraRigIntegrationTests PRIVATE
+        AY_CAMERA_RIG_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../EngineAssets/Validation/CameraRigProject/Assets/worlds/camera_rig.scn")
+    if(AYPHYSICS_BUILD_JOLT)
+        target_compile_definitions(AYEntity_CameraRigIntegrationTests PRIVATE AYPHYSICS_HAS_JOLT=1)
+    endif()
+    ay_add_test(AYEntity_CameraRigIntegrationTests LABELS "ayentity;camera;physics;hierarchy" TIMEOUT 60)
+endif()
 if(BUILD_TESTING AND AY_ENABLE_ENTITY_2D_SCHEMA)
     add_executable(AYEntity_IdentityTests
         unittest/TestMain.cpp

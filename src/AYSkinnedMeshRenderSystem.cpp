@@ -450,6 +450,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
             // mesh identity internally, then snapshots the complete skeleton
             // once all sections have consumed the previous pose.
             item.motionObjectId = temporalObjectIdentity(world, *e);
+            item.cameraLayerMask = meshComp->layer >= 0 && meshComp->layer < 32 ? 1u << meshComp->layer : 0;
             item.outlineHull = meshComp->outlineHull;
             item.sortKey = transparentDistanceSortKey(
                 submesh.localCenter, worldM, cameraPosition);
@@ -498,6 +499,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
             item.material = fallbackMat;
             item.world = worldM;
             item.motionObjectId = temporalObjectIdentity(world, *e);
+            item.cameraLayerMask = meshComp->layer >= 0 && meshComp->layer < 32 ? 1u << meshComp->layer : 0;
             scene.add(item);
             ++submitted;
         }

@@ -5,6 +5,7 @@
 #include <AYEntity/EntityRuntimeModule.h>
 #include <AYEntity/RenderSystem.h>
 #include <AYEntity/PerspectiveCameraUpdateSystem.h>
+#include <AYEntity/CameraRuntime.h>
 #include <AYEntity/SkinnedMeshRenderSystem.h>
 #include <AYEntity/World.h>
 #include <AYEntity/WorldLifecycle.h>
@@ -57,6 +58,7 @@ ComponentRegistryResult registerEntityRenderComponents(
 
 void registerEntityRenderSystems()
 {
+    registerCameraRuntimeSystem();
     ensureWorldLifecycleBridge();
     World& world = World::instance();
     if (!hasSystemNamed(world, "PerspectiveCameraUpdateSystem")) {

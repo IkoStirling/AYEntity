@@ -18,6 +18,7 @@
 #include "AYEntity/components/TransformComponent.h"
 #include "AYEntity/components/ActorInstanceComponent.h"
 #include "AYEntity/components/PerspectiveCameraComponent.h"
+#include "AYEntity/components/CameraControllerComponent.h"
 
 #if AY_ENTITY_HAS_2D_SCHEMA
 #include "AYEntity/Entity2DIntegrationModule.h"
@@ -32,6 +33,7 @@ AY_FINALIZE_REGISTRATION_METADATA(HealthComponent)
 AY_FINALIZE_REGISTRATION_METADATA(MeshComponent)
 AY_FINALIZE_REGISTRATION_METADATA(ActorInstanceComponent)
 AY_FINALIZE_REGISTRATION_METADATA(PerspectiveCameraComponent)
+AY_FINALIZE_REGISTRATION_METADATA(CameraControllerComponent)
 
 ComponentRegistryResult registerEntityCoreComponents(ComponentRegistry& registry)
 {
@@ -69,6 +71,11 @@ ComponentRegistryResult registerEntityCoreComponents(ComponentRegistry& registry
         [](Entity& entity, IComponent&) {
             if (!entity.hasComponent<Transform>()) entity.addComponent<Transform>();
         }, ComponentMultiplicity::Multiple));
+    AYT_REGISTER_COMPONENT(registerSceneComponent<CameraControllerComponent>(
+        registry, "CameraControllerComponent", "Camera Controller", "Camera",
+        [](Entity& entity, IComponent&) {
+            if (!entity.hasComponent<Transform>()) entity.addComponent<Transform>();
+        }));
     {
         auto actor = detail::makeComponentDescriptor<ActorInstanceComponent>(
             "ActorInstanceComponent", "Actor Instance", "Core");
