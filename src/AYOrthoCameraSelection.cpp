@@ -16,6 +16,8 @@ SelectedOrthoCamera2D selectOrthoCamera2D(World& world) noexcept
         if (entity == nullptr) continue;
         Transform* transform = entity->getComponent<Transform>();
         if (transform == nullptr) continue;
+        math::FVector3 worldPosition; math::FQuaternion worldRotation;
+        if (!entity->worldPose(worldPosition,worldRotation)) continue;
         for (OrthoCameraComponent* camera :
              entity->getComponents<OrthoCameraComponent>()) {
             if (camera == nullptr || !camera->isEnabled()) continue;

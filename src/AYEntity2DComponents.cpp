@@ -29,28 +29,31 @@ Transform* addTransformIfMissing(Entity& entity)
 void migrateLegacyTilemapTransform(Entity& entity, IComponent&)
 {
     (void)addTransformIfMissing(entity);
+    entity.setLegacySpatialMigration(false);
 }
 
 void migrateLegacySpriteTransform(Entity& entity, IComponent& component)
 {
-    if (entity.hasComponent<Transform>()) return;
+    if (entity.hasComponent<Transform>() && !entity.migratingLegacySpatialFields()) return;
     auto& sprite = static_cast<SpriteComponent&>(component);
     if (Transform* transform = addTransformIfMissing(entity)) {
         transform->position = sprite.position;
         transform->rotation = math::FQuaternion::fromAxisAngle(
             math::FVector3(0.0f, 0.0f, 1.0f), sprite.rotationZ);
         transform->scale = {sprite.scaleX, sprite.scaleY, 1.0f};
+        entity.setLegacySpatialMigration(false);
     }
 }
 
 void migrateLegacyCameraTransform(Entity& entity, IComponent& component)
 {
-    if (entity.hasComponent<Transform>()) return;
+    if (entity.hasComponent<Transform>() && !entity.migratingLegacySpatialFields()) return;
     auto& camera = static_cast<OrthoCameraComponent&>(component);
     if (Transform* transform = addTransformIfMissing(entity)) {
         transform->position = {camera.positionX, camera.positionY, 0.0f};
         transform->rotation = math::FQuaternion::fromAxisAngle(
             math::FVector3(0.0f, 0.0f, 1.0f), camera.rotationRadians);
+        entity.setLegacySpatialMigration(false);
     }
 }
 

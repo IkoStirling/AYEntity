@@ -1,5 +1,38 @@
 # AYEntity
 
+## 空间实体与数据实体（2026-10-14）
+
+`World::createSpatialEntity()` 创建空间实体：固有一个不可移除的局部 Transform，
+可以参与空间父子树，拥有位置、旋转和缩放。`World::createDataEntity()` 创建数据实体：
+承载组件、逻辑和状态，没有 Transform，不能挂接空间父节点或装配空间组件。
+两者都可保存在 Scene、拥有其他实体；数据实体不等于“不可运行的纯数据”。
+
+`Entity::transform()` 是空间属性入口。旧 `getComponent/addComponent<Transform>`、
+查询和反射保留一个 reserved intrinsic adapter，指向同一对象，不存在两份姿态。
+`IComponent` 基类仅为旧接口兼容保留；该属性不能用任何组件删除入口移除。
+新代码显式创建实体类型；无参 `createEntity()` 是兼容入口，初次空间获取可升级，
+不得用它表达严格的数据实体。转换使用 `convertKind`，有空间依赖或挂接时拒绝转为数据。
+
+空间父子关系 `setSpatialParent` 与生命周期归属 `setOwner` 独立且限定同一 World，
+禁止循环。`KeepLocal` 保留局部 TRS；`KeepWorld` 保持世界矩阵并校验局部 TRS 可表示性。
+`worldMatrix(alpha)` 按同一插值 alpha 组合祖先，保留非均匀缩放引起的 affine shear；
+`worldPose` 提供世界位置及忽略缩放的组合朝向。需要逆变换的操作拒绝奇异或剪切 TRS，
+失败不改变关系和姿态。动态刚体与权威 Sim 实体必须为空间根节点；层级本身不是确定性 Sim。
+
+销毁拥有者会级联销毁 owned 实体；仅空间挂接的子实体保留并解除挂接，保持世界姿态。
+`canDestroyEntity` 预检无法无损脱离的剪切/奇异情况；普通删除拒绝这类操作。
+`clearEntities` 用于整体替换 Scene，不保留外部节点。名称不是关系键：运行期同 World
+句柄校验版本，Scene schema5 保存独立 persistentId、kind、owner、spatialParent 与 spatial 对象。
+旧 schema1..4 的显式/迁移 Transform 升级为空间属性；其余实体为数据。
+加载先创建全部实体，再恢复关系；重复身份、未知类型、悬空或循环关系失败并走既有回滚。
+
+摄像机、网格、蒙皮、Sprite、Tilemap、粒子和物理桥已读取组合后的世界姿态/矩阵。
+新增边界证据见 `unittest/AYTest_SpatialEntity.cpp`；原有身份、Actor 和摄像机测试保留。
+`EntityPhysicsBridgeTest.cpp` 验证运动学挂接的世界创建姿态与父节点移动命令。
+两种关系深度均限制为256。现有 .act 格式仍表示空间 Actor；数据实体可使用可序列化逻辑组件。
+没有新增骨骼挂点、自动跟随约束或父子/owner 网络复制协议。
+
+
 2026-10-05：RenderIntegration 的 rigid/diagnostic fallback shader 源移到 Renderer 共享
 FallbackMeshShaderSources.h；运行时与默认离线清单引用同一份字节，发布游戏不临时编译。
 未改变皮肤/材质路径选择或 gameplay facade；粒子默认源也由 Renderer 清单覆盖。
@@ -1706,3 +1739,5 @@ The current recipe1 wrapper accepts 17 closed commands; Stage71 initially expose
 The original Stage74 OUT checker had an incorrect open-path expectation for its third recipe's Loop preview. Before actual execution, the explicit closing first waypoint was restored only in that new expectation; old PingPong, runner, recipe inputs, kernel and authoring policy were unchanged. The original frozen proposal and narrow loop-expectation-revision remain preserved.
 
 No CTest or JUnit case is introduced; the existing validation target remains AYEntity_LevelToolChecks.
+
+本次本地验证与限制见 [`空间实体实施记录`](../../AYDocs/ENTITY-SPATIAL-HIERARCHY.md#实际验证windowsmsvc-release2026-10-14)。

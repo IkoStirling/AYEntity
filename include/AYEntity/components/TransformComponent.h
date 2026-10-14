@@ -14,6 +14,8 @@ namespace ayt::entity
 {
 
 #define AY_CURRENT_CLASS Transform
+/// Intrinsic local pose of Spatial entities. IComponent is a legacy reflection/query adapter;
+/// the Entity owns this object and ordinary component removal/creation cannot replace it.
 struct Transform : public IComponent {
     const char* getName() const override { return "Transform"; }
 

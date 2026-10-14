@@ -54,7 +54,7 @@ bool ComponentFactory::removeComponent(
     const char* typeName)
 {
     const ComponentDescriptor* entry = findEntry(typeName);
-    if (entry == nullptr
+    if (entry == nullptr || entry->intrinsic
         || entry->multiplicity != ComponentMultiplicity::Single
         || entry->has == nullptr
         || entry->remove == nullptr

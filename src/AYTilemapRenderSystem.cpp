@@ -189,8 +189,7 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         const bool worldLit =
             renderDomain == ayt::render::RenderDomain2D::WorldLit;
         const ayt::math::Float4x4 worldMatrix =
-            ayt::math::Transform::getMatrix(
-                transform->position, transform->rotation, transform->scale);
+            entity->worldMatrix();
         const uint32_t layer = static_cast<uint32_t>(component->layer) & 0x1Fu;
         if (!worldLit && visibility.valid
             && (visibility.layerMask & (1u << layer)) == 0u) {
@@ -346,7 +345,7 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         // starts from the finite map and rejects individual chunks against the
         // current perspective camera below; no authored main camera fails open.
         const TilemapCameraVisibility* cull =
-            !worldLit && isAxisAlignedPositive(*transform)
+            !worldLit && (!entity->spatialParent() && isAxisAlignedPositive(*transform))
                 ? &visibility : nullptr;
         const uint32_t margin = component->prefetchMarginChunks > 0
             ? static_cast<uint32_t>(component->prefetchMarginChunks) : 0u;

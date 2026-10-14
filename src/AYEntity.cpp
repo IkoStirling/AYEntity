@@ -44,7 +44,7 @@ bool isValidComponentInstanceId(const std::string& id) noexcept {
     });
 }
 
-Entity::Entity() = default;
+Entity::Entity() : _persistentId(makeComponentInstanceId()) {}
 
 Entity::~Entity() {
     removeAllComponents();
@@ -72,9 +72,10 @@ void Entity::removeAllComponents() {
 
     for (const auto& instance : _componentInstances) {
         instance.component->onDetach();
-        delete instance.component;
+        if (instance.component != _transform.get()) delete instance.component;
     }
     _componentInstances.clear();
+    _transform.reset();
 }
 
 void Entity::setName(const char* name) {
@@ -141,6 +142,7 @@ bool Entity::removeComponentById(const std::string& id) {
     if (!_world) return false;
     for (size_t i = 0; i < _componentInstances.size(); ++i) {
         if (_componentInstances[i].id != id) continue;
+        if (_componentInstances[i].component == _transform.get()) return false;
         const auto instance = _componentInstances[i];
         const auto storage = _world->_componentStorages.find(instance.typeHash);
         if (storage == _world->_componentStorages.end()

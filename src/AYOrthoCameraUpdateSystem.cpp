@@ -45,10 +45,8 @@ void OrthoCameraUpdateSystem::buildCamera(ayt::render::RenderScene& scene)
         ? renderer->viewportAspect() : selected.camera->viewportAspectOr();
     const float interpolationAlpha =
         ayt::game::GameLoop::instance().getInterpolationFactor();
-    const math::FVector3 position =
-        selected.transform->interpolatedPosition(interpolationAlpha);
-    const math::FQuaternion rotation =
-        selected.transform->interpolatedRotation(interpolationAlpha);
+    math::FVector3 position; math::FQuaternion rotation;
+    if (!selected.entity->worldPose(position, rotation, interpolationAlpha)) return;
     const float angle = rotation.toEulerAngles().z;
     const auto center = selected.camera->worldCenter(position, angle);
     scene.setOverlayCamera2D(

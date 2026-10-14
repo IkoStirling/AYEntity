@@ -20,9 +20,8 @@
 
 namespace ayt::entity {
 namespace {
-particle::Pose poseOf(const Transform& transform, float alpha=1) {
-    const auto matrix=math::Transform::getMatrix(transform.interpolatedPosition(alpha),
-        transform.interpolatedRotation(alpha),transform.scale);
+particle::Pose poseOf(const Entity& entity, float alpha=1) {
+    const auto matrix=entity.worldMatrix(alpha);
     return {{matrix(0,3),matrix(1,3),matrix(2,3)},
         {matrix(0,0),matrix(1,0),matrix(2,0)},
         {matrix(0,1),matrix(1,1),matrix(2,1)},
@@ -57,9 +56,9 @@ class SceneParticleCollision2D final : public particle::CollisionQuery2D {
 public:
     explicit SceneParticleCollision2D(World& world) {
         for(auto* entity:world.query<Transform,ParticleSurface2DComponent>()) {
-            const auto& transform=*entity->getComponent<Transform>();
             const auto& source=*entity->getComponent<ParticleSurface2DComponent>();
-            const auto center=transform.position;
+            math::FVector3 center; math::FQuaternion worldRotation;
+            if (!entity->worldPose(center,worldRotation)) continue;
             const float hx=source.halfExtent.x,hy=source.halfExtent.y;
             if(!std::isfinite(center.x)||!std::isfinite(center.y)||!std::isfinite(hx)
                 ||!std::isfinite(hy)||!std::isfinite(source.height)||hx<=0||hy<=0||source.height<0) continue;
@@ -187,14 +186,14 @@ void ParticleSimulationSystem::onUpdate(float dt) {
         auto* emitter=entity->getComponent<ParticleEmitterComponent>();
         if (!emitter->runtime || !emitter->error.empty()) continue;
         if(emitter->usingGpu) {
-            gpu->update(emitter->playback.identity,dt,poseOf(*entity->getComponent<Transform>(),
+            gpu->update(emitter->playback.identity,dt,poseOf(*entity,
                 game::GameLoop::instance().getInterpolationFactor()),emitter->playback); continue;
         }
         const size_t before=emitter->runtime->particles().size();
         // Budget includes every other emitter's still-live particles.
         used-=before;
         const auto allowed=used+reserved<maxParticles ? static_cast<uint32_t>(maxParticles-used-reserved) : 0;
-        emitter->runtime->update(dt,poseOf(*entity->getComponent<Transform>(),
+        emitter->runtime->update(dt,poseOf(*entity,
             game::GameLoop::instance().getInterpolationFactor()),
             allowed>before ? allowed-static_cast<uint32_t>(before) : 0,&collision);
         collectImpacts(*emitter->runtime,emitter->layer,emitter->sortingKey);
@@ -204,12 +203,12 @@ void ParticleSimulationSystem::onUpdate(float dt) {
         auto* effect=entity->getComponent<ParticleEffectComponent>();
         if(!effect->runtime || !effect->error.empty()) continue;
         if(effect->usingGpu) {
-            gpu->update(effect->playback.identity,dt,poseOf(*entity->getComponent<Transform>(),
+            gpu->update(effect->playback.identity,dt,poseOf(*entity,
                 game::GameLoop::instance().getInterpolationFactor()),effect->playback); continue;
         }
         const size_t before=effect->runtime->liveParticles(); used-=before;
         const auto allowed=used+reserved<maxParticles ? static_cast<uint32_t>(maxParticles-used-reserved) : 0;
-        effect->runtime->update(dt,poseOf(*entity->getComponent<Transform>(),
+        effect->runtime->update(dt,poseOf(*entity,
             game::GameLoop::instance().getInterpolationFactor()),
             allowed>before ? allowed-static_cast<uint32_t>(before) : 0,&collision);
         for(const auto& child:effect->runtime->instances())
@@ -352,14 +351,14 @@ void ParticleRenderSystem::buildRenderScene(render::RenderScene& scene) {
         const auto* emitter=entity->getComponent<ParticleEmitterComponent>();
         if(emitter->visible && emitter->runtime && emitter->error.empty()) {
             if(emitter->usingGpu) drawGpu(emitter->playback.identity,emitter->layer,emitter->sortingKey);
-            else drawInstance(*emitter->runtime,poseOf(*entity->getComponent<Transform>(),alpha),emitter->layer,emitter->sortingKey);
+            else drawInstance(*emitter->runtime,poseOf(*entity,alpha),emitter->layer,emitter->sortingKey);
         }
     }
     for(auto* entity:World::instance().query<Transform,ParticleEffectComponent>()) {
         const auto* effect=entity->getComponent<ParticleEffectComponent>();
         if(!effect->visible || !effect->runtime || !effect->error.empty()) continue;
         if(effect->usingGpu) { drawGpu(effect->playback.identity,effect->layer,effect->sortingKey); continue; }
-        const auto pose=poseOf(*entity->getComponent<Transform>(),alpha);
+        const auto pose=poseOf(*entity,alpha);
         const auto& instances=effect->runtime->instances();
         for(size_t i=0;i<instances.size();++i)
             drawInstance(instances[i],effect->runtime->emitterPose(i,pose),effect->layer,effect->sortingKey);

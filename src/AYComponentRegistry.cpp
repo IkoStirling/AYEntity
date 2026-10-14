@@ -18,6 +18,8 @@ bool equivalent(
         && left.type == right.type
         && left.size == right.size
         && left.alignment == right.alignment
+        && left.intrinsic == right.intrinsic
+        && left.requiresSpatial == right.requiresSpatial
         && left.editorAddable == right.editorAddable
         && left.sceneSerializable == right.sceneSerializable
         && left.multiplicity == right.multiplicity

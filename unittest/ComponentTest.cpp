@@ -50,6 +50,8 @@ TEST_CASE(remove_component)
     CHECK_TRUE(e->hasComponent<Transform>());
 
     e->removeComponent<Transform>();
+    CHECK_TRUE(e->hasComponent<Transform>());
+    CHECK(e->convertKind(EntityKind::Data));
     CHECK_FALSE(e->hasComponent<Transform>());
 
     Entity::destroy(e);

@@ -36,6 +36,8 @@ class IComponent;
 class ISystem;
 class IComponentStorage;
 struct EntityHandle;
+enum class EntityKind : uint8_t { Data, Spatial };
+enum class ReparentMode : uint8_t { KeepLocal, KeepWorld };
 
 // =============================================================================
 // Constants

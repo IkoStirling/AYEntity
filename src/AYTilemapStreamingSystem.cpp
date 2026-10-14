@@ -29,14 +29,16 @@ void TilemapStreamingSystem::onUpdate(float)
             ? renderer->viewportAspect() : selected.camera->viewportAspectOr();
         const math::FVector2 viewHalf =
             selected.camera->visibleHalfExtents(aspect);
-        const float entityAngle = selected.transform->rotation.toEulerAngles().z;
+        math::FVector3 cameraPosition; math::FQuaternion cameraRotation;
+        if (!selected.entity->worldPose(cameraPosition,cameraRotation)) { TilemapVisibilityRuntime::instance().publish(state); return; }
+        const float entityAngle = cameraRotation.toEulerAngles().z;
         const float angle = selected.camera->worldRotation(entityAngle);
         const float c = std::fabs(std::cos(angle));
         const float s = std::fabs(std::sin(angle));
         const float halfW = c * viewHalf.x + s * viewHalf.y;
         const float halfH = s * viewHalf.x + c * viewHalf.y;
         const auto center = selected.camera->worldCenter(
-            selected.transform->position, entityAngle);
+            cameraPosition, entityAngle);
         const float cameraX = center.x;
         const float cameraY = center.y;
         state.valid = true;

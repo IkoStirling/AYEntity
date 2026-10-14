@@ -18,6 +18,8 @@ SelectedPerspectiveCamera3D selectPerspectiveCamera3D(World& world) {
         if (!entity) continue;
         auto* transform = entity->getComponent<Transform>();
         if (!transform || !validPose(transform->position, transform->rotation)) continue;
+        math::FVector3 worldPosition; math::FQuaternion worldRotation;
+        if (!entity->worldPose(worldPosition,worldRotation)) continue;
         for (auto* camera : entity->getComponents<PerspectiveCameraComponent>()) {
             if (!camera || !camera->active) continue;
             const auto* candidate = entity->componentInstance(camera);
@@ -38,8 +40,8 @@ bool evaluatePerspectiveCamera3D(World& world, float aspect, float alpha,
     const auto selected = selectPerspectiveCamera3D(world);
     if (!selected) return false;
     alpha = std::isfinite(alpha) ? std::clamp(alpha, 0.0f, 1.0f) : 1.0f;
-    const auto position = selected.transform->interpolatedPosition(alpha);
-    const auto rotation = selected.transform->interpolatedRotation(alpha);
+    math::FVector3 position; math::FQuaternion rotation;
+    if (!selected.entity->worldPose(position, rotation, alpha)) return false;
     if (!validPose(position, rotation)) return false;
     PerspectiveCameraFrame frame;
     frame.position = position;

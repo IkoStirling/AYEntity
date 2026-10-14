@@ -33,6 +33,8 @@ class DeterministicSession;
 class DeterministicHostController;
 class IEntitySimulationDriver;
 
+enum class EntityKind : uint8_t;
+
 class World {
 public:
     /// Process fallback World (Meyers). When an active Scene World is set via
@@ -65,11 +67,23 @@ public:
     /// Run Bridge(alpha) before Present(dt), then component presentation ticks.
     void updatePresentation(float dt, float interpolationAlpha);
 
-    /// Create an ordinary World entity; session ownership rejects direct structure changes.
+    /// Legacy creation: initially Data and promotes on first spatial acquisition.
+    /// New gameplay uses createSpatialEntity/createDataEntity explicitly.
+    /// Session ownership rejects direct structure changes.
     /// Use DeterministicSession::addEntity or tick-context spawn while claimed.
-    Entity* createEntity();
+    Entity* createEntity(); // legacy: Data, promotes on first spatial acquisition
+    /// Explicit creation: Data refuses spatial components; Spatial always has Transform.
+    Entity* createEntity(EntityKind kind);
+    Entity* createSpatialEntity() { return createEntity(EntityKind::Spatial); }
+    Entity* createDataEntity() { return createEntity(EntityKind::Data); }
+    Entity* findEntityByPersistentId(const std::string& id) const;
     /// Destroy an ordinary entity; throws logic_error while a session owns structure.
+    /// Preflight ownership cascade and world-preserving spatial detachment.
+    bool canDestroyEntity(const Entity* entity, std::string* error = nullptr) const;
+    /// Throws logic_error if a session owns the World or lossless detachment is impossible.
     void destroyEntity(Entity* e);
+    /// Bulk scene replacement; no outside entities survive, so no attachment conversion is needed.
+    void clearEntities();
     Entity* findEntity(const char* name) const;
     Entity* findEntity(uint32_t id) const;
     std::vector<Entity*> getAllEntities() const;
@@ -116,6 +130,7 @@ public:
         return ComponentRegistry::instance().find<T>() != nullptr;
     }
 
+    /// Resolve only against this World's issued generation; Edit/Play lifetimes are independent.
     Entity* getEntityByHandle(const EntityHandle& handle);
     EntityHandle getEntityHandle(uint32_t id);
 

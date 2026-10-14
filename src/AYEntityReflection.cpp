@@ -72,6 +72,7 @@ ComponentRegistryResult registerEntityCoreComponents(ComponentRegistry& registry
     {
         auto actor = detail::makeComponentDescriptor<ActorInstanceComponent>(
             "ActorInstanceComponent", "Actor Instance", "Core");
+        actor.requiresSpatial = true; // Current .act formats define spatial Actors with a root pose.
         actor.editorAddable = false; // Only the Actor class spawner creates it.
         actor.sceneSerializable = true;
         actor.serialize = [](ayt::serializer::ISerializer& serializer,

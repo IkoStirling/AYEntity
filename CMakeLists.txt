@@ -59,6 +59,7 @@ add_library(AYEntityCore STATIC
     src/AYWorld.cpp
     src/AYWorldLifecycle.cpp
     src/AYEntity.cpp
+    src/AYEntitySpatial.cpp
     src/AYComponentRegistry.cpp
     src/AYEntityReflection.cpp
     src/AYPerspectiveCameraSelection.cpp
@@ -624,6 +625,9 @@ if(BUILD_TESTING)
         unittest/AYTest_DeterministicLane.cpp unittest/AYTest_DetFloatSim.cpp)
     target_link_libraries(AYEntity_DeterministicTests PRIVATE AYEntityCore AYTest)
     ay_add_test(AYEntity_DeterministicTests LABELS "ayentity;determinism" TIMEOUT 60 RUN_SERIAL)
+    add_executable(AYEntity_SpatialTests unittest/AYTest_SpatialEntity.cpp)
+    target_link_libraries(AYEntity_SpatialTests PRIVATE AYEntityCore AYTest)
+    ay_add_test(AYEntity_SpatialTests LABELS "ayentity;spatial" TIMEOUT 60)
     add_executable(AYEntity_PerspectiveCameraTests
         unittest/PerspectiveCameraTestMain.cpp unittest/AYTest_PerspectiveCamera.cpp)
     target_link_libraries(AYEntity_PerspectiveCameraTests PRIVATE AYEntityCore AYTest)

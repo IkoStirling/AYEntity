@@ -30,7 +30,19 @@ ComponentDescriptor makeComponentDescriptor(
     descriptor.type = std::type_index(typeid(T));
     descriptor.size = sizeof(T);
     descriptor.alignment = alignof(T);
-    descriptor.editorAddable = true;
+    descriptor.intrinsic = std::is_same_v<T, Transform>;
+    descriptor.editorAddable = !descriptor.intrinsic;
+    // Standard spatial components. Custom component descriptors can explicitly opt in.
+    descriptor.requiresSpatial = descriptor.intrinsic
+        || name == "MeshComponent" || name == "SpriteComponent" || name == "TilemapComponent"
+        || name == "PerspectiveCameraComponent" || name == "OrthoCameraComponent"
+        || name == "RigidBodyComponent" || name == "ColliderComponent"
+        || name == "SimTransformComponent" || name == "DetSimTransformComponent"
+        || name == "SkeletonComponent" || name == "AnimationComponent" || name == "BlendSpaceComponent"
+        || name == "AnimationStateMachineComponent" || name == "SpriteAnimationComponent" || name == "ParticleSystemComponent"
+        || name == "AudioEmitterComponent" || name == "AudioListenerComponent"
+        || name == "CameraControllerComponent" || name == "ParticleEmitterComponent"
+        || name == "ParticleEffectComponent" || name == "ParticleSurface2DComponent";
     descriptor.add = multiplicity == ComponentMultiplicity::Multiple
         ? +[](Entity& entity) -> IComponent* { return entity.createComponent<T>(); }
         : +[](Entity& entity) -> IComponent* { return entity.addComponent<T>(); };
