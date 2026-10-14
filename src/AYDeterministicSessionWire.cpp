@@ -22,7 +22,7 @@ DetSimTransformComponent::Snapshot pose(Reader& r) {
 namespace detwire {
 ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
     if(bytes.size()>maxInputBytes)throw std::runtime_error("Manifest size limit");
-    auto r=checked(bytes,manifestMagic,5);ManifestLayout layout;
+    auto r=checked(bytes,manifestMagic,6);ManifestLayout layout;
     const auto app=r.u32(),input=r.u32(),numerator=r.u32(),denominator=r.u32(),dt=r.u32();
     const auto poseSchema=r.u32(),snapshot=r.u32();r.u64();
     if(!app || !input || !numerator || !denominator || poseSchema!=1 || snapshot!=DetSimTransformComponent::kSnapshotVersion
@@ -32,8 +32,9 @@ ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
     if(r.u32()!=math::DetFloat32::kProfileVersion || r.u32()!=math::DetQuaternion::kRotationProfileVersion
         || r.u32()!=math::kDetMathProfileVersion || r.u32()!=math::DetQuaternion::kAngularIntegrationProfileVersion)
         throw std::runtime_error("Unknown manifest numeric profile");
-    if(r.version==5 && r.u32()!=math::DetFloat64::kProfileVersion)throw std::runtime_error("Unknown binary64 profile");
-    auto n=r.count(maxSchemas);std::uint32_t previous=1;bool hasBinary64=false;
+    if(r.version>=5 && r.u32()!=math::DetFloat64::kProfileVersion)throw std::runtime_error("Unknown binary64 profile");
+    if(r.version==6&&(r.u32()!=math::kDetMath64ProfileVersion||r.u32()!=math::DetQuaterniond::kRotationProfileVersion||r.u32()!=math::DetQuaterniond::kAngularIntegrationProfileVersion))throw std::runtime_error("Unknown binary64 geometry/function profile");
+    auto n=r.count(maxSchemas);std::uint32_t previous=1;bool hasBinary64=false,hasGeometry64=false;
     for(unsigned i=0;i<n;++i) {
         const auto id=r.u32(),version=r.u32(),count=r.count(maxFields);
         if(id<=previous || id==UINT32_MAX || !version || !count)throw std::runtime_error("Invalid manifest schema");previous=id;
@@ -43,14 +44,17 @@ ManifestLayout manifestLayout(std::span<const std::uint8_t> bytes) {
             auto field=r.u32();if(field<=previousField)throw std::runtime_error("Invalid manifest field ID");previousField=field;
             const auto type=r.version==1?DetStateType::Word:static_cast<DetStateType>(r.u32());
             if(type==DetStateType::Float64 && r.version<5)throw std::runtime_error("Binary64 requires manifest5");
-            hasBinary64|=type==DetStateType::Float64;
-            const std::uint32_t width=type==DetStateType::Vec2?2:type==DetStateType::Vec3?3:type==DetStateType::Quaternion?4:1;
+            const bool geometry64=type==DetStateType::Vec2d||type==DetStateType::Vec3d||type==DetStateType::Quaterniond;
+            if(geometry64&&r.version<6)throw std::runtime_error("Binary64 geometry requires manifest6");
+            hasBinary64|=type==DetStateType::Float64||geometry64;hasGeometry64|=geometry64;
+            const std::uint32_t width=type==DetStateType::Vec2||type==DetStateType::Vec2d?2:type==DetStateType::Vec3||type==DetStateType::Vec3d?3:type==DetStateType::Quaternion||type==DetStateType::Quaterniond?4:1;
             std::vector<std::uint64_t> defaults;for(unsigned k=0;k<width;++k)defaults.push_back(r.u64());
             if(type!=DetStateType::Word)(void)decodeDetStateValue(type,defaults);
             fields.push_back({field,type,width});
         }
     }
     if(r.version==5&&!hasBinary64)throw std::runtime_error("Empty manifest binary64 surface");
+    if(r.version==6&&!hasGeometry64)throw std::runtime_error("Empty manifest binary64 geometry surface");
     n=r.count(maxSchemas);std::set<std::uint32_t> systems;std::optional<std::pair<std::int32_t,std::uint32_t>> lastSystem;
     for(unsigned i=0;i<n;++i){const auto id=r.u32();const auto priority=std::bit_cast<std::int32_t>(r.u32());
         const auto key=std::pair{priority,id};

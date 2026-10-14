@@ -3326,3 +3326,30 @@ Domain仍为有限binary32球/OBB，受角步<=1rad/substep和分量<=1e6限制�
 不将其它系统写pose自动沙箱化，应用承担sole-owner闭包约定。
 新标准Host示例同时注册Float64时钟，在同一manifest5状态中实际运行/录制/恢复/播放。
 验收和源码入口见[Stage76–78](../../AYDocs/DETERMINISTIC-PHYSICS-NUMERICS-STAGE76-78.md)。
+
+## Stage79–82：binary64 几何闭包与 rigid3D profile2
+
+稳定state type16..18追加于既有variant末尾，不重编号旧值。DetStateLayout宽度从canonical initial
+编码确定；decoder分别验证full64-bit finite lanes。manifest6只在新geometry surface存在时发射，
+追加math64/rotation64/angular64 profiles；scalar-only5与旧1..4路径保留。Raw quat不是unit语义，
+应用validator负责。标准pose/dt仍32，matrix不注册对象内存。
+
+Rigid3D body/schema2追加continuous bool；policy2封存skin/hit/cast预算；joint2每joint15字段，
+limits/motor合并canonical UInt32 flags，8joint+2header为122字段。logic version/hash2隔离旧profile1。
+Capsule localY、segment0=sphere，惯量含半球中心偏移；segment-OBB距离在plane crossing intervals
+求有限quadratic minima，稳定最早t。每capsule pair一个contact，inside用稳定minimum box axis。
+
+Hinge两轴对齐+anchor3行，twist自由；Slider两横向anchor行+rotation3行，axis travel自由。
+Hinge wrap[-pi,pi]限位、Slider signed-distance限位，motor lambda scratch每substep按force*dt clamp，
+position阶段只修约束，所有策略进入注册joint global/actor defaults。没有warm cache/servo/breakage。
+
+Pure sphere sweep用当前CP冻结geometry；runtime CCD只准Static geometry+Dynamic spheres且无joints，
+按relative displacement conservative planes求最早impact，推进全部sphere并施加冲量，再走remaining。
+Stable pair IDs/earliest fraction，量化/iteration/hit预算明确失败；scratch所有检查后physics写入。
+skin上小分离/闭合<=slop交给离散校正，sensors保留end-boundary事件语义。CCDradius>=2*skin。
+Numeric、motor/contact scratch每tick从closure重建，restore/实际late-input重新执行一致，无进程隐藏缓存。
+
+必要Windows checks与双scenario标准Host；完整CP/trace相等是生产路径证据，不是独立whole-CP golden。
+最终原生VM Deferred，范围/失败材料见Stage79–82文档与out/detcompletion79-20261014。
+
+Pose publication preflights complete snapshots, restores exact solver quaternion bits and retains two logical revisions; no setter renormalization after final trigger geometry.32 nontrivial-rotation checks expose non-idempotent normalization and assert integrator/published bits equality.

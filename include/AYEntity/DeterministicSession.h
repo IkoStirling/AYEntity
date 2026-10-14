@@ -151,6 +151,8 @@ public:
     bool registerSchema(DetStateSchema schema,std::vector<std::uint64_t> defaults={});
     /// Register finite, bounded typed fields before actors/seal; manifest2 by default.
     /// Float64 type15 opts into manifest5 and seals its software binary64 profile1;
+    /// binary64 Vec2d/Vec3d/Quaterniond types16..18 select manifest6 with function,
+    /// rotation and angular-integration profiles. Scalar-only manifest5 is unchanged.
     /// prior no-Float64 sessions retain their existing manifest1..4 branches.
     /// Defaults are automatically applied to actors and registered globals.
     bool registerTypedSchema(DetTypedStateSchema schema);

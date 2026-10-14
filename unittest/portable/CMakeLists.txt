@@ -108,6 +108,7 @@ add_library(ReplayArchiveKernel STATIC "${AYENTITY_ROOT}/src/AYDeterministicSess
     "${AYENTITY_ROOT}/src/AYDeterministicRollback.cpp" "${AYENTITY_ROOT}/src/AYDeterministicRollbackNetwork.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRollbackReplay.cpp" "${AYMATH_ROOT}/src/DetFloat.cpp" "${AYMATH_ROOT}/src/DetMath.cpp"
     "${AYENTITY_ROOT}/src/AYDeterministicRigidBody3D.cpp" "${AYMATH_ROOT}/src/DetFloat64.cpp"
+    "${AYMATH_ROOT}/src/DetMath64.cpp"
     $<TARGET_OBJECTS:TypedStateBackend>)
 target_compile_features(ReplayArchiveKernel PUBLIC cxx_std_23)
 target_include_directories(ReplayArchiveKernel PUBLIC "${AYENTITY_ROOT}/include" "${AYMATH_ROOT}/include" "${AYMATH_ROOT}/third_party/softfloat/include")

@@ -7,7 +7,7 @@ D ratio(int a,int b){return D::fromInt(a)/D::fromInt(b);}D abs(D x){return x.sig
 DetRigidBody3D sphere(D radius,D mass){DetRigidBody3D b;b.shape=DetRigidShape3D::Sphere;b.half={radius,radius,radius};b.mass=mass;b.friction=D{};return b;}
 V position(const DetSessionCheckpoint& cp,SimEntityId id){return V::fromBits(cp.actors.at(id).pose.position);}
 V velocity(const DetSessionCheckpoint& cp,SimEntityId id,const DetRigidBody3DConfig& c){DetStateLayout l(detRigidBodySchema3D(c));return std::get<V>(l.read(cp.actors.at(id).blocks.at(c.bodySchema),5));}
-void advance(DeterministicSession& s,unsigned count){for(unsigned i=0;i<count;++i){auto tick=s.nextTick();require(s.advance({tick,1,{}}),s.error().c_str());}}
+void advance(DeterministicSession& s,unsigned count){for(unsigned i=0;i<count;++i){auto tick=s.nextTick();if(!s.advance({tick,1,{}}))throw std::runtime_error(s.error());}}
 DetRigidBody3D fixed(V half){DetRigidBody3D b;b.mode=DetRigidMode3D::Static;b.mass=D{};b.half=half;return b;}
 void elastic(){for(int massB:{1,3}){DetRigidBody3DConfig c;c.gravity={};c.substeps=1;DeterministicSession s({77,1,1,64,77});require(installDetRigidBody3D(s,c),"install elastic");
     auto a=sphere(ratio(1,2),D::fromInt(1)),b=sphere(ratio(1,2),D::fromInt(massB));a.velocity=V::fromInts(1,0,0);b.velocity=V::fromInts(-1,0,0);a.restitution=b.restitution=D::fromInt(1);

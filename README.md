@@ -1738,3 +1738,23 @@ Distance/BallSocket/Fixed关节；32体/512scratch接触/32触发对/8关节等�
 其Live96/Record64/Replay64、恢复/末尾seek及完整CP/trace比较通过；旧ControlHost兼容通过。
 全部新范围LocalPassed/NativeDeferred，完整边界见
 [Stage76–78](../../AYDocs/DETERMINISTIC-PHYSICS-NUMERICS-STAGE76-78.md)。
+
+## Stage79–82：binary64 几何与 rigid3D profile2
+
+新增finite DetVec2d/3d/Quaterniond类型16..18、完整64-bit lanes与manifest6；
+封存函数/rotation/angular profiles，旧manifest1..5发射分支不变，无隐式迁移。
+builtin SimTransform/physics仍为binary32；matrix仍按element scalar注册。
+
+Rigid3D profile2扩展localY胶囊（radius,halfStraightSegment,radius）、均匀惯量、
+最近线段/分段segment-OBB contact；Hinge/Slider加immutable limits与force/torque-capped speed motor。
+Pure detRigidSphereSweep3D冻结checkpoint geometry，skin/earliest/tie/filter/sensor规则显式，budget failure抛错。
+body.continuous启用线性球CCD：只有Static shapes+Dynamic spheres，没有joint/Kinematic/Dynamic盒/胶囊，
+nonsensor启用球radius>=2*slop；relative sphere impacts、固定预算，失败后既有显式restore。
+profile2 body/policy/joint schema+logic身份有意不同于profile1，旧存档不自动升级；trigger payload1不变。
+
+[Host示例](examples/detrigidbody3d/README.md)提供rigid/ccd双scenario，两者都含Float64 clock/vector/rotation。
+新geometry state、capsule/inertia、hinge-slider motor/limits、CCD/restore/late-input和实际双路线Host检查，
+没有长稳/远端CI；native VM Deferred。仍缺mesh/compound、通用旋转CCD、sleep/islands、servo/breakage。
+详见[Stage79–82范围与验收](../../AYDocs/DETERMINISTIC-COMPLETION-STAGE79-82.md)。
+
+Rigid3D提交保留solver rotation bits，完整pose snapshot先预检；避免额外归一化后geometry/history与存储pose末位不一致。Fresh actor previous/current一致。

@@ -10,7 +10,8 @@ namespace {
 constexpr DetStateType types[]={DetStateType::Bool,DetStateType::Int8,DetStateType::UInt8,
     DetStateType::Int16,DetStateType::UInt16,DetStateType::Int32,DetStateType::UInt32,
     DetStateType::Int64,DetStateType::UInt64,DetStateType::Float32,DetStateType::Vec2,
-    DetStateType::Vec3,DetStateType::Quaternion,DetStateType::EntityRef,DetStateType::Float64};
+    DetStateType::Vec3,DetStateType::Quaternion,DetStateType::EntityRef,DetStateType::Float64,
+    DetStateType::Vec2d,DetStateType::Vec3d,DetStateType::Quaterniond};
 template<class T> T integer(std::span<const std::uint64_t> words) {
     using U=std::make_unsigned_t<T>;
     if(words.size()!=1 || (sizeof(T)<8 && words[0]>std::numeric_limits<U>::max()))
@@ -58,6 +59,14 @@ DetStateValue decodeDetStateValue(DetStateType type,std::span<const std::uint64_
     case DetStateType::Float64:{if(words.size()!=1)throw std::invalid_argument("Binary64 state shape");auto v=math::DetFloat64::fromBits(words[0]);if(!v.isFinite())throw std::invalid_argument("Non-finite binary64 state");return v;}
     default:break;
     }
+    if(type==DetStateType::Vec2d||type==DetStateType::Vec3d||type==DetStateType::Quaterniond){
+        const std::size_t width=type==DetStateType::Vec2d?2:type==DetStateType::Vec3d?3:4;
+        if(words.size()!=width)throw std::invalid_argument("Binary64 vector/rotation state shape");
+        for(auto word:words)if(!math::DetFloat64::fromBits(word).isFinite())throw std::invalid_argument("Non-finite binary64 lane");
+        if(type==DetStateType::Vec2d)return math::DetVec2d::fromBits({words[0],words[1]});
+        if(type==DetStateType::Vec3d)return math::DetVec3d::fromBits({words[0],words[1],words[2]});
+        return math::DetQuaterniond::fromBits({words[0],words[1],words[2],words[3]});
+    }
     const std::size_t width=type==DetStateType::Float32?1:type==DetStateType::Vec2?2:
         type==DetStateType::Vec3?3:type==DetStateType::Quaternion?4:0;
     if(!width || words.size()!=width)throw std::invalid_argument("Unknown typed state type/width");
@@ -97,7 +106,7 @@ void writeDetStateValue(const DetTypedStateSchema& schema,std::span<std::uint64_
 DetStateLayout::DetStateLayout(const DetTypedStateSchema& schema):_defaults(detStateDefaults(schema)) {
     std::size_t offset=0;_fields.reserve(schema.fields.size());
     for(const auto& f:schema.fields){const auto type=detStateType(f.initial);
-        const std::size_t width=type==DetStateType::Vec2?2:type==DetStateType::Vec3?3:type==DetStateType::Quaternion?4:1;
+        const std::size_t width=encodeDetStateValue(f.initial).size();
         _fields.push_back({f.id,type,offset,width});offset+=width;}
 }
 const DetStateLayout::Field& DetStateLayout::locate(std::size_t size,std::uint32_t id) const {

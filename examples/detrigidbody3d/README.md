@@ -1,6 +1,6 @@
 # Deterministic rigid3D standard Host
 
-**Version:** 0.1.0
+**Version:** 0.2.0
 **Date:** 2026-10-14
 **Status:** Active
 **Owner:** AYEntity
@@ -22,14 +22,28 @@ Output `.state`, `.trace` and `.summary.json` are fresh-only; physical I/O failu
 may leave partial new files. Example metadata paths must be printable ASCII.
 
 This console sample assembles standard Entity Core/Runtime, module-owned
-DeterminismHost and Scene. It creates a floor, dynamic box, falling sphere and
-ball-socket pendulum. Canonical input applies pendulum force through tick31;
-the physics solver owns position/rotation. A registered software Float64 clock
-advances exactly1/64 per tick and selects manifest5. Physics remains binary32.
-Display/file output does not feed native values back into Sim.
+DeterminismHost and Scene. Default `--scenario rigid` creates a floor, dynamic box,
+falling sphere, ball-socket pendulum, a motor/limited hinge rotor and slider capsule.
+`--scenario ccd` instead creates a fast Dynamic sphere, thin Static box wall and
+Static capsule, with one substep and optional linear sphere CCD.
 
-`AYEntity_RigidBody3DHostExample` actually passed Live96 advances (64forward plus
-32restore), Record64 and Replay64 with full final `.state` and main `.trace`
-byte equality and final replay seek. Restore/seek stay on the Host owner thread.
-This is finite Windows Release evidence, not whole-CP independent goldens,
-renderer/network/large-world coverage or final native VM acceptance.
+Canonical input applies force through tick31. Both recipes register software
+Float64 clock, vector and quaternion metadata, select manifest6 and advance with
+an explicit software widening of authoritative ctx.dt(). Physics remains binary32;
+binary64 metadata is independent registered logical state, not a replacement pose.
+Trace includes every actor pose and binary64 global lane; full state includes all
+registered state. Display/file output never feeds native values back into Sim.
+
+For the CCD recipe, pass `--scenario ccd` in every Live/Record/Replay command above.
+Scenario enters content identity: mismatched replays reject. Rigid3D profile2 uses
+new body/policy/joint schema and logic identities; no implicit profile1 migration.
+CCD admits only Static shapes plus Dynamic spheres and no joints; rotation is held
+for geometry, sphere spin stays valid. End-boundary triggers are not swept events.
+Iteration/hit budget failure is explicit; use the existing restore/fault boundary.
+
+`AYEntity_RigidBody3DHostExample` runs both scenarios, each actual Live96 advances
+(64 forward plus32 restore), Record64 and Replay64 with full final `.state` and
+main `.trace` byte equality and final seek: six real processes. Restore/seek stay
+on the Host owner thread. This is finite Windows Release evidence, not independent
+whole-CP goldens, renderer/network/large-world or final native VM coverage.
+See [Stage79–82](../../../../AYDocs/DETERMINISTIC-COMPLETION-STAGE79-82.md).
