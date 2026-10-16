@@ -431,10 +431,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
         const float interpolationAlpha =
             ayt::game::GameLoop::instance().getInterpolationFactor();
         const ayt::math::Float4x4 worldM =
-            ayt::math::Transform::getMatrix(
-                                            transform->interpolatedPosition(interpolationAlpha),
-                                            transform->interpolatedRotation(interpolationAlpha),
-                                            transform->scale);
+            e->worldMatrix(interpolationAlpha);
 
         bool submittedSubmesh = false;
         uint32_t submeshOrdinal = 0;

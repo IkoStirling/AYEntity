@@ -1,6 +1,7 @@
 // AYSceneSerializer.cpp — P4-B .ayscene v0 save/load.
 
 #include "AYEntity/SceneSerializer.h"
+#include <AYEntity.h>
 #include "AYEntity/ComponentFactory.h"
 #include "AYEntity/ComponentRegistry.h"
 #include "AYEntity/EntityImpl.h"
@@ -67,10 +68,7 @@ std::unordered_map<SceneMigKey, SceneSchemaMigrateFn, SceneMigKeyHash>& sceneMig
 
 void clearWorldEntities(World& world)
 {
-    const std::vector<Entity*> entities = world.getAllEntities();
-    for (Entity* entity : entities) {
-        world.destroyEntity(entity);
-    }
+    world.clearEntities();
 }
 
 bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world,
@@ -99,6 +97,18 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world,
         std::string name = entity->getName() ? entity->getName() : "";
         s.field("name", name);
 
+        std::string persistentId = entity->persistentId();
+        std::string kind = entity->isSpatial() ? "spatial" : "data";
+        std::string parentId = entity->spatialParent() ? entity->spatialParent()->persistentId() : "";
+        std::string ownerId = entity->owner() ? entity->owner()->persistentId() : "";
+        s.field("persistentId", persistentId); s.field("kind", kind);
+        s.field("spatialParent", parentId); s.field("owner", ownerId);
+        if (entity->isSpatial()) {
+            s.beginObject("spatial");
+            writeIdentity(s, *entity, *entity->transform());
+            ComponentFactory::serializeComponent(s, *entity->transform());
+            s.endObject();
+        }
         s.beginArray("components");
         if (auto* actor = entity->getComponent<ActorInstanceComponent>()) {
             ActorInstanceComponent snapshot;
@@ -126,7 +136,7 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world,
             continue;
         }
         for (IComponent* component : entity->getComponents()) {
-            if (component == nullptr) {
+            if (component == nullptr || component == entity->transform()) {
                 continue;
             }
             const char* registeredTypeName =
@@ -218,6 +228,8 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                      ayt::math::EngineCoordinateConvention::cacheTag);
     }
 
+    struct PendingRelation { Entity* entity; std::string parent, owner; };
+    std::vector<PendingRelation> relations;
     s.beginArray("entities");
     while (s.hasMoreArrayElements()) {
         s.beginObject(nullptr);
@@ -227,7 +239,18 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
         s.field("id", fileId);
         s.field("name", name);
 
-        Entity* entity = world.createEntity();
+        std::string kind, persistentId, parentId, ownerId;
+        if (wireVersion >= 5) {
+            s.field("kind", kind); s.field("persistentId", persistentId);
+            s.field("spatialParent", parentId); s.field("owner", ownerId);
+            if (kind != "spatial" && kind != "data") {
+                s.reportError(ayt::serializer::SerializeError::Code::InvalidInput, "invalid Entity kind");
+                return false;
+            }
+        }
+        Entity* entity = wireVersion >= 5
+            ? world.createEntity(kind == "spatial" ? EntityKind::Spatial : EntityKind::Data)
+            : world.createEntity();
         if (entity == nullptr) {
             s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
                           "failed to create entity during scene load");
@@ -243,6 +266,25 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
             entity->setName(name.c_str());
         }
         (void)fileId;
+        if (wireVersion >= 5) {
+            if (!entity->restorePersistentId(persistentId)) {
+                s.reportError(ayt::serializer::SerializeError::Code::InvalidInput, "invalid or duplicate Entity persistentId");
+                return false;
+            }
+            if (entity->isSpatial()) {
+                s.beginObject("spatial");
+                std::string id, displayName;
+                s.field(kInstanceIdField, id); s.field(kDisplayNameField, displayName);
+                if (!entity->setComponentInstanceId(entity->transform(), id)
+                    || !ComponentFactory::deserializeComponent(s, "Transform", *entity->transform())) {
+                    s.reportError(ayt::serializer::SerializeError::Code::InvalidInput, "invalid intrinsic spatial pose");
+                    return false;
+                }
+                entity->setComponentDisplayName(entity->transform(), displayName);
+                s.endObject();
+            }
+            relations.push_back({entity, parentId, ownerId});
+        }
 
         std::vector<std::pair<std::string, std::string>> deserializedComponents;
         s.beginArray("components");
@@ -264,9 +306,17 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                               "component entry missing $type");
             } else {
                 const auto* descriptor = ComponentRegistry::instance().find(typeName);
+                if (wireVersion >= 5 && descriptor && descriptor->intrinsic) {
+                    s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
+                        "Transform is intrinsic in schema5, not a component entry");
+                    return false;
+                }
                 const bool duplicateSingle = descriptor
                     && descriptor->multiplicity == ComponentMultiplicity::Single
-                    && entity->hasComponentByName(typeName.c_str());
+                    && (descriptor->intrinsic
+                        ? std::any_of(deserializedComponents.begin(), deserializedComponents.end(),
+                            [&typeName](const auto& read) { return read.second == typeName; })
+                        : entity->hasComponentByName(typeName.c_str()));
                 IComponent* component = duplicateSingle
                     ? nullptr
                     : ComponentFactory::addComponent(*entity, typeName.c_str());
@@ -298,6 +348,9 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
         // Dependencies synthesized by migration hooks must not shadow an
         // explicit component later in the file (including legacy Scenes).
         if (s.lastError().ok()) {
+            entity->setLegacySpatialMigration(wireVersion < 5
+                && std::none_of(deserializedComponents.begin(), deserializedComponents.end(),
+                    [](const auto& read) { return read.second == "Transform"; }));
             for (const auto& [instanceId, typeName] : deserializedComponents) {
                 auto* component = entity->findComponentById(instanceId);
                 if (!component) continue;
@@ -317,10 +370,24 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
             }
         }
 
+        entity->setLegacySpatialMigration(false);
         s.endObject();
     }
     s.endArray();
     s.endObject();
+    for (const auto& relation : relations) {
+        auto* parent = relation.parent.empty() ? nullptr : world.findEntityByPersistentId(relation.parent);
+        auto* owner = relation.owner.empty() ? nullptr : world.findEntityByPersistentId(relation.owner);
+        std::string error;
+        if ((!relation.parent.empty() && !parent) || (!relation.owner.empty() && !owner)
+            || (!relation.parent.empty() && !relation.entity->setSpatialParent(parent, ReparentMode::KeepLocal, &error))
+            || (!relation.owner.empty() && !relation.entity->setOwner(owner, &error))) {
+            s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
+                error.empty() ? "dangling Entity relationship" : error);
+            if (outError) *outError = s.lastError();
+            return false;
+        }
+    }
 
     if (!s.lastError().ok()) {
         if (outError) {
@@ -437,6 +504,13 @@ bool loadScene(World& world, const std::string& path,
         if (auto* runtime=world.findSystemByName("CameraRuntimeSystem"))
             static_cast<CameraRuntimeSystem*>(runtime)->resetAllViews();
         return true;
+    }
+    if (outError && outError->message.empty()) {
+        *outError = serializer->lastError();
+        if (outError->message.empty()) {
+            outError->code = ayt::serializer::SerializeError::Code::InvalidInput;
+            outError->message = "invalid scene envelope";
+        }
     }
     clearWorldEntities(world);
     auto restore = ayt::serializer::createSerializer(ayt::serializer::Format::Json);

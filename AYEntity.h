@@ -149,6 +149,17 @@ T* Entity::createComponent(Args&&... args) {
     World* world = getWorld();
     const auto* descriptor = ComponentRegistry::instance().find<T>();
     if (!world || !descriptor) return nullptr;
+    if constexpr (std::is_same_v<T, Transform>) {
+        if (transform()) return nullptr;
+        auto* intrinsic = acquireLegacyTransform();
+        if constexpr (sizeof...(Args) > 0) {
+            if (intrinsic) { *intrinsic = Transform(std::forward<Args>(args)...); intrinsic->onAttach(this); }
+        }
+        return intrinsic;
+    }
+    if (!prepareSpatialComponent(descriptor->requiresSpatial)) return nullptr;
+    if (spatialParent() && (descriptor->name == "RigidBodyComponent"
+        || descriptor->name == "SimTransformComponent" || descriptor->name == "DetSimTransformComponent")) return nullptr;
     if (descriptor->multiplicity == ComponentMultiplicity::Single
         && hasComponent<T>()) return nullptr;
 
@@ -193,6 +204,7 @@ std::vector<T*> Entity::getComponents() const {
 
 template<typename T>
 void Entity::removeComponent() {
+    if constexpr (std::is_same_v<T, Transform>) return;
     World* world = getWorld();
     if (!world) return;
     const auto* descriptor = ComponentRegistry::instance().find<T>();

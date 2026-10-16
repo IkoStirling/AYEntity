@@ -132,10 +132,8 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             const float aspect = rss->viewportAspect();
             const math::FVector2 viewHalf =
                 selected.camera->visibleHalfExtents(aspect);
-            const math::FVector3 cameraPosition =
-                selected.transform->interpolatedPosition(interpolationAlpha);
-            const math::FQuaternion cameraRotation =
-                selected.transform->interpolatedRotation(interpolationAlpha);
+            math::FVector3 cameraPosition; math::FQuaternion cameraRotation;
+            if (!selected.entity->worldPose(cameraPosition, cameraRotation, interpolationAlpha)) return;
             const float entityAngle = cameraRotation.toEulerAngles().z;
             const float angle = selected.camera->worldRotation(entityAngle);
             const auto center = selected.camera->worldCenter(
@@ -185,10 +183,8 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         }
 
         const ayt::render::RenderDomain2D renderDomain = renderDomainOf(*sprite);
-        const math::FVector3 presentationPosition =
-            transform->interpolatedPosition(interpolationAlpha);
-        const math::FQuaternion presentationRotation =
-            transform->interpolatedRotation(interpolationAlpha);
+        math::FVector3 presentationPosition; math::FQuaternion presentationRotation;
+        if (!entity->worldPose(presentationPosition, presentationRotation, interpolationAlpha)) continue;
 
         const bool worldLit = renderDomain == ayt::render::RenderDomain2D::WorldLit;
         const std::string resourceKey =
@@ -288,8 +284,8 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             const float sy = std::fabs(transform->scale.y);
             const float halfW = 0.5f * (c * sx + s * sy);
             const float halfH = 0.5f * (s * sx + c * sy);
-            if (std::fabs(presentationPosition.x - camCx) > camHalfW + halfW
-                || std::fabs(presentationPosition.y - camCy) > camHalfH + halfH) {
+            if (!entity->spatialParent() && (std::fabs(presentationPosition.x - camCx) > camHalfW + halfW
+                || std::fabs(presentationPosition.y - camCy) > camHalfH + halfH)) {
                 continue;
             }
         }
@@ -328,8 +324,7 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
         entry.item.mesh     = quad;
         entry.item.material = resources.material;
-        entry.item.world    = ayt::math::Transform::getMatrix(
-            presentationPosition, presentationRotation, transform->scale);
+        entry.item.world    = entity->worldMatrix(interpolationAlpha);
         entry.item.shadowFlags = worldLit
             ? ayt::render::makeShadowFlags(sprite->castShadow, /*receive=*/true)
             : ayt::render::ShadowFlags::None;

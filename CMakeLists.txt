@@ -60,6 +60,7 @@ add_library(AYEntityCore STATIC
     src/AYWorld.cpp
     src/AYWorldLifecycle.cpp
     src/AYEntity.cpp
+    src/AYEntitySpatial.cpp
     src/AYComponentRegistry.cpp
     src/AYEntityReflection.cpp
     src/AYPerspectiveCameraSelection.cpp
@@ -536,6 +537,7 @@ endif()
 if(AY_ENABLE_PHYSICS)
     add_library(AYEntityPhysicsIntegration STATIC
         src/AYEntityPhysicsIntegrationModule.cpp
+        src/AYCameraPhysicsCollision.cpp
         src/AYEntityPhysicsBridge.cpp
     )
     add_library(AYEntity::PhysicsIntegration ALIAS
@@ -645,6 +647,9 @@ if(BUILD_TESTING)
         unittest/AYTest_DeterministicLane.cpp unittest/AYTest_DetFloatSim.cpp)
     target_link_libraries(AYEntity_DeterministicTests PRIVATE AYEntityCore AYTest)
     ay_add_test(AYEntity_DeterministicTests LABELS "ayentity;determinism" TIMEOUT 60 RUN_SERIAL)
+    add_executable(AYEntity_SpatialTests unittest/AYTest_SpatialEntity.cpp)
+    target_link_libraries(AYEntity_SpatialTests PRIVATE AYEntityCore AYTest)
+    ay_add_test(AYEntity_SpatialTests LABELS "ayentity;spatial" TIMEOUT 60)
     add_executable(AYEntity_PerspectiveCameraTests
         unittest/PerspectiveCameraTestMain.cpp unittest/AYTest_PerspectiveCamera.cpp
         unittest/AYTest_CameraFeatures.cpp)
@@ -652,6 +657,18 @@ if(BUILD_TESTING)
     ay_add_test(AYEntity_PerspectiveCameraTests LABELS "ayentity;camera3d" TIMEOUT 60)
 endif()
 
+add_executable(AYEntity_CameraRigExample examples/camera-rig/main.cpp)
+target_link_libraries(AYEntity_CameraRigExample PRIVATE AYEntityCore)
+if(BUILD_TESTING AND TARGET AYEntityPhysicsIntegration)
+    add_executable(AYEntity_CameraRigIntegrationTests unittest/AYTest_CameraRigIntegration.cpp)
+    target_link_libraries(AYEntity_CameraRigIntegrationTests PRIVATE AYEntityPhysicsIntegration AYTest)
+    target_compile_definitions(AYEntity_CameraRigIntegrationTests PRIVATE
+        AY_CAMERA_RIG_FIXTURE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../../EngineAssets/Validation/CameraRigProject/Assets/worlds/camera_rig.scn")
+    if(AYPHYSICS_BUILD_JOLT)
+        target_compile_definitions(AYEntity_CameraRigIntegrationTests PRIVATE AYPHYSICS_HAS_JOLT=1)
+    endif()
+    ay_add_test(AYEntity_CameraRigIntegrationTests LABELS "ayentity;camera;physics;hierarchy" TIMEOUT 60)
+endif()
 if(BUILD_TESTING AND AY_ENABLE_ENTITY_2D_SCHEMA)
     add_executable(AYEntity_IdentityTests
         unittest/TestMain.cpp

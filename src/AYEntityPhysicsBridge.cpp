@@ -6,6 +6,7 @@
 #include "AYEntity/EntityPhysicsBridge.h"
 
 #include <AYEntity.h>
+#include <AYMath/MathTransform.h>
 #include <AYLog.h>
 #include <AYPhysics/PhysicsManager.h>
 #include <AYPhysics/PhysicsSubSystem.h>
@@ -288,6 +289,9 @@ void EntityPhysicsBridge::syncEntityToPhysics()
             continue;
         }
 
+        Transform worldTransform;
+        if (entity->spatialParent() && !rigidBody->isKinematic() && !rigidBody->isStatic()) continue;
+        if (!entity->worldPose(worldTransform.position, worldTransform.rotation)) continue;
         const uint32_t entityId = entity->getId();
         const ayt::physics::BodyHandle body = rigidBody->getBodyHandle();
         const auto dimension = rigidBody->getPhysicsDimension();
@@ -327,7 +331,7 @@ void EntityPhysicsBridge::syncEntityToPhysics()
                 continue;
             }
             ayt::physics::RigidbodyDesc desc;
-            buildRigidbodyDesc(desc, *transform, *rigidBody);
+            buildRigidbodyDesc(desc, worldTransform, *rigidBody);
             ayt::physics::BodyHandle created = ayt::physics::InvalidBodyHandle;
             const ayt::physics::PhysResult result =
                 createBodyOn(desc, dimension, created);
@@ -360,7 +364,7 @@ void EntityPhysicsBridge::syncEntityToPhysics()
         if (syncMode != RigidBodyComponent::SyncMode::EntityToPhysics
             || (binding.hasSubmittedPose
                 && binding.lastSyncedRevision == transform->revision
-                && poseEquals(binding, *transform))) {
+                && poseEquals(binding, worldTransform))) {
             continue;
         }
 
@@ -368,16 +372,16 @@ void EntityPhysicsBridge::syncEntityToPhysics()
         if (dimension == RigidBodyComponent::PhysicsDimension::TwoD) {
             if (auto* world = manager->world2D()) {
                 result = world->setRigidbodyTransform(
-                    body, transform->position, transform->rotation);
+                    body, worldTransform.position, worldTransform.rotation);
             }
         } else if (auto* world = manager->world3D()) {
             result = world->setRigidbodyTransform(
-                body, transform->position, transform->rotation);
+                body, worldTransform.position, worldTransform.rotation);
         }
 
         if (result == ayt::physics::PhysResult::Ok) {
-            binding.submittedPosition = transform->position;
-            binding.submittedRotation = transform->rotation;
+            binding.submittedPosition = worldTransform.position;
+            binding.submittedRotation = worldTransform.rotation;
             binding.lastSyncedRevision = transform->revision;
             binding.hasSubmittedPose = true;
         } else {
@@ -660,7 +664,9 @@ void EntityPhysicsBridge::syncPhysicsToEntity()
             || binding.syncMode != RigidBodyComponent::SyncMode::PhysicsToEntity) {
             continue;
         }
-        binding.transform->applySimulationPose(body.position, body.rotation);
+        if (binding.entity->spatialParent()) {
+            if (!binding.entity->setWorldMatrix(math::Transform::getMatrix(body.position, body.rotation, binding.transform->scale))) continue;
+        } else binding.transform->applySimulationPose(body.position, body.rotation);
         binding.rigidBody->setVelocity(body.linearVelocity.x,
                                        body.linearVelocity.y,
                                        body.linearVelocity.z);

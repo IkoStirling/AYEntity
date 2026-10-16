@@ -655,4 +655,31 @@ TEST_CASE(offset_change_rebuilds_collider)
     World::instance().shutdown();
 }
 
+
+TEST_CASE(kinematic_attachment_uses_world_pose_and_tracks_parent_motion) {
+    ayt::physics::PhysicsBackendDescriptor desc; desc.kind3D = ayt::physics::BackendKind::Mock;
+    TestRig rig(desc); ayt::physics::testaccess::reset();
+    auto& world = World::instance();
+    auto* parent = world.createSpatialEntity(); auto* child = world.createSpatialEntity();
+    parent->transform()->setPosition(10,0,0); child->transform()->setPosition(2,0,0);
+    auto* rb = child->addComponent<RigidBodyComponent>();
+    CHECK_FALSE(child->setSpatialParent(parent)); // Dynamic roots cannot inherit presentation motion.
+    rb->setKinematic(true); rb->setSyncMode(RigidBodyComponent::SyncMode::EntityToPhysics);
+    CHECK(child->setSpatialParent(parent));
+    rig.bridge.syncEntityToPhysics(); rig.step();
+    const auto& payloads = ayt::physics::testaccess::mockBackendCreatePayloads();
+    CHECK(!payloads.empty());
+    if (!payloads.empty()) CHECK_FLOAT_EQ(payloads[0].rigidDesc.position.x,12,1e-5f);
+    ayt::physics::testaccess::reset();
+    parent->transform()->setPosition(20,0,0);
+    rig.bridge.syncEntityToPhysics(); rig.step();
+    bool found = false;
+    for (const auto& command : ayt::physics::testaccess::mockBackendCommands())
+        if (command.type == ayt::physics::PhysicsCommandType::SetRigidbodyTransform) {
+            found = true; CHECK_FLOAT_EQ(command.u.xform.px,22,1e-5f);
+        }
+    CHECK(found); CHECK_FLOAT_EQ(child->transform()->position.x,2,1e-5f);
+    world.destroyEntity(child); world.destroyEntity(parent);
+    rig.bridge.syncEntityToPhysics(); rig.manager->shutdown(); world.shutdown();
+}
 TEST_SUITE_END

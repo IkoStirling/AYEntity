@@ -5,6 +5,7 @@
 
 #include <string_view>
 
+namespace ayt::physics { class PhysicsManager; }
 namespace ayt::entity
 {
 
@@ -24,5 +25,9 @@ public:
 [[nodiscard]] ComponentRegistryResult registerEntityPhysicsComponents(
     ComponentRegistry& registry);
 void registerEntityPhysicsIntegrationSubSystem();
+class World;
+/// Install the default camera sphere-sweep adapter for this World. Custom queries take precedence.
+/// nullptr manager uses the registered PhysicsSubSystem on each probe (safe across teardown).
+void installCameraPhysicsCollision(World& world, ayt::physics::PhysicsManager* manager = nullptr);
 
 } // namespace ayt::entity

@@ -3,6 +3,7 @@
 #include <AYEntity/ComponentRegistration.h>
 #include <AYEntity/EntityPhysicsBridge.h>
 #include <AYEntity/EntityRuntimeModule.h>
+#include <AYEntity/World.h>
 #include <AYEntity/components/ColliderComponent.h>
 #include <AYEntity/components/RigidBodyComponent.h>
 #include <AYGameLoop.h>
@@ -62,6 +63,7 @@ public:
         const ayt::game::FrameContext&) override
     {
         if (phase == ayt::game::FramePhase::FixedPrePhysics) {
+            installCameraPhysicsCollision(World::instance());
             _bridge.syncEntityToPhysics();
         } else if (phase == ayt::game::FramePhase::FixedPostPhysics) {
             _bridge.syncPhysicsToEntity();

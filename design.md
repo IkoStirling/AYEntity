@@ -1,5 +1,37 @@
 # AYEntity Design
 
+## 空间实体与数据实体（2026-10-14）
+
+`World::createSpatialEntity()` 创建空间实体：固有一个不可移除的局部 Transform，
+可以参与空间父子树，拥有位置、旋转和缩放。`World::createDataEntity()` 创建数据实体：
+承载组件、逻辑和状态，没有 Transform，不能挂接空间父节点或装配空间组件。
+两者都可保存在 Scene、拥有其他实体；数据实体不等于“不可运行的纯数据”。
+
+`Entity::transform()` 是空间属性入口。旧 `getComponent/addComponent<Transform>`、
+查询和反射保留一个 reserved intrinsic adapter，指向同一对象，不存在两份姿态。
+`IComponent` 基类仅为旧接口兼容保留；该属性不能用任何组件删除入口移除。
+新代码显式创建实体类型；无参 `createEntity()` 是兼容入口，初次空间获取可升级，
+不得用它表达严格的数据实体。转换使用 `convertKind`，有空间依赖或挂接时拒绝转为数据。
+
+空间父子关系 `setSpatialParent` 与生命周期归属 `setOwner` 独立且限定同一 World，
+禁止循环。`KeepLocal` 保留局部 TRS；`KeepWorld` 保持世界矩阵并校验局部 TRS 可表示性。
+`worldMatrix(alpha)` 按同一插值 alpha 组合祖先，保留非均匀缩放引起的 affine shear；
+`worldPose` 提供世界位置及忽略缩放的组合朝向。需要逆变换的操作拒绝奇异或剪切 TRS，
+失败不改变关系和姿态。动态刚体与权威 Sim 实体必须为空间根节点；层级本身不是确定性 Sim。
+
+销毁拥有者会级联销毁 owned 实体；仅空间挂接的子实体保留并解除挂接，保持世界姿态。
+`canDestroyEntity` 预检无法无损脱离的剪切/奇异情况；普通删除拒绝这类操作。
+`clearEntities` 用于整体替换 Scene，不保留外部节点。名称不是关系键：运行期同 World
+句柄校验版本，Scene schema5 保存独立 persistentId、kind、owner、spatialParent 与 spatial 对象。
+旧 schema1..4 的显式/迁移 Transform 升级为空间属性；其余实体为数据。
+加载先创建全部实体，再恢复关系；重复身份、未知类型、悬空或循环关系失败并走既有回滚。
+
+摄像机、网格、蒙皮、Sprite、Tilemap、粒子和物理桥已读取组合后的世界姿态/矩阵。
+新增边界证据见 `unittest/AYTest_SpatialEntity.cpp`；原有身份、Actor 和摄像机测试保留。
+`EntityPhysicsBridgeTest.cpp` 验证运动学挂接的世界创建姿态与父节点移动命令。
+两种关系深度均限制为256。现有 .act 格式仍表示空间 Actor；数据实体可使用可序列化逻辑组件。
+没有新增骨骼挂点、自动跟随约束或父子/owner 网络复制协议。
+
 ## 2026-10-14 — 相机控制、查询与视口
 
 Core 新增 CameraFrame/CameraRuntime/CameraControllerComponent，无 Renderer/Physics 链接依赖。
@@ -7,7 +39,7 @@ priority399 的 World-owned Present system 生成跟随/环绕/自由姿态；�
 World presentation alpha，identity/generation 变化清除速度历史。震屏仅施加到快照。
 镜头过渡按 viewportId/domain 隔离，单表现 tick 单次推进；中断以当前呈现姿态继续，
 CameraCut 和投影类型变化硬切。3D 镜头补局部姿态/正交/layerMask，2D/3D 补 viewportId
-与 blendDuration/teleport，新增 Scene 字段使用缺省值兼容，不改变文件后缀或 schema4。
+与 blendDuration/teleport；层级整合后的 Scene writer 使用 schema5，并兼容旧字段缺省值。
 查询使用左上像素/视口偏移/LH深度[0,1]，double带主元求解检测失败；不依赖快速透视逆路径。
 Sprite/Tilemap 按实际 Overlay packet 矩阵裁剪，避免过渡/震屏/多视口误剔除。
 Renderer provider 在提取前采样当前 viewport；Host覆盖仍限主视口，World teardown撤销回调。
@@ -3365,3 +3397,11 @@ Module-local regression sources were updated. Runtime tests and interactive edit
 DeterministicSession::debugPolicies2D exposes Session-owned immutable copies of successfully registered collision, character, path, interaction, respawn and flow policies (64/type, best effort allocation). Diagnostic metadata changes no schema, manifest, checkpoint, replay or canonical simulation bytes. Readers pair it with the same Session checkpoint. CameraRuntimeSystem optionally captures actual adapter outputs (256 probes), and returns owned collisions/view transition observations without issuing queries or advancing transitions. Capture defaults off; clear only removes diagnostic probes.
 
 Regression sources are included. Runtime tests and interactive editor acceptance are deferred for this content task; untested changes remain uncommitted.
+
+## Camera / spatial hierarchy integration (2026-10-14)
+
+Camera controllers bind persistent Entity identity with a World-scoped runtime handle; explicit missing targets cannot rebind by name. Presentation control samples world-space ancestor poses and converts once back to local position/orientation through the same alpha, preserving local scale and refusing singular/sheared parents.
+
+Entity.PhysicsIntegration installs the default Jolt sphere-sweep adapter. Host custom queries override it; collisionEnabled explicitly disables per controller. The finite-volume query ignores sensors/self/target bodies, checks generation handles and reports initial penetration at zero center travel. Null/Mock/2D return Unsupported. Orbit distance plus collision radius/padding implement the camera arm and damped recovery. Explicit manager adapters must be detached before manager destruction.
+
+Editor has stable target selection, collision parameters, and undoable main-window hierarchy dragging. CameraRigProject is a portable visual/authoring fixture; its Wall is visual-only, while AYEntity_CameraRigIntegrationTests exercises actual Jolt wall avoidance, lens effects/blending, self-ignore and recovery. See ../../AYDocs/CAMERA-SYSTEM.md and the integration evidence in ../../AYDocs/ENTITY-SPATIAL-HIERARCHY.md. Native Computer Use acceptance is deferred by user request.

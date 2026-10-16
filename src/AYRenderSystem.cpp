@@ -55,13 +55,11 @@ struct CachedDrawResources {
 
 
 
-ayt::math::Float4x4 transformToWorldMatrix(const Transform& transform)
+ayt::math::Float4x4 transformToWorldMatrix(const Entity& entity)
 
 {
     const float alpha = ayt::game::GameLoop::instance().getInterpolationFactor();
-    return ayt::math::Transform::getMatrix(transform.interpolatedPosition(alpha),
-                                           transform.interpolatedRotation(alpha),
-                                           transform.scale);
+    return entity.worldMatrix(alpha);
 
 }
 
@@ -322,7 +320,7 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         item.sourceWorld=reinterpret_cast<uintptr_t>(&world);
         item.mesh         = resources.mesh;
         item.material     = resources.material;
-        item.world        = transformToWorldMatrix(*transform);
+        item.world        = transformToWorldMatrix(*entity);
         // Temporal passes match this rigid draw to its previous transform.
         item.motionObjectId = temporalObjectIdentity(world, *entity);
         item.cameraLayerMask = meshComp->layer >= 0 && meshComp->layer < 32 ? 1u << meshComp->layer : 0;
@@ -333,7 +331,10 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             Transform depthXf = *transform;
             depthXf.scale = meshComp->outlineSourceScale;
             item.hasOutlineDepthWorld = true;
-            item.outlineDepthWorld = transformToWorldMatrix(depthXf);
+            const float alpha = ayt::game::GameLoop::instance().getInterpolationFactor();
+            item.outlineDepthWorld = (entity->spatialParent() ? entity->spatialParent()->worldMatrix(alpha)
+                : ayt::math::Float4x4::identity()) * ayt::math::Transform::getMatrix(
+                    depthXf.interpolatedPosition(alpha),depthXf.interpolatedRotation(alpha),depthXf.scale);
         }
 
         // TransparentPass sorts descending by sortKey (far → near).

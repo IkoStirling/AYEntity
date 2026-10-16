@@ -189,7 +189,7 @@ Entity* World::createEntityInternal() {
     if (_nextEntityId >= _entityPool.size()) {
         _entityPool.resize(_nextEntityId + 1);
     }
-    _entityPool[_nextEntityId] = EntityHandlePool::instance().allocate(_nextEntityId);
+    _entityPool[_nextEntityId] = EntityHandlePool::instance().allocateScoped(_nextEntityId);
     _entities.push_back(std::unique_ptr<Entity>(entity));
 
     uint32_t entityId = _nextEntityId++;
@@ -204,11 +204,25 @@ void World::destroyEntity(Entity* e) {
     // raw Entity* (EditorPlayRuntime clear* during ~dtor after tests call
     // World::shutdown). Must not touch e when the world is down.
     if (!_initialized || !e) return;
+    const auto existing = std::find_if(_entities.begin(), _entities.end(),
+        [e](const auto& entity) { return entity.get() == e; });
+    if (existing == _entities.end()) return;
     if (!e->isValid()) return;
+    std::string error;
+    if (!canDestroyEntity(e,&error)) throw std::logic_error(error);
     destroyEntityInternal(e);
 }
 
 void World::destroyEntityInternal(Entity* e) {
+    // Ownership cascades; spatial attachment alone detaches children preserving their world pose.
+    const auto owned = e->ownedEntities();
+    for (auto* child : owned) destroyEntityInternal(child);
+    const auto children = e->spatialChildren();
+    for (auto* child : children) {
+        std::string ignored;
+        if (!child->setSpatialParent(nullptr, ReparentMode::KeepWorld, &ignored))
+            throw std::logic_error(ignored);
+    }
     uint32_t id = e->getId();
 
     // F7 — drop the entity's component storage entries BEFORE
@@ -271,7 +285,8 @@ std::vector<Entity*> World::queryByNames(const std::vector<const char*>& compone
 }
 
 Entity* World::getEntityByHandle(const EntityHandle& handle) {
-    if (!EntityHandlePool::instance().isValid(handle)) return nullptr;
+    if (handle.id == 0 || handle.id >= _entityPool.size()
+        || _entityPool[handle.id] != handle) return nullptr;
     return findEntity(handle.id);
 }
 

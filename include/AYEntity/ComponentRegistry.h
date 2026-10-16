@@ -49,6 +49,9 @@ struct ComponentDescriptor
     std::type_index type = typeid(void);
     std::size_t size = 0;
     std::size_t alignment = 0;
+    /// Built-in spatial properties retain a legacy reflection adapter, not add/remove semantics.
+    bool intrinsic = false;
+    bool requiresSpatial = false;
     bool editorAddable = false;
     bool sceneSerializable = false;
     ComponentMultiplicity multiplicity = ComponentMultiplicity::Single;

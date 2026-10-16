@@ -12,7 +12,9 @@ namespace ayt::entity
 
 class World;
 
-constexpr uint32_t kSceneSchemaVersion = 4;
+constexpr uint32_t kSceneSchemaVersion = 5;
+/// JSON-only project migration can repair component identities without registered spatial semantics.
+constexpr uint32_t kSceneComponentIdentitySchemaVersion = 4;
 constexpr const char* kSceneSchemaVersionField = "__schemaVersion";
 // H1 (lh-rh-split-entity audit 2026-08-24): embed the engine's
 // coordinate-convention cache tag alongside __schemaVersion so a

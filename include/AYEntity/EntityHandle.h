@@ -3,6 +3,7 @@
 
 #include <AYCore.h>
 #include <cstdint>
+#include <stdexcept>
 
 namespace ayt::entity
 {
@@ -35,6 +36,8 @@ public:
     static EntityHandlePool& instance();
 
     EntityHandle allocate(uint32_t id);
+    /// Internal World allocation; globally distinct generation with World-local resolution.
+    EntityHandle allocateScoped(uint32_t id);
     void release(const EntityHandle& handle);
     bool isValid(const EntityHandle& handle) const;
     void reset();
@@ -43,6 +46,7 @@ private:
     EntityHandlePool() = default;
 
     std::vector<uint32_t> _versions;
+    uint32_t _scopedSerial = 0x80000000u;
 };
 
 // =============================================================================
@@ -63,8 +67,15 @@ inline EntityHandle EntityHandlePool::allocate(uint32_t id) {
     return h;
 }
 
+inline EntityHandle EntityHandlePool::allocateScoped(uint32_t id) {
+    if (id >= _versions.size()) _versions.resize(id + 1,0);
+    if (_scopedSerial == UINT32_MAX) throw std::overflow_error("World entity generation space exhausted");
+    _versions[id] = ++_scopedSerial;
+    return {id,_versions[id]};
+}
+
 inline void EntityHandlePool::release(const EntityHandle& handle) {
-    if (handle.id < _versions.size()) {
+    if (handle.id < _versions.size() && _versions[handle.id] == handle.version) {
         _versions[handle.id]++;
     }
 }

@@ -42,11 +42,33 @@ CameraRuntimeSystem::DebugSnapshot CameraRuntimeSystem::debugSnapshot() const {
     for(const auto& [key,state]:_transitions){CameraFrame frame;if(state.transition.snapshot(frame))out.views.push_back({int32_t(key>>1),bool(key&1),frame,state.transition.debugProgress(),state.transition.debugDuration()});}
     return out;
 }
+bool CameraControllerComponent::setTarget(Entity* target) {
+    if (!_entity || !_entity->getWorld()) return false;
+    if (target && (target == _entity || !target->isSpatial() || target->getWorld() != _entity->getWorld())) return false;
+    targetPersistentId = target ? target->persistentId() : std::string{};
+    targetName = target ? target->getName() : std::string{};
+    targetHandle = target ? _entity->getWorld()->getEntityHandle(target->getId()) : EntityHandle{};
+    resetHistory(); return true;
+}
+Entity* CameraControllerComponent::resolveTarget() const {
+    auto* world = _entity ? _entity->getWorld() : nullptr;
+    if (!world) return nullptr;
+    Entity* target = nullptr;
+    if (!targetPersistentId.empty()) {
+        target = world->getEntityByHandle(targetHandle);
+        if (!target || target->persistentId() != targetPersistentId)
+            target = world->findEntityByPersistentId(targetPersistentId);
+    } else if (!targetName.empty()) target = world->findEntity(targetName.c_str());
+    if (!target || target == _entity || !target->isSpatial()) { targetHandle = {}; return nullptr; }
+    targetHandle = world->getEntityHandle(target->getId()); return target;
+}
 void CameraRuntimeSystem::onUpdate(float dt) {
     _debugCollisions.clear();
     _dt = std::isfinite(dt) && dt > 0 ? dt : 0;
     ++_tick;
     auto& world = _owner ? *_owner : World::instance();
+    const auto& collision = _collision ? _collision : _defaultCollision;
+    const float alpha = world.presentationInterpolationAlpha();
     for (auto* entity : world.query<Transform, CameraControllerComponent>()) {
         auto* transform = entity->getComponent<Transform>();
         auto* c = entity->getComponent<CameraControllerComponent>();
@@ -56,8 +78,10 @@ void CameraRuntimeSystem::onUpdate(float dt) {
         if (_dt == 0 || c->mode == 0 || c->mode < 0 || c->mode > 3) continue;
         if (!camera_detail::finite(transform->position) || !std::isfinite(transform->rotation.dot(transform->rotation))
             || transform->rotation.dot(transform->rotation) < 1e-12f) continue;
-        auto desiredPosition = transform->position;
-        auto desiredRotation = transform->rotation.normalize();
+        math::FVector3 currentPosition; math::FQuaternion currentRotation;
+        if (!entity->worldPose(currentPosition,currentRotation,alpha)) continue;
+        auto desiredPosition = currentPosition;
+        auto desiredRotation = currentRotation;
         if (c->mode == 3) {
             if (!camera_detail::finite(c->movementInput) || !std::isfinite(c->moveSpeed)
                 || !std::isfinite(c->yawRadians) || !std::isfinite(c->pitchRadians)) continue;
@@ -68,14 +92,13 @@ void CameraRuntimeSystem::onUpdate(float dt) {
             if (c->twoD) movement.z = 0;
             desiredPosition += desiredRotation * movement * (std::max(0.f,c->moveSpeed) * _dt);
         } else {
-            auto* target = c->targetName.empty() ? nullptr : world.findEntity(c->targetName.c_str());
-            auto* targetTransform = target && target != entity ? target->getComponent<Transform>() : nullptr;
-            if (!targetTransform || !camera_detail::finite(targetTransform->position)
+            auto* target = c->resolveTarget();
+            math::FVector3 targetPosition; math::FQuaternion targetRotation;
+            if (!target || !target->worldPose(targetPosition,targetRotation,alpha)
                 || !camera_detail::finite(c->offset)) { c->hasPreviousTarget = false; continue; }
-            const auto targetPosition = targetTransform->interpolatedPosition(world.presentationInterpolationAlpha());
             if (!camera_detail::finite(targetPosition)) continue;
             const auto targetHandle = world.getEntityHandle(target->getId());
-            if (c->previousTargetName != c->targetName || c->previousTargetHandle != targetHandle) c->hasPreviousTarget = false;
+            if (c->previousTargetHandle != targetHandle) c->hasPreviousTarget = false;
             auto anchor = targetPosition;
             if (c->hasPreviousTarget && std::isfinite(c->lookAheadSeconds))
                 anchor += (targetPosition - c->previousTarget) * (std::clamp(c->lookAheadSeconds,0.f,10.f) / _dt);
@@ -93,22 +116,22 @@ void CameraRuntimeSystem::onUpdate(float dt) {
             } else desiredPosition = anchor + c->offset;
             c->collisionAnchor = anchor; c->hasCollisionAnchor = camera_detail::finite(anchor);
             if (c->twoD) {
-                desiredPosition.z = transform->position.z;
-                const auto delta = desiredPosition - transform->position;
+                desiredPosition.z = currentPosition.z;
+                const auto delta = desiredPosition - currentPosition;
                 const float zoneX = std::isfinite(c->deadZone.x) ? std::max(0.f,c->deadZone.x) : 0;
                 const float zoneY = std::isfinite(c->deadZone.y) ? std::max(0.f,c->deadZone.y) : 0;
-                desiredPosition.x = transform->position.x + delta.x - std::clamp(delta.x,-zoneX,zoneX);
-                desiredPosition.y = transform->position.y + delta.y - std::clamp(delta.y,-zoneY,zoneY);
+                desiredPosition.x = currentPosition.x + delta.x - std::clamp(delta.x,-zoneX,zoneX);
+                desiredPosition.y = currentPosition.y + delta.y - std::clamp(delta.y,-zoneY,zoneY);
             }
             // Resolve after damping too: a camera must not interpolate back through an obstruction.
-            desiredPosition = transform->position + (desiredPosition - transform->position) * damping(c->positionDamping,_dt);
-            if (!c->twoD && _collision) {
+            desiredPosition = currentPosition + (desiredPosition - currentPosition) * damping(c->positionDamping,_dt);
+            if (!c->twoD && c->collisionEnabled && collision) {
                 const auto arm = desiredPosition - anchor;
                 const float length = arm.length();
                 if (std::isfinite(length) && length > 1e-6f) {
                     const float radius = std::isfinite(c->collisionRadius) ? std::max(0.f,c->collisionRadius) : .2f;
                     const auto requestedEye=desiredPosition;
-                    const float allowed = _collision({anchor,desiredPosition,radius,entity});
+                    const float allowed = collision({anchor,desiredPosition,radius,entity,target,c->collisionLayerMask,c->ignoreTargetCollision});
                     const float observedDistance=std::isfinite(allowed)&&allowed<length?std::clamp(allowed-std::max(0.f,c->collisionPadding),0.f,length):length;
                     observeCollision({entity->getId(),anchor,requestedEye,anchor+arm*(observedDistance/length),radius,allowed,std::isfinite(allowed)&&allowed>=0});
                     if (!std::isfinite(allowed) || allowed < 0) continue;
@@ -127,8 +150,8 @@ void CameraRuntimeSystem::onUpdate(float dt) {
         if (!c->twoD && c->lookAtTarget && c->hasCollisionAnchor
             && (c->collisionAnchor-desiredPosition).lengthSq()>1e-10f)
             desiredRotation=lookRotation(c->collisionAnchor-desiredPosition);
-        transform->setPresentationPose(desiredPosition,
-            transform->rotation.normalize().slerp(desiredRotation,damping(c->rotationDamping,_dt)).normalize());
+        (void)entity->setWorldPose(desiredPosition,
+            currentRotation.slerp(desiredRotation,damping(c->rotationDamping,_dt)).normalize(),alpha);
     }
 }
 
@@ -152,12 +175,13 @@ bool CameraRuntimeSystem::snapshot(int32_t viewport, bool twoD, CameraFrame& out
 }
 void CameraRuntimeSystem::constrainFrame(const Entity& entity, CameraFrame& frame) const {
     const auto* c = const_cast<Entity&>(entity).getComponent<CameraControllerComponent>();
-    if (!_collision || !c || c->twoD || !c->hasCollisionAnchor || (c->mode != 1 && c->mode != 2)) return;
+    const auto& collision = _collision ? _collision : _defaultCollision;
+    if (!collision || !c || !c->collisionEnabled || c->twoD || !c->hasCollisionAnchor || (c->mode != 1 && c->mode != 2)) return;
     const auto arm = frame.position - c->collisionAnchor;
     const float length = arm.length();
     if (!std::isfinite(length) || length <= 1e-6f) return;
     const float radius = std::isfinite(c->collisionRadius) ? std::max(0.f,c->collisionRadius) : .2f;
-    const float allowed = _collision({c->collisionAnchor,frame.position,radius,&entity});
+    const float allowed = collision({c->collisionAnchor,frame.position,radius,&entity,c->resolveTarget(),c->collisionLayerMask,c->ignoreTargetCollision});
     const float observedDistance=std::isfinite(allowed)&&allowed<length?std::clamp(allowed-std::max(0.f,c->collisionPadding),0.f,length):length;
     observeCollision({entity.getId(),c->collisionAnchor,frame.position,c->collisionAnchor+arm*(observedDistance/length),radius,allowed,std::isfinite(allowed)&&allowed>=0});
     if (!std::isfinite(allowed) || allowed < 0 || allowed >= length) return;

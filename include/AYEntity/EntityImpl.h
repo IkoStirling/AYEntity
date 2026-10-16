@@ -6,11 +6,16 @@
 #include <AYEntity/EntityHandle.h>
 #include <vector>
 #include <string>
+#include <memory>
+#include <AYMath/MathTypes.h>
 
 namespace ayt::entity
 {
 
 class World;
+struct Transform;
+/// Data entities carry logic/state; Spatial entities additionally own one intrinsic local pose.
+
 
 constexpr uint32_t MAX_ENTITIES = 10000;
 
@@ -41,6 +46,40 @@ public:
 
     static Entity* create();
     static void destroy(Entity* e);
+
+    EntityKind kind() const noexcept { return _kind; }
+    bool migratingLegacySpatialFields() const noexcept { return _migratingLegacySpatialFields; }
+    void setLegacySpatialMigration(bool enabled) noexcept { _migratingLegacySpatialFields = enabled; }
+    bool isSpatial() const noexcept { return _kind == EntityKind::Spatial; }
+    /// Intrinsic LOCAL pose. Null for Data; never removable from Spatial entities.
+    Transform* transform() noexcept { return _transform.get(); }
+    const Transform* transform() const noexcept { return _transform.get(); }
+    const std::string& persistentId() const noexcept { return _persistentId; }
+    bool restorePersistentId(const std::string& id);
+    /// Explicit conversion; failure does not change pose, components or relations.
+    bool convertKind(EntityKind kind, std::string* error = nullptr);
+    Entity* spatialParent() const;
+    Entity* owner() const;
+    std::vector<Entity*> spatialChildren() const;
+    std::vector<Entity*> ownedEntities() const;
+    /// Same-World, acyclic relations. Ownership is independent of spatial attachment.
+    bool setSpatialParent(Entity* parent, ReparentMode mode = ReparentMode::KeepLocal,
+                          std::string* error = nullptr);
+    bool setOwner(Entity* owner, std::string* error = nullptr);
+    /// Exact affine world composition, including nonuniform scale/shear.
+    math::Float4x4 worldMatrix(float interpolationAlpha = 1.0f) const;
+    /// Position plus scale-free orientation, useful for cameras and physics.
+    bool worldPose(math::FVector3& position, math::FQuaternion& rotation,
+                   float interpolationAlpha = 1.0f) const;
+    /// Checked world-to-local conversion; rejects singular/sheared local TRS.
+    bool setWorldMatrix(const math::Float4x4& matrix, std::string* error = nullptr);
+    /// Presentation world pose converted through the parent's sampled pose. Preserves local scale.
+    /// Rejects invalid/singular/sheared parent poses without writing; orientation ignores scale.
+    bool setWorldPose(const math::FVector3& position, const math::FQuaternion& rotation,
+                      float interpolationAlpha = 1.0f, std::string* error = nullptr);
+    /// Compatibility acquisition for old addComponent<Transform> callers only.
+    Transform* acquireLegacyTransform();
+    bool prepareSpatialComponent(bool requiresSpatial, std::string* error = nullptr);
 
     uint32_t getId() const { return _id; }
     const char* getName() const { return _name.c_str(); }
@@ -103,6 +142,13 @@ public:
 private:
     void removeAllComponents();
 
+    EntityKind _kind = EntityKind::Data;
+    bool _legacySpatialPromotion = true;
+    bool _identityRestored = false;
+    bool _migratingLegacySpatialFields = false;
+    std::string _persistentId;
+    std::unique_ptr<Transform> _transform;
+    EntityHandle _spatialParent{}, _owner{};
     uint32_t _id = INVALID_ID;
     std::string _name;
     World* _world = nullptr;

@@ -7,14 +7,21 @@
 
 namespace ayt::entity {
 #define AY_CURRENT_CLASS CameraControllerComponent
-/// Optional presentation controller for a camera Entity. Target names are scene references;
-/// targets are re-resolved every frame and never retained as raw pointers.
+/// Optional presentation controller. Persisted target identity survives rename/save/reload.
+/// Runtime target handles are World-scoped; legacy targetName is used only when identity is empty.
 struct CameraControllerComponent : IComponent {
     const char* getName() const override { return "CameraControllerComponent"; }
     /// 0=manual, 1=follow, 2=orbit, 3=free. Set twoD for XY tracking.
     AY_PROPERTY(int32_t, mode, kAttrSerialize)
     AY_PROPERTY(bool, twoD, kAttrSerialize)
     AY_PROPERTY(std::string, targetName, kAttrSerialize)
+    AY_PROPERTY(std::string, targetPersistentId, kAttrSerializeHidden)
+    /// Bind an attached Spatial target in the same World; nullptr explicitly clears both references.
+    bool setTarget(Entity* target);
+    /// Re-resolve stable identity in the owner World; missing explicit identity never falls back to name.
+    Entity* resolveTarget() const;
+    void onAttach(Entity* owner) override { _entity = owner; }
+    void onDetach() override { _entity = nullptr; resetHistory(); }
     AY_PROPERTY(math::FVector3, offset, kAttrSerialize)
     AY_PROPERTY(float, positionDamping, kAttrSerialize)
     AY_PROPERTY(float, rotationDamping, kAttrSerialize)
@@ -28,6 +35,9 @@ struct CameraControllerComponent : IComponent {
     AY_PROPERTY(float, pitchRadians, kAttrSerialize)
     AY_PROPERTY(float, distance, kAttrSerialize)
     AY_PROPERTY(float, moveSpeed, kAttrSerialize)
+    AY_PROPERTY(bool, collisionEnabled, kAttrSerialize)
+    AY_PROPERTY(uint32_t, collisionLayerMask, kAttrSerialize)
+    AY_PROPERTY(bool, ignoreTargetCollision, kAttrSerialize)
     AY_PROPERTY(float, collisionRadius, kAttrSerialize)
     AY_PROPERTY(float, collisionPadding, kAttrSerialize)
 
@@ -35,6 +45,7 @@ struct CameraControllerComponent : IComponent {
         positionDamping(8), rotationDamping(8), deadZone(0,0), lookAheadSeconds(0),
         boundsEnabled(false), boundsMin(-10000,-10000,-10000), boundsMax(10000,10000,10000),
         lookAtTarget(true), yawRadians(0), pitchRadians(0), distance(5), moveSpeed(6),
+        collisionEnabled(true), collisionLayerMask(0xFFFFFFFFu), ignoreTargetCollision(true),
         collisionRadius(.2f), collisionPadding(.05f) {}
 
     /// Local movement input (right/up/forward), set by the game's input facade.
@@ -43,6 +54,7 @@ struct CameraControllerComponent : IComponent {
     bool hasPreviousTarget = false;
     std::string previousTargetName;
     EntityHandle previousTargetHandle{};
+    mutable EntityHandle targetHandle{};
     math::FVector3 collisionAnchor{};
     bool hasCollisionAnchor = false;
     /// Runtime-only offsets applied to camera snapshots, never to authoritative Transform.
@@ -68,6 +80,8 @@ struct CameraControllerComponent : IComponent {
         hasPreviousTarget = false; hasCollisionAnchor = false; shakeDuration = 0; shakeElapsed = 0;
         shakePosition = {}; shakeRotation = {0,0,0,1};
     }
+private:
+    Entity* _entity = nullptr;
 };
 #undef AY_CURRENT_CLASS
 }

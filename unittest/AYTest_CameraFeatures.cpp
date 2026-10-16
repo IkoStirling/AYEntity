@@ -223,5 +223,74 @@ TEST_CASE(debug_collision_snapshot_copies_real_probe_without_extra_sweeps) {
     runtime.setDebugCaptureEnabled(true);runtime.onUpdate(1);auto snapshot=runtime.debugSnapshot();CHECK(calls==1);CHECK(snapshot.collisions.size()==1);
     (void)runtime.debugSnapshot();CHECK(calls==1);runtime.clearDebugHistory();CHECK(runtime.debugSnapshot().collisions.empty());CHECK(snapshot.collisions.size()==1);
 }
+
+
+TEST_CASE(stable_target_survives_rename_reload_and_never_rebinds_reused_name) {
+    CameraFixture fixture; auto* target = fixture.make("Player");
+    auto* camera = fixture.make("FollowStable"); auto* control = camera->addComponent<CameraControllerComponent>();
+    control->mode = 1; control->positionDamping = 0; control->offset = {};
+    CHECK(control->setTarget(target)); const auto targetId = target->persistentId();
+    target->setName("Renamed"); target->transform()->position = {10,2,3};
+    auto& runtime = cameraRuntime(fixture.world); runtime.onUpdate(.1f);
+    CHECK_FLOAT_EQ(camera->worldMatrix()(0,3),10,1e-5f);
+    const char* path = "camera_stable_target.scn";
+    CHECK(saveScene(fixture.world,path)); CHECK(loadScene(fixture.world,path));
+    camera = fixture.world.findEntity("FollowStable"); control = camera->getComponent<CameraControllerComponent>();
+    target = fixture.world.findEntityByPersistentId(targetId);
+    CHECK(control->resolveTarget()==target); CHECK(control->targetPersistentId==targetId);
+    runtime.onUpdate(.1f); CHECK_FLOAT_EQ(camera->worldMatrix()(0,3),10,1e-5f);
+    fixture.world.destroyEntity(target); auto* replacement = fixture.make("Player"); replacement->transform()->position={99,0,0};
+    CHECK(control->resolveTarget()==nullptr); runtime.onUpdate(.1f);
+    CHECK_FLOAT_EQ(camera->worldMatrix()(0,3),10,1e-5f);
+    CHECK(control->setTarget(nullptr)); CHECK(control->targetPersistentId.empty()); CHECK(control->targetName.empty());
+    std::remove(path);
+}
+TEST_CASE(parented_controller_uses_world_target_and_writes_local_pose_once) {
+    CameraFixture fixture; auto* root = fixture.make("Root"); root->transform()->position={10,0,0};
+    root->transform()->rotation=ayt::math::FQuaternion::fromAxisAngle({0,1,0},ayt::math::radians(90.f));
+    auto* target = fixture.make("Target"); CHECK(target->setSpatialParent(root)); target->transform()->position={0,0,2};
+    auto* camera = fixture.make("ParentedFollow"); CHECK(camera->setSpatialParent(root));
+    auto* control = camera->addComponent<CameraControllerComponent>(); CHECK(control->setTarget(target));
+    control->mode=1; control->offset={0,1,-5}; control->positionDamping=0; control->rotationDamping=0;
+    camera->createComponent<PerspectiveCameraComponent>(); auto& runtime=cameraRuntime(fixture.world);
+    runtime.onUpdate(.1f); CameraFrame frame; CHECK(evaluatePerspectiveCamera3D(fixture.world,1,1,frame));
+    CHECK_FLOAT_EQ(frame.position.x,12,1e-4f); CHECK_FLOAT_EQ(frame.position.z,-5,1e-4f);
+    CHECK_FLOAT_EQ(camera->transform()->position.x,5,1e-4f); CHECK_FLOAT_EQ(camera->transform()->position.z,2,1e-4f);
+    root->transform()->position.x=20; runtime.onUpdate(.1f);
+    CHECK(evaluatePerspectiveCamera3D(fixture.world,1,1,frame)); CHECK_FLOAT_EQ(frame.position.x,22,1e-4f);
+    root->transform()->applySimulationPose({20,0,0},root->transform()->rotation);
+    root->transform()->applySimulationPose({30,0,0},root->transform()->rotation);
+    fixture.world.updatePresentation(.1f,.5f); CHECK(evaluatePerspectiveCamera3D(fixture.world,1,.5f,frame));
+    CHECK_FLOAT_EQ(frame.position.x,27,1e-4f); CHECK_FLOAT_EQ(camera->transform()->position.z,2,1e-4f);
+    root->transform()->scale={0,1,1}; const auto before=camera->transform()->position;
+    CHECK_FALSE(camera->setWorldPose({1,2,3},{0,0,0,1})); CHECK((camera->transform()->position-before).lengthSq()<1e-10f);
+}
+TEST_CASE(character_rig_cutscene_switch_blend_reload_and_owner_cleanup) {
+    CameraFixture fixture; auto* player=fixture.make("Character"); player->transform()->position={10,0,0};
+    auto* rig=fixture.make("CameraRig"); CHECK(rig->setSpatialParent(player)); CHECK(rig->setOwner(player));
+    auto* orbit=fixture.make("ThirdPerson"); CHECK(orbit->setSpatialParent(rig)); CHECK(orbit->setOwner(rig));
+    auto* control=orbit->addComponent<CameraControllerComponent>(); CHECK(control->setTarget(player));
+    control->mode=2; control->offset={0,1.5f,0}; control->distance=5; control->positionDamping=0;
+    auto* normal=orbit->createComponent<PerspectiveCameraComponent>(); normal->blendDuration=.5f;
+    auto* close=fixture.make("SpellCloseup"); CHECK(close->setSpatialParent(rig)); CHECK(close->setOwner(rig));
+    close->transform()->position={0,2,-1}; auto* spell=close->createComponent<PerspectiveCameraComponent>();
+    spell->active=false; spell->blendDuration=.5f;
+    auto* state=fixture.world.createDataEntity(); CHECK(state->setOwner(player));
+    auto& runtime=cameraRuntime(fixture.world); runtime.onUpdate(.1f); CameraFrame frame;
+    CHECK(evaluatePerspectiveCamera3D(fixture.world,1,1,frame)); CHECK_FLOAT_EQ(frame.position.x,10,1e-4f);
+    CHECK_FLOAT_EQ(frame.position.z,-5,1e-4f); (void)runtime.present(frame,0,false,.5f,false);
+    normal->active=false; spell->active=true; runtime.onUpdate(.25f);
+    CHECK(evaluatePerspectiveCamera3D(fixture.world,1,1,frame)); CHECK(selectPerspectiveCamera3D(fixture.world).entity==close);
+    auto blended=runtime.present(frame,0,false,.5f,false); CHECK_FLOAT_EQ(blended.position.z,-3,1e-4f);
+    normal->active=true; spell->active=false; runtime.onUpdate(.1f);
+    CHECK(evaluatePerspectiveCamera3D(fixture.world,1,1,frame)); blended=runtime.present(frame,0,false,.5f,false);
+    CHECK(blended.position.z < -3 && blended.position.z > -5);
+    const auto playerId=player->persistentId(); const char* path="character_camera_rig.scn";
+    CHECK(saveScene(fixture.world,path)); CHECK(loadScene(fixture.world,path));
+    player=fixture.world.findEntityByPersistentId(playerId); CHECK(player!=nullptr);
+    CHECK(fixture.world.findEntity("ThirdPerson")->getComponent<CameraControllerComponent>()->resolveTarget()==player);
+    fixture.world.destroyEntity(player); CHECK(fixture.world.getAllEntities().empty()); std::remove(path);
+}
+
 TEST_SUITE_END
 }

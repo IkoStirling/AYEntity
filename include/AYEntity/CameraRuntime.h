@@ -14,6 +14,9 @@ struct CameraCollisionProbe {
     math::FVector3 anchor{}, desiredEye{};
     float radius = .2f;
     const Entity* cameraEntity = nullptr;
+    const Entity* targetEntity = nullptr;
+    uint32_t layerMask = 0xFFFFFFFFu;
+    bool ignoreTarget = true;
 };
 using CameraCollisionQuery = std::function<float(const CameraCollisionProbe&)>;
 
@@ -23,8 +26,11 @@ class CameraRuntimeSystem : public ISystem {
 public:
     const char* getName() const override { return "CameraRuntimeSystem"; }
     void onUpdate(float dt) override;
-    /// Install a sphere-sweep adapter; an empty callback disables collision avoidance.
+    /// Custom sphere-sweep adapter. Empty restores the integration fallback; collisionEnabled disables per controller.
     void setCollisionQuery(CameraCollisionQuery query) { _collision = std::move(query); }
+    /// Integration fallback; a custom setCollisionQuery callback takes precedence.
+    /// The adapter resolves its external service for each call and must not retain a World pointer.
+    void setDefaultCollisionQuery(CameraCollisionQuery query) { _defaultCollision = std::move(query); }
     /// Apply transition once per presentation tick, even if renderer samples repeatedly.
     CameraFrame present(const CameraFrame& frame, int32_t viewportId, bool twoD,
                         float duration, bool smooth = true);
@@ -55,6 +61,7 @@ private:
     struct TransitionState { CameraTransition transition; uint64_t tick = UINT64_MAX; };
     std::unordered_map<uint64_t, TransitionState> _transitions;
     CameraCollisionQuery _collision;
+    CameraCollisionQuery _defaultCollision;
     uint64_t _tick = 0;
     float _dt = 0;
 };

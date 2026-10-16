@@ -17,6 +17,8 @@ SelectedOrthoCamera2D selectOrthoCamera2D(World& world, int32_t viewportId) noex
         if (entity == nullptr) continue;
         Transform* transform = entity->getComponent<Transform>();
         if (transform == nullptr) continue;
+        math::FVector3 worldPosition; math::FQuaternion worldRotation;
+        if (!entity->worldPose(worldPosition,worldRotation)) continue;
         for (OrthoCameraComponent* camera :
              entity->getComponents<OrthoCameraComponent>()) {
             if (camera == nullptr || !camera->isEnabled() || camera->viewportId != viewportId) continue;
@@ -41,8 +43,8 @@ bool evaluateOrthoCamera2D(World& world, float aspect, float alpha, CameraFrame&
     const auto selected = selectOrthoCamera2D(world, viewportId);
     if (!selected) return false;
     alpha = std::isfinite(alpha) ? std::clamp(alpha,0.f,1.f) : 1.f;
-    const auto position = selected.transform->interpolatedPosition(alpha);
-    const auto rotation = selected.transform->interpolatedRotation(alpha);
+    math::FVector3 position; math::FQuaternion rotation;
+    if (!selected.entity->worldPose(position,rotation,alpha)) return false;
     if (!camera_detail::finite(position) || !std::isfinite(rotation.dot(rotation)) || rotation.dot(rotation) < 1e-12f) return false;
     const float angle = rotation.toEulerAngles().z;
     const auto center = selected.camera->worldCenter(position,angle);

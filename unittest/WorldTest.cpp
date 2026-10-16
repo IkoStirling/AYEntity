@@ -60,8 +60,8 @@ TEST_CASE(query_entities)
     e2->addComponent<Transform>();
     e2->addComponent<MeshComponent>();
 
-    Entity* e3 = World::instance().createEntity();
-    e3->addComponent<MeshComponent>();
+    Entity* e3 = World::instance().createDataEntity();
+    e3->addComponent<HealthComponent>();
 
     auto transformQuery = World::instance().query<Transform>();
     int count = 0;
