@@ -1758,3 +1758,15 @@ profile2 body/policy/joint schema+logic身份有意不同于profile1，旧存档
 详见[Stage79–82范围与验收](../../AYDocs/DETERMINISTIC-COMPLETION-STAGE79-82.md)。
 
 Rigid3D提交保留solver rotation bits，完整pose snapshot先预检；避免额外归一化后geometry/history与存储pose末位不一致。Fresh actor previous/current一致。
+
+## Debug content extension (2026-10-15)
+
+Successful installDetBrain2D retains immutable owned diagnostic policy copies on DeterministicSession::debugBrainConfigs2D. They never enter canonical state, manifest, replay or checkpoint bytes. The editor uses the standard DeterminismHost session and matching checkpoint detBrainState2D; sensing/target/patrol/intent drawings are historical pre-motion observations and never recompute LOS or write inputs. Rigid/skinned render extraction tags optional Entity/World provenance for renderer diagnostics. Particle observations use existing instances and budget counters; GPU reserved capacity is never reported as a live count.
+
+Module-local regression sources were updated. Runtime tests and interactive editor acceptance are deferred by the current task request; previous validation reports cover the earlier baseline. These changes remain uncommitted until focused runtime checks are requested and pass.
+
+## Extended diagnostic observations (2026-10-15)
+
+DeterministicSession::debugPolicies2D exposes Session-owned immutable copies of successfully registered collision, character, path, interaction, respawn and flow policies (64/type, best effort allocation). Diagnostic metadata changes no schema, manifest, checkpoint, replay or canonical simulation bytes. Readers pair it with the same Session checkpoint. CameraRuntimeSystem optionally captures actual adapter outputs (256 probes), and returns owned collisions/view transition observations without issuing queries or advancing transitions. Capture defaults off; clear only removes diagnostic probes.
+
+Regression sources are included. Runtime tests and interactive editor acceptance are deferred for this content task; untested changes remain uncommitted.

@@ -216,5 +216,12 @@ TEST_CASE(scene_roundtrip_persists_controller_and_new_lens_fields_but_not_effect
     }
     std::remove(path);
 }
+TEST_CASE(debug_collision_snapshot_copies_real_probe_without_extra_sweeps) {
+    CameraFixture fixture;fixture.make("Target");auto* entity=fixture.make("DebugOrbit");auto* controller=entity->addComponent<CameraControllerComponent>();
+    controller->mode=2;controller->targetName="Target";controller->offset={};controller->positionDamping=0;controller->distance=5;
+    auto& runtime=cameraRuntime(fixture.world);int calls=0;runtime.setCollisionQuery([&](const CameraCollisionProbe&){++calls;return 2.f;});
+    runtime.setDebugCaptureEnabled(true);runtime.onUpdate(1);auto snapshot=runtime.debugSnapshot();CHECK(calls==1);CHECK(snapshot.collisions.size()==1);
+    (void)runtime.debugSnapshot();CHECK(calls==1);runtime.clearDebugHistory();CHECK(runtime.debugSnapshot().collisions.empty());CHECK(snapshot.collisions.size()==1);
+}
 TEST_SUITE_END
 }

@@ -1,4 +1,5 @@
 #include <AYEntity/DeterministicPathMotion2D.h>
+#include "DetDebugPolicies2D.h"
 #include <AYEntity/DeterministicCollisionQuery2D.h>
 #include "detail/DetSessionWire.h"
 #include <algorithm>
@@ -203,7 +204,7 @@ bool installDetPathMotion2D(DeterministicSession& session,DetPathMotion2DConfig 
             try{validateCheckpoint(cp,c,states,policies,bodies);return true;}catch(...){error="deterministic path 2D: invalid registered boundary";return false;}})
         && session.registerSystem(c.preSystemId,c.collision.priority,[c](DetTickContext& ctx){pre(ctx,c);return true;})
         && session.registerSystem(c.postSystemId,c.collision.priority,[c](DetTickContext& ctx){post(ctx,c);return true;})))return false;
-    return true;
+    DetDebugAccess::retain(session,c);return true;
 }
 DetTypedStateSchema detPathMotionStateSchema2D(const DetPathMotion2DConfig& c){
     if(!validConfig(c))invalid();return stateSchema(c);

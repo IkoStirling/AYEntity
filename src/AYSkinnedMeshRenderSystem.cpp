@@ -444,6 +444,8 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
                     ? rigidIt->second
                     : (submesh.material.isValid() ? submesh.material : fallbackMat);
             ayt::render::DrawItem item;
+        item.sourceEntityId=e->getId();
+        item.sourceWorld=reinterpret_cast<uintptr_t>(&world);
             item.mesh = meshSubmission->mesh;
             item.material = submeshMat;
             item.firstIndex = submesh.firstIndex;
@@ -498,6 +500,8 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
 
         if (!submittedSubmesh) {
             ayt::render::DrawItem item;
+        item.sourceEntityId=e->getId();
+        item.sourceWorld=reinterpret_cast<uintptr_t>(&world);
             item.mesh = meshSubmission->mesh;
             item.material = fallbackMat;
             item.world = worldM;

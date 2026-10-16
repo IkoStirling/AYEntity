@@ -3353,3 +3353,15 @@ Numeric、motor/contact scratch每tick从closure重建，restore/实际late-inpu
 最终原生VM Deferred，范围/失败材料见Stage79–82文档与out/detcompletion79-20261014。
 
 Pose publication preflights complete snapshots, restores exact solver quaternion bits and retains two logical revisions; no setter renormalization after final trigger geometry.32 nontrivial-rotation checks expose non-idempotent normalization and assert integrator/published bits equality.
+
+## Debug content extension (2026-10-15)
+
+Successful installDetBrain2D retains immutable owned diagnostic policy copies on DeterministicSession::debugBrainConfigs2D. They never enter canonical state, manifest, replay or checkpoint bytes. The editor uses the standard DeterminismHost session and matching checkpoint detBrainState2D; sensing/target/patrol/intent drawings are historical pre-motion observations and never recompute LOS or write inputs. Rigid/skinned render extraction tags optional Entity/World provenance for renderer diagnostics. Particle observations use existing instances and budget counters; GPU reserved capacity is never reported as a live count.
+
+Module-local regression sources were updated. Runtime tests and interactive editor acceptance are deferred by the current task request; previous validation reports cover the earlier baseline. These changes remain uncommitted until focused runtime checks are requested and pass.
+
+## Extended diagnostic observations (2026-10-15)
+
+DeterministicSession::debugPolicies2D exposes Session-owned immutable copies of successfully registered collision, character, path, interaction, respawn and flow policies (64/type, best effort allocation). Diagnostic metadata changes no schema, manifest, checkpoint, replay or canonical simulation bytes. Readers pair it with the same Session checkpoint. CameraRuntimeSystem optionally captures actual adapter outputs (256 probes), and returns owned collisions/view transition observations without issuing queries or advancing transitions. Capture defaults off; clear only removes diagnostic probes.
+
+Regression sources are included. Runtime tests and interactive editor acceptance are deferred for this content task; untested changes remain uncommitted.

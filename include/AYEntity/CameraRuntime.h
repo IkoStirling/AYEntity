@@ -3,6 +3,7 @@
 #include <AYEntity/CameraFrame.h>
 #include <functional>
 #include <unordered_map>
+#include <vector>
 
 namespace ayt::entity {
 class World;
@@ -37,9 +38,19 @@ public:
     bool snapshot(int32_t viewportId, bool twoD, CameraFrame& output) const noexcept;
     /// Constrain a composed lens/effect snapshot too, so local offsets/shake cannot bypass the sweep.
     void constrainFrame(const Entity& entity, CameraFrame& frame) const;
+    struct DebugCollision {uint32_t entityId=0;math::FVector3 anchor{},desiredEye{},resolvedEye{};float radius=0,allowed=0;bool valid=false;};
+    struct DebugView {int32_t viewport=0;bool twoD=false;CameraFrame frame;float progress=1,duration=0;};
+    struct DebugSnapshot {std::vector<DebugCollision> collisions;std::vector<DebugView> views;};
+    /// Owner-thread copied last real probes/transitions. Never invokes the collision adapter.
+    DebugSnapshot debugSnapshot() const;
+    void setDebugCaptureEnabled(bool enabled) noexcept { _debugCapture=enabled;if(!enabled)_debugCollisions.clear(); }
+    void clearDebugHistory() noexcept { _debugCollisions.clear(); }
     static constexpr int kPriority = 399;
 private:
     friend CameraRuntimeSystem& cameraRuntime(World& world);
+    bool _debugCapture=false;
+    mutable std::vector<DebugCollision> _debugCollisions;
+    void observeCollision(DebugCollision value) const noexcept;
     World* _owner = nullptr;
     struct TransitionState { CameraTransition transition; uint64_t tick = UINT64_MAX; };
     std::unordered_map<uint64_t, TransitionState> _transitions;

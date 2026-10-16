@@ -13,6 +13,8 @@ namespace ayt::entity {
 class World;
 class Entity;
 class DetSessionStorage;
+struct DetBrain2DConfig;
+struct DetDebugPolicies2D;
 using SimEntityId = std::uint64_t;
 using DetStateBlocks = std::map<std::uint32_t,std::vector<std::uint64_t>>;
 struct DetStateSchema {
@@ -188,8 +190,16 @@ public:
     const std::vector<std::uint8_t>& manifest() const;
     /// Presentation lookup only; authoritative systems use stable session IDs.
     Entity* presentationEntity(SimEntityId id) const;
+    /// Owner-thread diagnostic policy copies. Excluded from canonical state and manifest.
+    /// Optional noncanonical immutable policies for debug display; never grants simulation authority.
+    const DetDebugPolicies2D* debugPolicies2D() const noexcept { return _debugPolicies2D.get(); }
+    const auto& debugBrainConfigs2D() const noexcept { return _debugBrainConfigs2D; }
 private:
     friend class DetTickContext;
+    friend struct DetDebugAccess;
+    std::shared_ptr<DetDebugPolicies2D> _debugPolicies2D;
+    friend bool installDetBrain2D(DeterministicSession&,DetBrain2DConfig);
+    std::vector<std::shared_ptr<const DetBrain2DConfig>> _debugBrainConfigs2D;
     friend bool installDetCharacterController2D(DeterministicSession&,DetCharacterController2DConfig);
     friend bool installDetCharacterRespawn2D(DeterministicSession&,DetCharacterRespawn2DConfig);
     // Narrow installer preflight; no public configuration-inspection surface.

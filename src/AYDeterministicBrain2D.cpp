@@ -203,9 +203,11 @@ std::uint32_t detBrainField2D(const DetBrain2DConfig& c,SimEntityId owner,DetBra
 bool installDetBrain2D(DeterministicSession& session,DetBrain2DConfig c){Plan p;try{p=plan(c);if(session.sealed() || session.faulted() || session.nextTick())return false;}catch(const std::invalid_argument&){return false;}
     if(!(session.registerTypedSchema(p.state) && session.registerGlobalState(p.state.id)))return false;
     for(const auto& policy:p.policies)if(!(session.registerTypedSchema(policy) && session.registerGlobalState(policy.id)))return false;
-    return session.registerLogicProfile(c.logicProfileId,p.identity.first,p.identity.second)
+    const bool installed=session.registerLogicProfile(c.logicProfileId,p.identity.first,p.identity.second)
         && session.registerSystem(c.systemId,c.character.collision.priority,[c,p](DetTickContext& ctx){return run(ctx,c,p);})
-        && session.registerValidator(c.validatorId,p.identity.first,[c,p](const DetSessionCheckpoint& cp,std::string& error){try{pure(cp,c,p);return true;}catch(const std::exception& e){error=e.what();return false;}});}
+        && session.registerValidator(c.validatorId,p.identity.first,[c,p](const DetSessionCheckpoint& cp,std::string& error){try{pure(cp,c,p);return true;}catch(const std::exception& e){error=e.what();return false;}});
+    if(installed) session._debugBrainConfigs2D.push_back(std::make_shared<const DetBrain2DConfig>(std::move(c)));
+    return installed;}
 DetBrainState2D detBrainState2D(DetTickContext& ctx,const DetBrain2DConfig& c,SimEntityId owner){const auto p=plan(c);policyMatches(ctx,p);
     (void)detAttackState2D(ctx,c.attack,owner);validOwned([&]<class T>(auto f){return ctx.readGlobal<T>(c.stateSchema,f);},c,stamp(ctx.tick()),false);
     return copy(readState([&]<class T>(auto f){return ctx.readGlobal<T>(c.stateSchema,f);},ownerIndex(c,owner)));}

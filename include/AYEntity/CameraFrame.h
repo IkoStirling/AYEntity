@@ -171,6 +171,9 @@ public:
         return _last;
     }
     void reset() noexcept { _initialized = false; _duration = 0; }
+    /// Raw time fraction before optional smooth easing; observation does not tick.
+    float debugProgress() const noexcept { return _duration>0?std::clamp(_elapsed/_duration,0.f,1.f):1.f; }
+    float debugDuration() const noexcept { return _duration; }
     /// Copy the last presented frame; before the first sample/reset, fail without writes.
     bool snapshot(CameraFrame& output) const noexcept {
         if (!_initialized) return false;

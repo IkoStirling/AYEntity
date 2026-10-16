@@ -1,6 +1,7 @@
 // design reference: AYEntity/design.md Stage53 bounded registered enemy decisions.
 // Hand tables cover selected decisions/HP/positions; whole CP comparisons prove execution equality only.
 #include <AYEntity/DeterministicBrain2D.h>
+#include <AYEntity/DeterministicDebug2D.h>
 #include <AYEntity/DeterministicReplay.h>
 #include <AYEntity/DeterministicRollback.h>
 #include <algorithm>
@@ -62,6 +63,9 @@ bool configure(DeterministicSession& s,const DetBrain2DConfig& c,bool reverse=fa
     if(!installDetActions2D(s,c.attack.vitality.progress.actions) || !installDetProgress2D(s,c.attack.vitality.progress)
         || !installDetCharacterController2D(s,c.character) || !installDetVitality2D(s,c.attack.vitality)
         || !installDetAttack2D(s,c.attack) || !installDetBrain2D(s,c))return false;
+    require(s.debugPolicies2D() && s.debugPolicies2D()->characters.size()==1 && s.debugPolicies2D()->collisions.size()==1,"Owned character and collision diagnostic policies");
+    require(s.debugBrainConfigs2D().size()==1,"One owned read-only debug policy");
+    require(encodeDetBrainConfig2D(*s.debugBrainConfigs2D().front())==encodeDetBrainConfig2D(c),"Diagnostic policy preserves the registered literal");
     if(!reverse && !registerInput(s,c))return false;std::vector<SimEntityId> ids{10,20,30,40};if(reverse)std::reverse(ids.begin(),ids.end());
     for(auto id:ids)if(!s.addEntity(id,actor(c,id,geometry)))return false;return s.seal();}
 DetTickInput frame(std::uint64_t tick,bool moving=false){return {tick,1,{{1,0,1,{static_cast<std::uint8_t>(moving)}},{1,1,99,{53}}}};}

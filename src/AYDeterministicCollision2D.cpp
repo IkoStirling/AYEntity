@@ -1,5 +1,6 @@
 // design reference: AYEntity/design.md Stage26/28/29 scratch-before-commit motion and static slopes.
 #include <AYEntity/DeterministicCollision2D.h>
+#include "DetDebugPolicies2D.h"
 #include <AYEntity/DeterministicCollisionQuery2D.h>
 #include "detail/DetSessionWire.h"
 #include "detail/DetCharacterCollision2D.h"
@@ -431,8 +432,9 @@ bool detail::installDetCharacterCollision2D(DeterministicSession& s,DetCollision
         [c,body=DetStateLayout(bodySchema(c)),history=DetStateLayout(historySchema(c))](const auto& state,std::string& e){
             try {validateExtendedState(state,c,body,history);return true;}catch(const std::exception& error){e=error.what();return false;}}))return false;
     const auto binding=respawn?std::optional{*respawn}:std::nullopt;
-    return s.registerSystem(c.systemId,c.priority,[c,controllerStateSchema,maxSlopeRisePerRun,binding](DetTickContext& context){
+    const bool installed=s.registerSystem(c.systemId,c.priority,[c,controllerStateSchema,maxSlopeRisePerRun,binding](DetTickContext& context){
         tick(context,c,controllerStateSchema,maxSlopeRisePerRun,binding?&*binding:nullptr);return true;});
+    if(installed)DetDebugAccess::retain(s,c);return installed;
 }
 bool installDetCollision2D(DeterministicSession& s,DetCollision2DConfig c) {
     if(c.stepUp || c.characterRespawn)return false;

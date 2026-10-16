@@ -1,5 +1,6 @@
 // design reference: AYEntity/design.md Stage34 registered trigger interactions.
 #include <AYEntity/DeterministicInteraction2D.h>
+#include "DetDebugPolicies2D.h"
 #include <algorithm>
 #include <set>
 #include <stdexcept>
@@ -183,10 +184,11 @@ bool installDetInteraction2D(DeterministicSession& session,DetInteraction2DConfi
     catch(const std::invalid_argument&){return false;}
     if(!(session.registerTypedSchema(p.state) && session.registerGlobalState(c.stateSchema)))return false;
     for(const auto& schema:p.policies)if(!(session.registerTypedSchema(schema) && session.registerGlobalState(schema.id)))return false;
-    return session.registerLogicProfile(c.logicProfileId,1,0x4449523244503031ull)
+    const bool installed=session.registerLogicProfile(c.logicProfileId,1,0x4449523244503031ull)
         && session.registerValidator(c.validatorId,1,[c,p](const DetSessionCheckpoint& cp,std::string& error){
             try{validateCheckpoint(cp,c,p);return true;}catch(const std::exception& e){error=e.what();return false;}})
         && session.registerSystem(c.systemId,c.actions.collision.priority,[c,p](DetTickContext& context){return run(context,c,p);});
+    if(installed)DetDebugAccess::retain(session,c);return installed;
 }
 DetInteractionState2D detInteractionState2D(DetTickContext& context,const DetInteraction2DConfig& c,std::uint32_t id){
     const auto p=plan(c);matches(context,p.policies);matches(context,p.actionPolicies);const auto i=find(c,id);auto r=read(context,c,i);

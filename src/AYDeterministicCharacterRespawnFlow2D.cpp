@@ -1,5 +1,6 @@
 // design reference: AYEntity/design.md finite registered checkpoint/death routing.
 #include <AYEntity/DeterministicCharacterRespawnFlow2D.h>
+#include "DetDebugPolicies2D.h"
 #include "detail/DetCharacterRespawn2D.h"
 #include "detail/DetSessionWire.h"
 #include <algorithm>
@@ -217,9 +218,10 @@ bool installDetCharacterRespawnFlow2D(DeterministicSession& session,DetCharacter
     if(!(session.registerTypedSchema(p.state) && session.registerGlobalState(p.state.id)))return false;
     if(p.external && !(session.registerTypedSchema(*p.external) && session.registerGlobalState(p.external->id)))return false;
     for(const auto& s:p.policies)if(!(session.registerTypedSchema(s) && session.registerGlobalState(s.id)))return false;
-    return session.registerLogicProfile(c.logicProfileId,profile(c),fingerprint(c)) && session.registerValidator(c.validatorId,profile(c),[c,p](const auto& cp,std::string& error){
+    const bool installed=session.registerLogicProfile(c.logicProfileId,profile(c),fingerprint(c)) && session.registerValidator(c.validatorId,profile(c),[c,p](const auto& cp,std::string& error){
         try{validateCheckpoint(cp,c,p);return true;}catch(const std::exception& e){error=e.what();return false;}})
         && session.registerSystem(c.systemId,c.respawn.character.collision.priority,[c,p](DetTickContext& ctx){return run(ctx,c,p);});
+    if(installed)DetDebugAccess::retain(session,c);return installed;
 }
 void detCharacterRespawnFlowInput2D(DetTickContext& ctx,SimEntityId actor,const DetCharacterRespawnFlow2DConfig& c,bool manual){
     const auto p=plan(c);policiesMatch(ctx,c,p);const auto n=bindingIndex(c,actor);const auto r=read(ctx,c,n);valid(r,c,n,ctx.tick(),ctx.tick(),false);

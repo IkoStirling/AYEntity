@@ -34,7 +34,16 @@ void updateShake(CameraControllerComponent& controller, float dt) {
 }
 }
 
+void CameraRuntimeSystem::observeCollision(DebugCollision value) const noexcept {
+    if(!_debugCapture)return;try{if(_debugCollisions.size()==256)_debugCollisions.erase(_debugCollisions.begin());_debugCollisions.push_back(value);}catch(...){}
+}
+CameraRuntimeSystem::DebugSnapshot CameraRuntimeSystem::debugSnapshot() const {
+    DebugSnapshot out;out.collisions=_debugCollisions;
+    for(const auto& [key,state]:_transitions){CameraFrame frame;if(state.transition.snapshot(frame))out.views.push_back({int32_t(key>>1),bool(key&1),frame,state.transition.debugProgress(),state.transition.debugDuration()});}
+    return out;
+}
 void CameraRuntimeSystem::onUpdate(float dt) {
+    _debugCollisions.clear();
     _dt = std::isfinite(dt) && dt > 0 ? dt : 0;
     ++_tick;
     auto& world = _owner ? *_owner : World::instance();
@@ -98,7 +107,10 @@ void CameraRuntimeSystem::onUpdate(float dt) {
                 const float length = arm.length();
                 if (std::isfinite(length) && length > 1e-6f) {
                     const float radius = std::isfinite(c->collisionRadius) ? std::max(0.f,c->collisionRadius) : .2f;
+                    const auto requestedEye=desiredPosition;
                     const float allowed = _collision({anchor,desiredPosition,radius,entity});
+                    const float observedDistance=std::isfinite(allowed)&&allowed<length?std::clamp(allowed-std::max(0.f,c->collisionPadding),0.f,length):length;
+                    observeCollision({entity->getId(),anchor,requestedEye,anchor+arm*(observedDistance/length),radius,allowed,std::isfinite(allowed)&&allowed>=0});
                     if (!std::isfinite(allowed) || allowed < 0) continue;
                     const float padding = std::isfinite(c->collisionPadding) ? std::max(0.f,c->collisionPadding) : 0;
                     if (allowed < length) desiredPosition = anchor + arm * (std::max(0.f,allowed-padding) / length);
@@ -146,6 +158,8 @@ void CameraRuntimeSystem::constrainFrame(const Entity& entity, CameraFrame& fram
     if (!std::isfinite(length) || length <= 1e-6f) return;
     const float radius = std::isfinite(c->collisionRadius) ? std::max(0.f,c->collisionRadius) : .2f;
     const float allowed = _collision({c->collisionAnchor,frame.position,radius,&entity});
+    const float observedDistance=std::isfinite(allowed)&&allowed<length?std::clamp(allowed-std::max(0.f,c->collisionPadding),0.f,length):length;
+    observeCollision({entity.getId(),c->collisionAnchor,frame.position,c->collisionAnchor+arm*(observedDistance/length),radius,allowed,std::isfinite(allowed)&&allowed>=0});
     if (!std::isfinite(allowed) || allowed < 0 || allowed >= length) return;
     auto candidate = frame;
     const float padding = std::isfinite(c->collisionPadding) ? std::max(0.f,c->collisionPadding) : 0;

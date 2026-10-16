@@ -1,4 +1,5 @@
 #include <AYEntity/DeterministicCharacterController2D.h>
+#include "DetDebugPolicies2D.h"
 #include <AYMath/DetSlopeGeometry2D.h>
 #include "detail/DetCharacterCollision2D.h"
 #include "detail/DetCharacterRespawn2D.h"
@@ -752,7 +753,8 @@ bool installDetCharacterController2D(DeterministicSession& session,DetCharacterC
     const std::array systems{config.preSystemId,config.collision.systemId,config.postSystemId};
     const std::array validators{config.collision.systemId,config.validatorId};const std::array logic{config.logicProfileId};
     if(!session.characterRegistrationAvailable(schemas,systems,validators,logic))return false;
-    return installPipeline(session,config,nullptr);
+    const bool installed=installPipeline(session,config,nullptr);
+    if(installed)DetDebugAccess::retain(session,config);return installed;
 }
 bool installDetCharacterRespawn2D(DeterministicSession& session,DetCharacterRespawn2DConfig config) {
     if(!validConfig(config.character) || !detail::validRespawnConfig(config))return false;const auto& c=config.character;
@@ -760,6 +762,7 @@ bool installDetCharacterRespawn2D(DeterministicSession& session,DetCharacterResp
     const std::array systems{c.preSystemId,c.collision.systemId,c.postSystemId};
     const std::array validators{c.collision.systemId,c.validatorId,config.validatorId};const std::array logic{c.logicProfileId,config.logicProfileId};
     if(!session.characterRegistrationAvailable(schemas,systems,validators,logic))return false;
-    return detail::registerRespawnState(session,config) && installPipeline(session,c,&config);
+    const bool installed=detail::registerRespawnState(session,config) && installPipeline(session,c,&config);
+    if(installed){DetDebugAccess::retain(session,c);DetDebugAccess::retain(session,config);}return installed;
 }
 } // namespace ayt::entity

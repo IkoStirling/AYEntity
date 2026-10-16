@@ -318,6 +318,8 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         }
 
         ayt::render::DrawItem item;
+        item.sourceEntityId=entity->getId();
+        item.sourceWorld=reinterpret_cast<uintptr_t>(&world);
         item.mesh         = resources.mesh;
         item.material     = resources.material;
         item.world        = transformToWorldMatrix(*transform);
