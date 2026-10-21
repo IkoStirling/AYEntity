@@ -1,5 +1,38 @@
 # AYEntity
 
+## 网格重导入与资源上下文（2026-10-22）
+
+RenderSystem/SkinnedMeshRenderSystem使用Renderer随实际GPU网格发布的不可变提交快照。
+重导入后的范围、材质slot、骨骼palette和局部中心不再从旁路旧缓存或更新的L2对象猜测。
+GPU拒绝替换时继续提交旧GPU对应的元数据；L2单独卸载也不改变画面。
+显式destroy后重新解析路径，Renderer关闭重建/替换后按新资源上下文重新获取句柄。
+
+派生路径/中心/palette缓存属于System并与GPU快照绑定；驻留与路径解析在一次提取内去重，失败下次可重试。
+静态系统使用各段slot或显式整网格材质覆盖；蒙皮保留slot优先、materialPath回退的既有规则。
+`AYEntity_RenderSubmissionTests`是Noop契约层；`AYEntity_MeshSubmissionRenderTest <新目录> d3d11|d3d12`
+验证真实两段几何/材质、骨骼映射、失败保留、destroy及新Renderer上下文，独立于CPU句柄断言。
+临时测试几何仅用于验收，没有新增引擎自带模型包。准备预算与所有权见
+[提交元数据设计](../../AYDocs/RENDER-MESH-SUBMISSION-METADATA-RFC-20261022.md)。
+
+提取基准是手动目标`AYEntity_RenderSubmissionBenchmark`。从根目录构建后运行：
+
+```powershell
+out/build/render-phoskia-20261004/AYRuntime/AYEntity/unittest/AYEntity_RenderSubmissionBenchmark.exe <新JSON路径> static 1024 128 120
+```
+
+第二参数可选`static`或`skinned`，随后为实体数、不同网格路径数及测量帧数。
+它只计Debug/Noop场景提取，排除冷加载、GPU上传、渲染和写盘；不能用于报告实际帧率。
+对照旧实现时，用`unittest/PrepareRenderSubmissionBaseline.py <AYEntity仓库> <旧提交> <新目录>`
+从本地Git导出两个实现与配对声明，再把输出的`isolated`目录作为CMake变量
+`AY_ENTITY_RENDER_BENCHMARK_BASELINE_DIR`，构建`AYEntity_RenderSubmissionBenchmarkBaseline`。
+脚本保留原始字节、Git blob与摘要，只隔离命名空间和自身头文件引用；共享框架依赖仍为当前版本。
+对照完成后用CMake的`-U AY_ENTITY_RENDER_BENCHMARK_BASELINE_DIR`移除该可选设置。
+各次测量串行执行，关闭同机重构建/其他基准，并记录源版本、二进制摘要、参数和原始报告。
+
+冻结阶段完整`AYEntityTest`220例/2938断言、定向提交9例/153断言通过；
+真实D3D11/12的static/skinned夹具通过。Renderer完整CPU1004例/17200断言与两后端Gpu53例/44219断言通过。
+历史基线与最终测量不重复累计为测试数量；完整命令/报告见关联设计和Renderer测试入口。
+
 ## Scene 灯光（2026-10-21）
 
 安装 `EntityRenderIntegrationModule`、在 registry seal 前注册渲染组件后，在活动 Scene World

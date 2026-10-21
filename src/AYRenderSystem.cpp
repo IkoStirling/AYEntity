@@ -8,6 +8,7 @@
 #include "AYEntity/EntityModule.h"
 
 #include "AYRenderer/RendererSubSystem.h"
+#include <AYRenderer/MeshSubmissionInfo.h>
 
 #include "AYEntity/components/MeshComponent.h"
 
@@ -17,8 +18,7 @@
 
 #include "AYMath/MathTransform.h"
 #include <AYResource/AssetPath.h>
-#include <AYResource/ResourceManager.h>
-#include <AYResource/assetsDefs/IMesh.h>
+#include <AYIO/Path.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -41,7 +41,8 @@ struct CachedDrawResources {
 
     ayt::render::MeshHandle     mesh;
 
-    ayt::render::MaterialHandle material;
+    uint64_t extraction=0;
+    std::shared_ptr<const ayt::render::MeshSubmissionInfo> snapshot;
 
     struct Section {
         uint32_t firstIndex = 0;
@@ -65,14 +66,6 @@ ayt::math::Float4x4 transformToWorldMatrix(const Entity& entity)
 }
 
 
-
-std::string assetKey(const std::string& meshPath, const std::string& materialPath)
-
-{
-
-    return meshPath + "|" + materialPath;
-
-}
 
 uint64_t temporalObjectIdentity(World& world, Entity& entity) noexcept
 {
@@ -115,11 +108,26 @@ void logBuildSceneSummary(uint32_t frameIndex, uint32_t matched, uint32_t skippe
 
 } // namespace
 
+struct RenderSystem::ResourceCache {
+    struct Path {std::string resolved;uint64_t extraction=0;bool absolute=false;};
+    struct Material {ayt::render::MaterialHandle handle;uint64_t extraction=0;};
+    uint64_t context=0,extraction=0;
+    std::vector<std::string> roots;
+    std::unordered_map<std::string,CachedDrawResources> entries;
+    std::unordered_map<std::string,Path> paths;
+    std::unordered_map<std::string,Material> materials;
+    const std::string empty;
+    void clear(){entries.clear();paths.clear();materials.clear();}
+};
+
+RenderSystem::RenderSystem()=default;
+RenderSystem::~RenderSystem()=default;
 
 
 void RenderSystem::onStart()
 
 {
+    _resources.reset();
 
     ayt::render::RendererSubSystem* rendererSubSystem =
 
@@ -192,9 +200,36 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
     ayt::render::Renderer& renderer = rendererSubSystem->renderer();
 
-    static std::unordered_map<std::string, CachedDrawResources> cache;
-
-
+    if(!_resources)_resources=std::make_unique<ResourceCache>();
+    const auto context=renderer.resourceContextId();
+    const auto& roots=ayt::resource::assetRoots();
+    if(_resources->context!=context||_resources->roots!=roots){
+        _resources->clear();_resources->context=context;_resources->roots=roots;
+    }
+    if(!context)return;
+    if(++_resources->extraction==0){_resources->clear();_resources->extraction=1;}
+    const uint64_t extraction=_resources->extraction;
+    // Reuse cache nodes, but validate current resources once per invocation,
+    // including separate camera-view extractions in the same renderer frame.
+    const auto resolvePath=[&](const std::string& path)->const std::string&{
+        if(path.empty())return _resources->empty;
+        auto [found,inserted]=_resources->paths.try_emplace(path);
+        auto& record=found->second;
+        if(inserted){record.absolute=ayt::io::path::isAbsolute(path);}
+        if(inserted||(!record.absolute&&record.extraction!=extraction)){
+            record.resolved=ayt::resource::resolveAssetPath({},path);record.extraction=extraction;
+        }
+        return record.resolved;
+    };
+    const auto resolveMaterial=[&](const std::string& path){
+        if(path.empty())return ayt::render::MaterialHandle{};
+        auto& record=_resources->materials[path];
+        if(record.extraction!=extraction){
+            record.extraction=extraction;
+            if(!renderer.isMaterialResident(record.handle))record.handle=renderer.loadMaterial(path);
+        }
+        return record.handle;
+    };
 
     uint32_t matched = 0;
 
@@ -244,70 +279,47 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         }
 
 
-        const std::string meshPath = ayt::resource::resolveAssetPath({}, meshComp->meshPath);
-        const std::string materialPath = ayt::resource::resolveAssetPath({}, meshComp->materialPath);
-        const std::string key = assetKey(meshPath, materialPath);
-
-        CachedDrawResources& resources = cache[key];
-
-        if (!resources.mesh.isValid()) {
-
-            resources.mesh = renderer.loadMesh(meshPath);
-            if (resources.mesh.isValid()) {
-                const auto source = ayt::resource::ResourceManager::instance()
-                    .load<ayt::resource::IMesh>(meshPath);
-                if (source && source->getSubmeshCount() > 1) {
-                    const char* first = source->getMaterialSlotCount() > 0
-                        ? source->getMaterialSlot(0) : nullptr;
-                    resources.firstSlotPath = first && first[0]
-                        ? ayt::resource::resolveAssetPath(meshPath, first) : std::string{};
-                    const auto* sections = source->getSubmeshes();
-                    for (uint32_t i = 0; sections && i < source->getSubmeshCount(); ++i) {
-                        const auto& section = sections[i];
-                        if (section.indexCount == 0 ||
-                            uint64_t(section.indexOffset) + section.indexCount > source->getIndexCount()) {
-                            continue;
-                        }
-                        const char* slot = section.materialIndex < source->getMaterialSlotCount()
-                            ? source->getMaterialSlot(section.materialIndex) : nullptr;
-                        CachedDrawResources::Section draw;
-                        draw.firstIndex = section.indexOffset;
-                        draw.indexCount = section.indexCount;
-                        if (slot && slot[0]) draw.materialPath = ayt::resource::resolveAssetPath(meshPath, slot);
-                        resources.sections.push_back(std::move(draw));
+        const std::string& meshPath=resolvePath(meshComp->meshPath);
+        const std::string& materialPath=resolvePath(meshComp->materialPath);
+        auto& resources=_resources->entries[meshPath];
+        if(resources.extraction!=extraction) {
+            resources.extraction=extraction;
+            auto snapshot=renderer.meshSubmissionInfo(resources.mesh);
+            if(!snapshot) {
+                resources.mesh=renderer.loadMesh(meshPath);
+                snapshot=renderer.meshSubmissionInfo(resources.mesh);
+            }
+            if(snapshot!=resources.snapshot) {
+                std::vector<CachedDrawResources::Section> sections;
+                std::string firstSlotPath;
+                if(snapshot&&snapshot->sections.size()>1) {
+                    sections.reserve(snapshot->sections.size());
+                    if(!snapshot->materialSlots.empty()&&!snapshot->materialSlots[0].empty())
+                        firstSlotPath=ayt::resource::resolveAssetPath(meshPath,snapshot->materialSlots[0]);
+                    for(const auto& source:snapshot->sections) {
+                        if(!source.indexCount)continue;
+                        CachedDrawResources::Section section;
+                        section.firstIndex=source.firstIndex;section.indexCount=source.indexCount;
+                        if(source.materialIndex<snapshot->materialSlots.size()&&!snapshot->materialSlots[source.materialIndex].empty())
+                            section.materialPath=ayt::resource::resolveAssetPath(meshPath,snapshot->materialSlots[source.materialIndex]);
+                        sections.push_back(std::move(section));
                     }
                 }
+                // Publish derived metadata only after all allocation succeeds.
+                resources.snapshot=snapshot;resources.sections=std::move(sections);
+                resources.firstSlotPath=std::move(firstSlotPath);
             }
-
-            if (!resources.mesh.isValid() && frameIndex < 5) {
-
-                std::fprintf(stderr, "[RenderSystem] loadMesh failed: '%s'\n",
-
-                             meshComp->meshPath.c_str());
-
-            }
-
+            for(auto& section:resources.sections)section.material=resolveMaterial(section.materialPath);
+            if(!resources.mesh.isValid()&&frameIndex<5)
+                std::fprintf(stderr,"[RenderSystem] loadMesh failed: '%s'\n",meshComp->meshPath.c_str());
         }
-
-        if (!resources.material.isValid() && !meshComp->materialPath.empty()) {
-
-            resources.material = renderer.loadMaterial(meshComp->materialPath);
-
-            if (!resources.material.isValid() && frameIndex < 5) {
-
-                std::fprintf(stderr, "[RenderSystem] loadMaterial failed: '%s'\n",
-
-                             meshComp->materialPath.c_str());
-
-            }
-
-        }
-
-
+        const auto material=resolveMaterial(materialPath);
+        if(!materialPath.empty()&&!material.isValid()&&frameIndex<5)
+            std::fprintf(stderr,"[RenderSystem] loadMaterial failed: '%s'\n",meshComp->materialPath.c_str());
 
         const bool useSections = !meshComp->outlineHull && !resources.sections.empty()
             && (materialPath.empty() || materialPath == resources.firstSlotPath);
-        if (!resources.mesh.isValid() || (!resources.material.isValid() && !useSections)) {
+        if (!resources.mesh.isValid() || (!material.isValid() && !useSections)) {
 
             ++skippedLoad;
 
@@ -317,7 +329,7 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
         // .aymat has no blend field — MeshComponent::alphaBlend is the host tag.
         if (meshComp->alphaBlend) {
-            renderer.setMaterialBlendMode(resources.material,
+            renderer.setMaterialBlendMode(material,
                                           ayt::render::BlendMode::Alpha);
         }
 
@@ -325,7 +337,7 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         item.sourceEntityId=entity->getId();
         item.sourceWorld=reinterpret_cast<uintptr_t>(&world);
         item.mesh         = resources.mesh;
-        item.material     = resources.material;
+        item.material     = material;
         item.world        = transformToWorldMatrix(*entity);
         // Temporal passes match this rigid draw to its previous transform.
         item.motionObjectId = temporalObjectIdentity(world, *entity);
@@ -375,12 +387,10 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
             // A different explicit material (including selection outlines)
             // retains the legacy whole-mesh override behavior.
             for (auto& section : resources.sections) {
-                if (!section.material.isValid() && !section.materialPath.empty())
-                    section.material = renderer.loadMaterial(section.materialPath);
                 auto draw = item;
                 draw.firstIndex = section.firstIndex;
                 draw.indexCount = section.indexCount;
-                draw.material = section.material.isValid() ? section.material : resources.material;
+                draw.material = section.material.isValid() ? section.material : material;
                 if (!draw.material.isValid()) { ++skippedLoad; continue; }
                 if (meshComp->alphaBlend)
                     renderer.setMaterialBlendMode(draw.material, ayt::render::BlendMode::Alpha);

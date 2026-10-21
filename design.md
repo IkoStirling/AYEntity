@@ -1,5 +1,22 @@
 # AYEntity Design
 
+## 2026-10-22 — 网格提交缓存与GPU版本
+
+静态/蒙皮提取使用Renderer的不可变MeshSubmissionInfo；L2对象变化不再直接解释L3的索引范围。
+派生中心/slot/palette只在GPU快照变化时重建，GPU拒绝后沿用旧快照。OwnedCpu包复制必要remap/pose值，
+已有包副本不会随新快照被改写；包内plain GPU句柄仍不获得租约。
+
+静态资源缓存收归RenderSystem实例，不再使用跨World的函数静态map。
+Renderer上下文或挂载roots改变后清除派生缓存；单次提取内去重路径、材质及失败结果。
+蒙皮保留重用的派生缓存，以上下文+当前GPU快照确认版本；绝对路径命中后可查询该上下文的GPU快照，
+相对路径继续按当前roots解析。材质驻留查询只验证当前表项，不能替代上下文身份或shader准备。
+资源更新必须位于提取边界之间；未引入独立提交线程或自动GPU驱逐。
+
+性能验证使用同一Debug/Noop框架的实际旧提取源码与当前源码；旧实现及配套声明只做namespace/include机械隔离。
+`PrepareRenderSubmissionBaseline.py`从本地Git导出并保存原始blob及SHA256；不下载代码、不覆盖已有输出。
+`AYEntity_RenderSubmissionBenchmark`不计冷加载/编译/上传和render，报告提取中位/P95；不作FPS保证。
+功能层由模块Noop用例及真实D3D11/12手动目标分别验证，具体阶段结果在根任务证据中记录。
+
 ## 2026-10-21 — Scene Light 组件与渲染提取
 
 LightComponent 的反射 finalizer 只在 RenderIntegration TU 注册一次，不让 Core 静态注册依赖

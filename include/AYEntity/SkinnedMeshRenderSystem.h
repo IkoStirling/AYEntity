@@ -9,13 +9,16 @@
 #include <AYRenderer/RenderTypes.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace ayt::render
 {
 struct RenderScene;
+struct MeshSubmissionInfo;
 class Renderer;
 }
 
@@ -32,8 +35,9 @@ public:
 
 private:
     void buildSkinnedScene(ayt::render::RenderScene& scene);
+    struct ExtractionResources;
     ayt::render::MaterialHandle loadMaterialCached(
-        ayt::render::Renderer& renderer, const std::string& path);
+        ayt::render::Renderer& renderer, const std::string& path, ExtractionResources& extraction);
 
     struct MaterialKey {
         std::string path;
@@ -45,8 +49,8 @@ private:
         }
     };
 
-    // Per-system cache for generated fallback materials. Cooked .aymat
-    // paths also live here so the per-frame path never re-enters Renderer.
+    // Generated fallback instances only. Path materials use Renderer's current
+    // path cache; context identity prevents reuse after device reconstruction.
     std::unordered_map<MaterialKey, ayt::render::MaterialHandle, MaterialKeyHash> _materialCache;
 
     struct CachedSubmeshSubmission {
@@ -64,13 +68,27 @@ private:
     };
     struct CachedMeshSubmission {
         ayt::render::MeshHandle mesh;
+        std::shared_ptr<const ayt::render::MeshSubmissionInfo> snapshot;
+        uint64_t extraction = 0;
         std::vector<CachedSubmeshSubmission> submeshes;
     };
 
     CachedMeshSubmission* loadMeshSubmissionCached(
-        ayt::render::Renderer& renderer, const std::string& meshPath);
+        ayt::render::Renderer& renderer, const std::string& meshPath, ExtractionResources& extraction);
+
+    // One build invocation (including one camera view), never a frame/global
+    // revision heuristic. Negative lookups retry on the next extraction.
+    struct ExtractionResources {
+        std::unordered_set<std::string> failedMaterials;
+        std::unordered_set<std::string> failedMeshes;
+    };
 
     std::unordered_map<std::string, CachedMeshSubmission> _meshSubmissionCache;
+    struct CachedPathMaterial {ayt::render::MaterialHandle handle;uint64_t extraction=0;};
+    std::unordered_map<std::string,CachedPathMaterial> _pathMaterialCache;
+    std::vector<std::string> _assetRoots;
+    uint64_t _resourceContextId = 0;
+    uint64_t _extractionSerial = 0;
 
     // P2.1 visibility diagnostics. These are intentionally process-local
     // switches so the normal material pipeline remains unchanged. Set

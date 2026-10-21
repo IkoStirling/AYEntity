@@ -23,9 +23,9 @@
 #include <AYMath/MathTransform.h>
 #include <AYMath/MathUtils.h>
 #include <AYResource/AssetPath.h>
-#include <AYResource/ResourceManager.h>
-#include <AYResource/assetsDefs/IMesh.h>
+#include <AYRenderer/MeshSubmissionInfo.h>
 #include <AYIO/Env.h>
+#include <AYIO/Path.h>
 
 #include <algorithm>
 #include <cctype>
@@ -44,57 +44,6 @@ std::string lowerCopy(std::string value)
     std::transform(value.begin(), value.end(), value.begin(),
                    [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return value;
-}
-
-ayt::math::FVector3 indexedRangeCenter(
-    const ayt::resource::IMesh& mesh,
-    const ayt::resource::IMesh::Submesh& submesh)
-{
-    if (!mesh.hasAttribute(ayt::resource::MeshAttribute::Position)
-        || mesh.getVertexData() == nullptr || mesh.getIndexData() == nullptr
-        || mesh.getVertexStride() == 0 || submesh.indexCount == 0) {
-        return mesh.hasBounds() ? mesh.getBounds().center
-                                : ayt::math::FVector3(0.0f, 0.0f, 0.0f);
-    }
-
-    const uint64_t rangeEnd = std::min<uint64_t>(
-        static_cast<uint64_t>(submesh.indexOffset) + submesh.indexCount,
-        mesh.getIndexCount());
-    const auto positionInfo =
-        mesh.getAttributeInfo(ayt::resource::MeshAttribute::Position);
-    if (positionInfo.count < 3 || rangeEnd <= submesh.indexOffset) {
-        return mesh.hasBounds() ? mesh.getBounds().center
-                                : ayt::math::FVector3(0.0f, 0.0f, 0.0f);
-    }
-
-    double sumX = 0.0;
-    double sumY = 0.0;
-    double sumZ = 0.0;
-    uint64_t validCount = 0;
-    for (uint64_t cursor = submesh.indexOffset; cursor < rangeEnd; ++cursor) {
-        const uint32_t vertexIndex = mesh.getIndexData()[cursor];
-        if (vertexIndex >= mesh.getVertexCount()) {
-            continue;
-        }
-        float position[3]{};
-        const uint8_t* source = mesh.getVertexData()
-            + static_cast<size_t>(vertexIndex) * mesh.getVertexStride()
-            + positionInfo.offset;
-        std::memcpy(position, source, sizeof(position));
-        sumX += position[0];
-        sumY += position[1];
-        sumZ += position[2];
-        ++validCount;
-    }
-    if (validCount == 0) {
-        return mesh.hasBounds() ? mesh.getBounds().center
-                                : ayt::math::FVector3(0.0f, 0.0f, 0.0f);
-    }
-    const double inverseCount = 1.0 / static_cast<double>(validCount);
-    return ayt::math::FVector3(
-        static_cast<float>(sumX * inverseCount),
-        static_cast<float>(sumY * inverseCount),
-        static_cast<float>(sumZ * inverseCount));
 }
 
 int32_t transparentDistanceSortKey(
@@ -136,6 +85,9 @@ void SkinnedMeshRenderSystem::onStart()
 {
     _materialCache.clear();
     _meshSubmissionCache.clear();
+    _pathMaterialCache.clear();
+    _assetRoots.clear();
+    _extractionSerial=0;
 
     const std::string diagnostic = lowerCopy(
         ayt::io::env::get("AY_SKINNED_DIAGNOSTIC").value_or(""));
@@ -178,168 +130,91 @@ void SkinnedMeshRenderSystem::onUpdate(float /*dt*/)
 }
 
 ayt::render::MaterialHandle SkinnedMeshRenderSystem::loadMaterialCached(
-    ayt::render::Renderer& renderer, const std::string& path)
+    ayt::render::Renderer& renderer, const std::string& path, ExtractionResources& extraction)
 {
-    if (path.empty()) {
-        return {};
+    if(path.empty()||(!extraction.failedMaterials.empty()&&extraction.failedMaterials.contains(path)))return {};
+    const auto found=_pathMaterialCache.find(path);
+    if(found!=_pathMaterialCache.end()){
+        if(found->second.extraction==_extractionSerial)return found->second.handle;
+        if(renderer.isMaterialResident(found->second.handle)){
+            found->second.extraction=_extractionSerial;return found->second.handle;
+        }
     }
-    const MaterialKey key{path};
-    const auto found = _materialCache.find(key);
-    if (found != _materialCache.end()) {
-        return found->second;
-    }
-
-    const ayt::render::MaterialHandle material = renderer.loadMaterial(path);
-    if (material.isValid()) {
-        _materialCache.emplace(key, material);
-    }
+    const auto material=renderer.loadMaterial(path);
+    if(material.isValid())_pathMaterialCache.insert_or_assign(path,CachedPathMaterial{material,_extractionSerial});
+    else {_pathMaterialCache.erase(path);extraction.failedMaterials.insert(path);}
     return material;
 }
 
 SkinnedMeshRenderSystem::CachedMeshSubmission*
 SkinnedMeshRenderSystem::loadMeshSubmissionCached(
-    ayt::render::Renderer& renderer, const std::string& meshPath)
+    ayt::render::Renderer& renderer, const std::string& meshPath, ExtractionResources& extraction)
 {
+    if(!extraction.failedMeshes.empty()&&extraction.failedMeshes.contains(meshPath))return nullptr;
     const auto found = _meshSubmissionCache.find(meshPath);
-    if (found != _meshSubmissionCache.end()) {
+    if(found!=_meshSubmissionCache.end()&&found->second.extraction==_extractionSerial)return &found->second;
+    auto mesh=found!=_meshSubmissionCache.end()&&ayt::io::path::isAbsolute(meshPath)
+        ?found->second.mesh:ayt::render::MeshHandle{};
+    auto snapshot=renderer.meshSubmissionInfo(mesh);
+    if(!snapshot){mesh=renderer.loadMesh(meshPath);snapshot=renderer.meshSubmissionInfo(mesh);}
+    if(!mesh.isValid()||!snapshot){
+        _meshSubmissionCache.erase(meshPath);extraction.failedMeshes.insert(meshPath);return nullptr;
+    }
+    if(found!=_meshSubmissionCache.end()&&found->second.mesh.id==mesh.id&&found->second.snapshot==snapshot){
+        for(auto& section:found->second.submeshes)
+            if(!renderer.isMaterialResident(section.material))
+                section.material=loadMaterialCached(renderer,section.materialPath,extraction);
+        found->second.extraction=_extractionSerial;
         return &found->second;
     }
 
     CachedMeshSubmission cached;
-    cached.mesh = renderer.loadMesh(meshPath);
-    if (!cached.mesh.isValid()) {
-        return nullptr;
-    }
-
-    const std::shared_ptr<ayt::resource::IMesh> sourceMesh =
-        ayt::resource::ResourceManager::instance()
-            .load<ayt::resource::IMesh>(meshPath);
-    if (sourceMesh == nullptr) {
-        return nullptr;
-    }
-
-    const uint32_t submeshCount = sourceMesh->getSubmeshCount();
-    const uint32_t slotCount = sourceMesh->getMaterialSlotCount();
-    const ayt::resource::IMesh::Submesh* submeshes = sourceMesh->getSubmeshes();
-    const uint32_t paletteCount = sourceMesh->getSkinPaletteCount();
-    const ayt::resource::SkinPalette* palettes = sourceMesh->getSkinPalettes();
-    const uint32_t paletteJointCount = sourceMesh->getSkinPaletteJointCount();
-    const uint32_t* paletteJoints = sourceMesh->getSkinPaletteJoints();
-    if (paletteCount != 0u && paletteCount != submeshCount) {
-        std::fprintf(stderr,
-                     "[SkinnedMeshRenderSystem] mesh '%s' has %u palettes for %u submeshes\n",
-                     meshPath.c_str(), paletteCount, submeshCount);
-        return nullptr;
-    }
-
-    bool legacyOrdinalSlots = submeshCount > 1
-                           && submeshCount == slotCount
-                           && submeshes != nullptr;
-    for (uint32_t i = 0; legacyOrdinalSlots && i < submeshCount; ++i) {
-        legacyOrdinalSlots = submeshes[i].materialIndex == 0;
-    }
+    cached.mesh = mesh;
+    cached.snapshot = snapshot;
+    cached.extraction=_extractionSerial;
+    const auto submeshCount = static_cast<uint32_t>(snapshot->sections.size());
+    const auto slotCount = static_cast<uint32_t>(snapshot->materialSlots.size());
+    bool legacyOrdinalSlots = submeshCount > 1 && submeshCount == slotCount;
+    for (const auto& section : snapshot->sections)
+        legacyOrdinalSlots = legacyOrdinalSlots && section.materialIndex == 0;
     if (legacyOrdinalSlots) {
-        static bool s_legacySlotLog = false;
-        if (!s_legacySlotLog) {
-            std::fprintf(stderr,
-                         "[SkinnedMeshRenderSystem] legacy submesh "
-                         "material indices detected; using slot order\n");
-            s_legacySlotLog = true;
+        static bool logged = false;
+        if (!logged) {
+            std::fprintf(stderr, "[SkinnedMeshRenderSystem] legacy submesh material indices; using slot order\n");
+            logged = true;
         }
     }
 
     cached.submeshes.reserve(submeshCount);
-    for (uint32_t i = 0; submeshes != nullptr && i < submeshCount; ++i) {
-        const ayt::resource::IMesh::Submesh& submesh = submeshes[i];
-        if (submesh.indexCount == 0) {
-            continue;
+    uint64_t coveredIndices = 0;
+    for (uint32_t i = 0; i < submeshCount; ++i) {
+        const auto& source = snapshot->sections[i];
+        coveredIndices += source.indexCount;
+        if (!source.indexCount) continue;
+        CachedSubmeshSubmission section;
+        section.firstIndex = source.firstIndex;
+        section.indexCount = source.indexCount;
+        section.sourceMaterialIndex = source.materialIndex;
+        section.localCenter = source.localCenter;
+        section.bonePalette = source.bonePalette;
+        const uint32_t slot = legacyOrdinalSlots ? i : source.materialIndex;
+        if (slot < slotCount && !snapshot->materialSlots[slot].empty()) {
+            section.materialPath = ayt::resource::resolveAssetPath(meshPath,snapshot->materialSlots[slot]);
+            section.material = loadMaterialCached(renderer,section.materialPath,extraction);
         }
-
-        CachedSubmeshSubmission submission;
-        submission.firstIndex = submesh.indexOffset;
-        submission.indexCount = submesh.indexCount;
-        submission.sourceMaterialIndex = submesh.materialIndex;
-        submission.localCenter = indexedRangeCenter(*sourceMesh, submesh);
-        if (palettes != nullptr && i < paletteCount) {
-            const ayt::resource::SkinPalette& palette = palettes[i];
-            const uint64_t paletteEnd = static_cast<uint64_t>(palette.jointOffset)
-                                      + palette.jointCount;
-            if (paletteEnd > paletteJointCount
-                || (palette.jointCount > 0u && paletteJoints == nullptr)) {
-                std::fprintf(stderr,
-                             "[SkinnedMeshRenderSystem] mesh '%s' palette %u is invalid\n",
-                             meshPath.c_str(), i);
-                return nullptr;
-            }
-            if (palette.jointCount > 0u) {
-                submission.bonePalette.assign(paletteJoints + palette.jointOffset,
-                                              paletteJoints + paletteEnd);
-            }
+        if (_diagnosticLog) {
+            std::fprintf(stderr,"[SkinnedMeshDiagnostic] mesh=%s submesh=%u first=%u count=%u materialIndex=%u slot=%u material=%s loaded=%d\n",
+                meshPath.c_str(),i,section.firstIndex,section.indexCount,source.materialIndex,slot,
+                section.materialPath.c_str(),section.material.isValid()?1:0);
         }
-        const uint32_t slotIndex = legacyOrdinalSlots ? i : submesh.materialIndex;
-        if (slotIndex < slotCount) {
-            const char* slot = sourceMesh->getMaterialSlot(slotIndex);
-            if (slot != nullptr && slot[0] != '\0') {
-                const std::string materialPath =
-                    ayt::resource::resolveAssetPath(meshPath, slot);
-                submission.materialPath = materialPath;
-                submission.material = loadMaterialCached(renderer, materialPath);
-                if (!submission.material.isValid()) {
-                    static uint32_t s_slotFailLog = 0;
-                    if (s_slotFailLog < 5) {
-                        std::fprintf(stderr,
-                                     "[SkinnedMeshRenderSystem] loadMaterial "
-                                     "slot %u ('%s') failed; using fallback\n",
-                                     slotIndex, materialPath.c_str());
-                        ++s_slotFailLog;
-                    }
-                }
-            }
-        }
-        cached.submeshes.push_back(submission);
+        cached.submeshes.push_back(std::move(section));
     }
-
     if (_diagnosticLog) {
-        uint64_t coveredIndices = 0;
-        uint32_t invalidRanges = 0;
-        uint32_t cachedOrdinal = 0;
-        for (uint32_t i = 0; i < submeshCount; ++i) {
-            const auto& submesh = submeshes[i];
-            const uint64_t end = static_cast<uint64_t>(submesh.indexOffset)
-                               + static_cast<uint64_t>(submesh.indexCount);
-            if (submesh.indexCount == 0 || end > sourceMesh->getIndexCount()) {
-                ++invalidRanges;
-            }
-            coveredIndices += submesh.indexCount;
-            const uint32_t slotIndex = legacyOrdinalSlots ? i : submesh.materialIndex;
-            const char* slot = slotIndex < slotCount
-                             ? sourceMesh->getMaterialSlot(slotIndex) : nullptr;
-            const bool materialLoaded = submesh.indexCount != 0
-                && cachedOrdinal < cached.submeshes.size()
-                && cached.submeshes[cachedOrdinal++].material.isValid();
-            std::fprintf(stderr,
-                         "[SkinnedMeshDiagnostic] mesh=%s submesh=%u "
-                         "first=%u count=%u materialIndex=%u slot=%u "
-                         "material=%s loaded=%d range=%s\n",
-                         meshPath.c_str(), i, submesh.indexOffset,
-                         submesh.indexCount, submesh.materialIndex, slotIndex,
-                         slot != nullptr ? slot : "<invalid-slot>",
-                         materialLoaded ? 1 : 0,
-                         (submesh.indexCount != 0 && end <= sourceMesh->getIndexCount())
-                             ? "ok" : "INVALID");
-        }
-        std::fprintf(stderr,
-                     "[SkinnedMeshDiagnostic] mesh=%s vertices=%u indices=%u "
-                     "submeshes=%u slots=%u coveredIndices=%llu invalidRanges=%u "
-                     "skin=%d bounds=%d\n",
-                     meshPath.c_str(), sourceMesh->getVertexCount(),
-                     sourceMesh->getIndexCount(), submeshCount, slotCount,
-                     static_cast<unsigned long long>(coveredIndices), invalidRanges,
-                     sourceMesh->hasSkinWeights() ? 1 : 0,
-                     sourceMesh->hasBounds() ? 1 : 0);
+        std::fprintf(stderr,"[SkinnedMeshDiagnostic] uploaded mesh=%s vertices=%u indices=%u submeshes=%u slots=%u coveredIndices=%llu\n",
+            meshPath.c_str(),snapshot->vertexCount,snapshot->indexCount,submeshCount,slotCount,
+            static_cast<unsigned long long>(coveredIndices));
     }
-
-    auto [inserted, unused] = _meshSubmissionCache.emplace(meshPath, std::move(cached));
+    auto [inserted, unused] = _meshSubmissionCache.insert_or_assign(meshPath,std::move(cached));
     (void)unused;
     return &inserted->second;
 }
@@ -352,7 +227,21 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
         ayt::render::RendererSubSystem::findRegistered();
     if (rss == nullptr) return;
     ayt::render::Renderer& renderer = rss->renderer();
+    const uint64_t context = renderer.resourceContextId();
+    if (!context) return;
+    const auto& roots=ayt::resource::assetRoots();
+    if (_resourceContextId != context||_assetRoots!=roots) {
+        // Generated fallback instances are context-owned, independent of the
+        // mounted asset roots. Do not orphan them on a roots-only change.
+        if(_resourceContextId!=context)_materialCache.clear();
+        _meshSubmissionCache.clear();
+        _pathMaterialCache.clear();
+        _assetRoots=roots;
+        _resourceContextId = context;
+    }
+    if(++_extractionSerial==0){_meshSubmissionCache.clear();_pathMaterialCache.clear();_extractionSerial=1;}
     const ayt::math::FVector3 cameraPosition = renderer.mainCameraPosition();
+    ExtractionResources extraction;
 
     constexpr const char* kRigidKey = "AYEntity_RigidLit_bgfx_v2";
     const MaterialKey rigidKey{ kRigidKey };
@@ -388,7 +277,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
         if (!meshComp->visible || meshComp->meshPath.empty()) continue;
 
         CachedMeshSubmission* meshSubmission =
-            loadMeshSubmissionCached(renderer, meshComp->meshPath);
+            loadMeshSubmissionCached(renderer, meshComp->meshPath,extraction);
         if (meshSubmission == nullptr || !meshSubmission->mesh.isValid()) {
             ++skippedNoMesh;
             static uint32_t s_meshFailLog = 0;
@@ -407,7 +296,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
         ayt::render::MaterialHandle fallbackMat = rigidIt->second;
         if (!meshComp->materialPath.empty()) {
             const ayt::render::MaterialHandle cooked =
-                loadMaterialCached(renderer, meshComp->materialPath);
+                loadMaterialCached(renderer, meshComp->materialPath,extraction);
             if (cooked.isValid()) {
                 fallbackMat = cooked;
             } else {

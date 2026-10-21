@@ -53,6 +53,44 @@ if(TARGET AYEntityParticleIntegration)
 endif()
 if(TARGET AYEntityRenderIntegration)
     list(APPEND SOURCES AYTest_SceneLighting.cpp)
+    add_executable(AYEntity_RenderSubmissionTests
+        RenderSubmissionTestMain.cpp AYTest_RenderSubmission.cpp)
+    target_link_libraries(AYEntity_RenderSubmissionTests PRIVATE AYEntity AYTest)
+    ay_add_test(AYEntity_RenderSubmissionTests CASE_REPORT LABELS "entity;render-submission;integration")
+    # Manual real-device acceptance; remains separate from the Noop CPU tier.
+    add_executable(AYEntity_MeshSubmissionRenderTest EXCLUDE_FROM_ALL MeshSubmissionRenderTest.cpp)
+    target_include_directories(AYEntity_MeshSubmissionRenderTest PRIVATE ../../AYRenderer/src)
+    target_link_libraries(AYEntity_MeshSubmissionRenderTest PRIVATE AYEntity bgfx::bgfx)
+    if(WIN32)
+        target_link_libraries(AYEntity_MeshSubmissionRenderTest PRIVATE user32)
+    endif()
+    if(MSVC)
+        target_compile_options(AYEntity_MeshSubmissionRenderTest PRIVATE /Zc:__cplusplus /Zc:preprocessor)
+    endif()
+    add_executable(AYEntity_RenderSubmissionBenchmark EXCLUDE_FROM_ALL RenderSubmissionBenchmark.cpp)
+    target_link_libraries(AYEntity_RenderSubmissionBenchmark PRIVATE AYEntity)
+    # Optional saved source baseline. Neither downloaded code nor a second engine
+    # implementation is part of the repository; record the source revision with evidence.
+    if(AY_ENTITY_RENDER_BENCHMARK_BASELINE_DIR)
+        foreach(source AYRenderSystem.cpp AYSkinnedMeshRenderSystem.cpp
+                include/AYEntityBaseline/RenderSystem.h include/AYEntityBaseline/SkinnedMeshRenderSystem.h)
+            if(NOT EXISTS "${AY_ENTITY_RENDER_BENCHMARK_BASELINE_DIR}/${source}")
+                message(FATAL_ERROR "Missing saved render benchmark baseline: ${source}")
+            endif()
+        endforeach()
+        add_executable(AYEntity_RenderSubmissionBenchmarkBaseline EXCLUDE_FROM_ALL
+            RenderSubmissionBenchmark.cpp
+            "${AY_ENTITY_RENDER_BENCHMARK_BASELINE_DIR}/AYRenderSystem.cpp"
+            "${AY_ENTITY_RENDER_BENCHMARK_BASELINE_DIR}/AYSkinnedMeshRenderSystem.cpp")
+        target_link_libraries(AYEntity_RenderSubmissionBenchmarkBaseline PRIVATE AYEntity)
+        # Saved implementation/declarations use an isolated namespace, avoiding
+        # mixed class definitions in the current framework. Dependencies stay shared.
+        target_include_directories(AYEntity_RenderSubmissionBenchmarkBaseline BEFORE PRIVATE
+            "${AY_ENTITY_RENDER_BENCHMARK_BASELINE_DIR}/include")
+        target_compile_definitions(AYEntity_RenderSubmissionBenchmarkBaseline PRIVATE
+            AY_ENTITY_RENDER_BENCHMARK_BASELINE=1
+            AY_ENTITY_RENDER_BENCHMARK_LABEL="saved-source-baseline")
+    endif()
 endif()
 add_executable(${PROJECT_NAME} ${SOURCES})
 
