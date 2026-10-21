@@ -10,6 +10,7 @@
 #include <AYEntity/World.h>
 #include <AYEntity/WorldLifecycle.h>
 #include <AYEntity/components/MeshComponent.h>
+#include <AYEntity/components/LightComponent.h>
 #include <AYRenderer/RendererRuntimeModule.h>
 #include <AYRenderer/RendererSubSystem.h>
 
@@ -18,6 +19,9 @@
 
 namespace ayt::entity
 {
+
+// One finalizer in the integration TU; Core stays independent of light schema.
+AY_FINALIZE_REGISTRATION_METADATA(LightComponent)
 
 namespace
 {
@@ -52,8 +56,21 @@ void ensureWorldLifecycleBridge()
 ComponentRegistryResult registerEntityRenderComponents(
     ComponentRegistry& registry)
 {
-    return registerSceneComponent<MeshComponent>(
-        registry, "MeshComponent", "Mesh", "Rendering");
+    const auto mesh=registerSceneComponent<MeshComponent>(registry,"MeshComponent","Mesh","Rendering");
+    if(!mesh) return mesh;
+    auto light=detail::makeComponentDescriptor<LightComponent>("LightComponent","Light","Rendering");
+    light.requiresSpatial=true;light.sceneSerializable=true;
+    light.serialize=[](ayt::serializer::ISerializer& writer,const IComponent& base){
+        auto& value=const_cast<LightComponent&>(static_cast<const LightComponent&>(base));
+        if(!value.valid()){writer.reportError(ayt::serializer::SerializeError::Code::InvalidInput,"Invalid Scene light values");return;}
+        ayt::serializer::SerializerForReflect<LightComponent>::applyFields(writer,value);
+    };
+    light.deserialize=[](ayt::serializer::ISerializer& reader,IComponent& base){
+        auto& value=static_cast<LightComponent&>(base);
+        ayt::serializer::SerializerForReflect<LightComponent>::applyReadFields(reader,value);
+        if(!value.valid()) reader.reportError(ayt::serializer::SerializeError::Code::InvalidInput,"Invalid Scene light values");
+    };
+    return registry.registerComponent(std::move(light));
 }
 
 void registerEntityRenderSystems()

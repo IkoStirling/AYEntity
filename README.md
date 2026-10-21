@@ -1,5 +1,22 @@
 # AYEntity
 
+## Scene 灯光（2026-10-21）
+
+安装 `EntityRenderIntegrationModule`、在 registry seal 前注册渲染组件后，在活动 Scene World
+创建 Spatial Entity 并添加 `LightComponent`。组件支持 Directional / Point / Spot、启用、线性RGB、
+强度、米制范围、锥半角、阴影和优先级；创建组件无需模型或灯光资源文件。
+移动/旋转使用固有 Transform，局部 +Z 发光，世界位置受父级变换影响，朝向和范围忽略缩放。
+
+RenderSystem 在呈现 alpha 提取值，最多8盏有效启用灯按优先级降序、persistentId 升序选择。
+无 authored 组件保留 Host 默认照明；存在但全部禁用/非法时明确关闭直接照明，保留环境/自发光。
+高级宿主可使用 `collectSceneLighting`，其结果计数说明禁用、非法及超过预算的灯；不返回借用指针。
+`LightComponent::valid` 和注册的 Scene codec 拒绝非有限/越界数据、内角大于外角及 Point 阴影。
+直接运行时写入的非法组件在提取时跳过；整体 Scene 加载/编辑失败沿用既有回滚。
+
+`EntitySceneLightingTests` 覆盖范围/层级、稳定预算、codec、真实注册 RenderSystem 到
+RendererSubSystem 的包所有权及删除/禁用/Host 恢复。默认渲染桥已接入，实际 GPU 作者流程另由
+AYEditor 隐藏窗口测试验证；两者的证据边界分别记录。
+
 ## 空间实体与数据实体（2026-10-14）
 
 `World::createSpatialEntity()` 创建空间实体：固有一个不可移除的局部 Transform，

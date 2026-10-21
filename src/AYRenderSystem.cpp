@@ -1,4 +1,5 @@
 #include "AYEntity/RenderSystem.h"
+#include <AYEntity/SceneLighting.h>
 
 
 
@@ -159,6 +160,11 @@ void RenderSystem::onUpdate(float /*dt*/)
 void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
 {
+    ayt::render::SceneLights authoredLights;
+    const auto lighting=collectSceneLighting(World::instance(),authoredLights,
+        ayt::game::GameLoop::instance().getInterpolationFactor());
+    if(lighting.authored) scene.setSceneLights(authoredLights);
+
 
     static uint32_t s_frameIndex = 0;
 

@@ -491,6 +491,7 @@ if(AY_ENABLE_RENDERER)
     endif()
     add_library(AYEntityRenderIntegration STATIC
         src/AYEntityRenderIntegrationModule.cpp
+        src/AYSceneLighting.cpp
         src/AYPerspectiveCameraUpdateSystem.cpp
         src/AYRenderSystem.cpp
         src/AYSkinnedMeshRenderSystem.cpp

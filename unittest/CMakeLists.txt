@@ -51,6 +51,9 @@ set(SOURCES
 if(TARGET AYEntityParticleIntegration)
     list(APPEND SOURCES AYTest_ParticleSystems.cpp)
 endif()
+if(TARGET AYEntityRenderIntegration)
+    list(APPEND SOURCES AYTest_SceneLighting.cpp)
+endif()
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE

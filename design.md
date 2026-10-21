@@ -1,5 +1,17 @@
 # AYEntity Design
 
+## 2026-10-21 — Scene Light 组件与渲染提取
+
+LightComponent 的反射 finalizer 只在 RenderIntegration TU 注册一次，不让 Core 静态注册依赖
+Renderer。descriptor 要求 Spatial 并提供完整值校验的 codec；字段是 Scene schema5 的普通组件
+payload，无新 Scene 格式版本。Core-only 注册表未安装该组件时仍拒绝未知类型。
+
+collectSceneLighting 在 World owner 线程按同一 alpha 求 worldPose，固定8项插入选择不保留
+组件/World 指针。父级位置与 scale-free 朝向分别沿用实体空间契约；Directional 把强度折入颜色，
+Point/Spot 保留 Renderer 对应强度，锥半角转换为余弦。场景删除之后已有包仍持有自己的值快照。
+RenderSystem 仅在 authored>0 时安装快照，明确区分没有作者灯光与作者灯光全部关闭。
+Noop 生产桥测试覆盖注册系统、更新、旧包持有、删除和清理 builder，GPU 测试不替代此桥测试。
+
 ## 空间实体与数据实体（2026-10-14）
 
 `World::createSpatialEntity()` 创建空间实体：固有一个不可移除的局部 Transform，
