@@ -183,6 +183,14 @@ Sprite/Tilemap 美术和碰撞区域需要分别配置。当前仅支持轴对�
 该组件刻意只覆盖最常见的规则网格 MVP。非规则区域、逐帧时长、动画事件、命名
 片段与状态机应由后续独立 clip 资产描述，而不是继续扩张组件字段。
 
+## 2D Tilemap 动画
+
+`TilemapAnimationTickSystem` 按性能时钟推进每条 Tilemap 资源路径共享的动画状态，
+`TilemapRenderSystem` 在同一帧读取已解析的图块。运行时保留连续短帧不足 1 毫秒
+的余数；长时间停顿跳过完整正时长动画循环，零时长帧保持停止语义；显示图块未变时
+不增加网格重建 revision。倒退时间清除余数。它仍使用性能时钟，游戏暂停/时间缩放
+不会自动影响瓦片动画；同路径资源重载后要显式清理动画缓存。
+
 ECS 结构、Simulation/Presentation 分轨和引导流程见 [design.md](design.md)。
 
 ## 确定性 Simulation / Presentation 分轨

@@ -3434,3 +3434,24 @@ Camera controllers bind persistent Entity identity with a World-scoped runtime h
 Entity.PhysicsIntegration installs the default Jolt sphere-sweep adapter. Host custom queries override it; collisionEnabled explicitly disables per controller. The finite-volume query ignores sensors/self/target bodies, checks generation handles and reports initial penetration at zero center travel. Null/Mock/2D return Unsupported. Orbit distance plus collision radius/padding implement the camera arm and damped recovery. Explicit manager adapters must be detached before manager destruction.
 
 Editor has stable target selection, collision parameters, and undoable main-window hierarchy dragging. CameraRigProject is a portable visual/authoring fixture; its Wall is visual-only, while AYEntity_CameraRigIntegrationTests exercises actual Jolt wall avoidance, lens effects/blending, self-ignore and recovery. See ../../AYDocs/CAMERA-SYSTEM.md and the integration evidence in ../../AYDocs/ENTITY-SPATIAL-HIERARCHY.md. Native Computer Use acceptance is deferred by user request.
+
+## Tilemap Scene animation mirror arithmetic (2026-10-22)
+
+`TilemapAnimationRuntime` now matches the AY2D CPU helper's elapsed-time
+arithmetic while retaining AYEntity's per-path resource cache and visible
+revision. Forward microsecond subtraction is unsigned after the order check,
+so an `INT64_MIN` to `INT64_MAX` clock span cannot overflow. Sub-millisecond
+remainders carry across ticks; clock reversal resets the remainder. Positive
+duration frames skip complete cycles before a bounded walk, so a long pause
+does not run work proportional to elapsed frames. Zero-duration frames keep
+their stop behavior and elapsed milliseconds saturate instead of wrapping.
+The resolved buffer and revision update only when the visible frame tile ID
+changes. Cross-module tests run the AY2D and AYEntity implementations through
+short steps, a 60-frame sequence, extreme jumps and reversal; the Harbor
+content sample exercises the same production Scene path on D3D11.
+
+The tick system still samples `performanceNowUs()` directly; pause and time
+scaling of the game clock do not apply automatically. `ensure(path, resource)`
+still caches the first animation table under a path until `clear()`. Clock
+source and resource reload semantics are separate integration decisions, not
+changed by this arithmetic alignment.

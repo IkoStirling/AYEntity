@@ -4,6 +4,7 @@
 #include "AYEntity/TilemapAnimationRuntime.h"
 
 #include <algorithm>
+#include <limits>
 
 namespace ayt::entity
 {
@@ -103,6 +104,7 @@ void TilemapAnimationRuntime::tick(TilemapAnimationRuntimeEntry& e,
     // advance (mirror of the AY2D first-call contract).
     if (!e.hasBeenTicked) {
         e.lastTickUs    = nowUs;
+        e.subMillisecondUs = 0;
         e.hasBeenTicked = true;
         for (size_t i = 0; i < e.table.size(); ++i) {
             const uint32_t next = resolvedFrameId(
@@ -114,25 +116,33 @@ void TilemapAnimationRuntime::tick(TilemapAnimationRuntimeEntry& e,
         return;
     }
 
-    int64_t deltaUs = nowUs - e.lastTickUs;
-    if (deltaUs < 0) {
-        deltaUs = 0;  // never run backwards (AY2D R-7 spirit)
+    if (nowUs < e.lastTickUs) {
+        e.lastTickUs = nowUs;
+        e.subMillisecondUs = 0;
+        return;
     }
-    e.lastTickUs = nowUs;
+    const uint64_t deltaUs = static_cast<uint64_t>(nowUs)
+        - static_cast<uint64_t>(e.lastTickUs);
     if (deltaUs == 0) {
         return;  // second entity on the same path this frame — no-op
     }
-
-    // Integer-ms accumulation — no float drift (design.md §7.2 lock).
-    const uint32_t deltaMs = static_cast<uint32_t>(deltaUs / 1000);
-    if (deltaMs == 0) {
-        return;
-    }
-
     const size_t n = e.table.size();
     if (n == 0) {
+        e.lastTickUs = nowUs;
+        e.subMillisecondUs = 0;
         return;  // no animations registered
     }
+
+    uint64_t deltaMs = deltaUs / 1000u;
+    uint32_t fractionalUs = static_cast<uint32_t>(deltaUs % 1000u)
+        + e.subMillisecondUs;
+    if (fractionalUs >= 1000u) {
+        ++deltaMs;
+        fractionalUs -= 1000u;
+    }
+    e.lastTickUs = nowUs;
+    e.subMillisecondUs = static_cast<uint16_t>(fractionalUs);
+    if (deltaMs == 0u) return;
 
     for (size_t i = 0; i < n; ++i) {
         const auto& frames = e.table[i];
@@ -142,19 +152,33 @@ void TilemapAnimationRuntime::tick(TilemapAnimationRuntimeEntry& e,
 
         uint32_t& elapsed  = e.elapsedMs[i];
         uint32_t& frameIdx = e.currentFrameIdx[i];
-        elapsed += deltaMs;
-
-        // Walk frames while elapsed exceeds the frame duration; loops by
-        // mod; a zero-duration frame breaks (no infinite loop).
-        while (true) {
-            const TileAnimFrame& f = frames[frameIdx % frames.size()];
-            if (f.durationMs == 0 || elapsed < f.durationMs) {
+        uint64_t remaining = static_cast<uint64_t>(elapsed) + deltaMs;
+        uint64_t cycleMs = 0u;
+        bool allPositive = true;
+        for (const TileAnimFrame& frame : frames) {
+            if (frame.durationMs == 0u
+                || cycleMs > (std::numeric_limits<uint64_t>::max)()
+                                  - frame.durationMs) {
+                allPositive = false;
                 break;
             }
-            elapsed -= f.durationMs;
+            cycleMs += frame.durationMs;
+        }
+        if (allPositive && remaining >= cycleMs) {
+            remaining %= cycleMs;
+            frameIdx = static_cast<uint32_t>(frameIdx % frames.size());
+        }
+
+        for (size_t traversed = 0u; traversed < frames.size(); ++traversed) {
+            const TileAnimFrame& f = frames[frameIdx % frames.size()];
+            if (f.durationMs == 0u || remaining < f.durationMs) break;
+            remaining -= f.durationMs;
             frameIdx = (frameIdx + 1u)
                      % static_cast<uint32_t>(frames.size());
         }
+        elapsed = static_cast<uint32_t>(remaining >
+            (std::numeric_limits<uint32_t>::max)()
+                ? (std::numeric_limits<uint32_t>::max)() : remaining);
 
         const uint32_t next = resolvedFrameId(
             e.table, e.currentFrameIdx, static_cast<uint32_t>(i));

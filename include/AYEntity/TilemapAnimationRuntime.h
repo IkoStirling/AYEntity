@@ -56,13 +56,14 @@ struct TilemapAnimationRuntimeEntry {
     std::vector<uint32_t> elapsedMs;         // ms into the current frame
     // Hot-path resolve buffer: resolved[i] == the frame tile id currently
     // displayed for source tile id i (== i when static/absent). Refreshed
-    // by every tick() call (including the first baseline call), so the
+    // after visible frame changes (and the first baseline call), so the
     // render path reads it with no hash and no table traversal.
     std::vector<uint32_t> resolved;
     // Monotonic visible-frame revision. Chunk meshes cache this value and only
     // rebuild when an animated source tile actually resolves to another id.
     uint64_t revision = 1;
     int64_t lastTickUs    = 0;
+    uint16_t subMillisecondUs = 0;
     bool    hasBeenTicked = false;
 };
 
@@ -86,12 +87,13 @@ public:
     // Advances `e` to `nowUs`, mirroring ayt::ay2d::tickTilemapAnimation:
     //   - first call stashes the baseline, no advance (no huge initial
     //     jump on a far-future first timestamp);
-    //   - reversed clock (nowUs < lastTickUs) clamps delta to 0;
+    //   - reversed clock (nowUs < lastTickUs) resets the sub-ms remainder;
     //   - deltaUs == 0 (e.g. a second entity sharing the path in the same
     //     frame) is a no-op — idempotent by construction;
-    //   - integer-ms accumulation; while-loop modulo advance; a
-    //     zero-duration frame breaks (never advances, never loops);
-    //   - refreshes resolved[] for every table index.
+    //   - microsecond remainder carries across ticks; full positive cycles
+    //     are skipped before bounded frame traversal;
+    //   - a zero-duration frame stops advancement without an infinite loop;
+    //   - resolved[] and revision change only when displayed tiles change.
     void tick(TilemapAnimationRuntimeEntry& e, int64_t nowUs);
 
     // Animation source tile id -> currently displayed frame tile id.

@@ -13,6 +13,8 @@
 //   6. sticky-Noop render closed loop: an animated tile's payload UV
 //      flips to the next frame's tile id after a tick (the Present-lane
 //      consumer).
+//   7. cross-module short-step, long-jump and extreme-clock parity, plus
+//      visible-frame-only revision growth.
 //
 // Systems are driven via constructed instances (the AYTest_2DRenderSystems
 // inline-test pattern). The AY2D lib link here is test-only (CM-5 comment
@@ -47,6 +49,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <sys/stat.h>
 #include <vector>
@@ -282,6 +285,72 @@ TEST_CASE(cm5_runtime_cross_asserts_ay2d_tick)
     CHECK_INT_EQ(static_cast<int>(mirror->resolved[5]), 20);
     CHECK_INT_EQ(static_cast<int>(mirror->resolved[9]), 90);
 
+    rt.clear();
+}
+
+TEST_CASE(runtime_matches_ay2d_across_short_steps_and_extreme_clock_span)
+{
+    ayt::resource::TilemapAsset asset = makeDeterministicAsset();
+    TilemapAnimationRuntime& rt = TilemapAnimationRuntime::instance();
+    rt.clear();
+    TilemapAnimationRuntimeEntry* mirror = rt.ensure("extreme-clock", asset);
+    CHECK_NOT_NULL(mirror);
+    ayt::ay2d::Tilemap real;
+    fillRealTable(real);
+
+    const auto advanceBoth = [&](int64_t nowUs) {
+        rt.tick(*mirror, nowUs);
+        ayt::ay2d::tickTilemapAnimation(real, nowUs);
+        CHECK_TRUE(mirror->subMillisecondUs == real.subMillisecondUs);
+        for (uint32_t id = 0u; id < 10u; ++id) {
+            CHECK_TRUE(mirror->currentFrameIdx[id]
+                       == real.animationState.currentFrameIdx[id]);
+            CHECK_TRUE(mirror->elapsedMs[id]
+                       == real.animationState.elapsedMs[id]);
+            CHECK_TRUE(TilemapAnimationRuntime::resolve(*mirror, id)
+                       == ayt::ay2d::resolveAnimatedTileId(real, id));
+        }
+    };
+
+    int64_t now = (std::numeric_limits<int64_t>::min)();
+    advanceBoth(now);
+    advanceBoth(now += 600);
+    advanceBoth(now += 600);
+    CHECK_TRUE(mirror->subMillisecondUs == 200u);
+    for (int frame = 0; frame < 60; ++frame)
+        advanceBoth(now += 16'666);
+    advanceBoth((std::numeric_limits<int64_t>::max)());
+    CHECK_TRUE(mirror->elapsedMs[5]
+               == (std::numeric_limits<uint32_t>::max)());
+    advanceBoth((std::numeric_limits<int64_t>::min)() + 10);
+    CHECK_TRUE(mirror->subMillisecondUs == 0u);
+    advanceBoth((std::numeric_limits<int64_t>::min)() + 610);
+    CHECK_TRUE(mirror->subMillisecondUs == 600u);
+    rt.clear();
+}
+
+TEST_CASE(runtime_revision_changes_only_when_displayed_frame_changes)
+{
+    ayt::resource::TilemapAsset asset;
+    asset.create(1u, 1u, 16u, 16u,
+                 ayt::resource::TilemapPackMode::Narrow16, 0u, nullptr, 0u);
+    const ayt::resource::TileAnimationFrame frames[] = {
+        {10u, 100u}, {11u, 100u}};
+    CHECK_TRUE(asset.setAnimationEntry(2u, frames, 2u));
+    TilemapAnimationRuntime& rt = TilemapAnimationRuntime::instance();
+    rt.clear();
+    TilemapAnimationRuntimeEntry* entry = rt.ensure("revision", asset);
+    CHECK_NOT_NULL(entry);
+    rt.tick(*entry, 0);
+    const uint64_t initial = entry->revision;
+    rt.tick(*entry, 200'000);
+    CHECK_TRUE(entry->revision == initial);
+    rt.tick(*entry, 300'000);
+    CHECK_TRUE(entry->revision == initial + 1u);
+    rt.tick(*entry, 300'600);
+    CHECK_TRUE(entry->revision == initial + 1u);
+    rt.tick(*entry, 400'000);
+    CHECK_TRUE(entry->revision == initial + 2u);
     rt.clear();
 }
 
