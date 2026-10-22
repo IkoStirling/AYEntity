@@ -191,6 +191,11 @@ Sprite/Tilemap 美术和碰撞区域需要分别配置。当前仅支持轴对�
 不增加网格重建 revision。倒退时间清除余数。它仍使用性能时钟，游戏暂停/时间缩放
 不会自动影响瓦片动画；同路径资源重载后要显式清理动画缓存。
 
+v3 图块渲染按可见区块与图层缓存已分组的网格描述。静态区块再次可见时直接提交
+驻留网格，不再逐帧扫描瓦片并生成 CPU 批次；动画换帧只重建含相应源图块的区块。
+网格逐出后会按需重建，资源重载仍沿用显式清理缓存的约定。
+`TilemapRenderSystem::lastFrameStats().authoredChunksBatched` 可诊断本帧实际批次重建数。
+
 ECS 结构、Simulation/Presentation 分轨和引导流程见 [design.md](design.md)。
 
 ## 确定性 Simulation / Presentation 分轨

@@ -1300,6 +1300,15 @@ draw batch；层级通过相邻 sortingKey 保持稳定顺序。四分格 shadow
 几何，颜色取资源内 `0xRRGGBBAA`，因此 Edit 与 Play 消费同一份烘焙数据。v1/v2 资源
 继续走组件 `atlasPath/atlasTexturePath` 的旧规则网格分支。
 
+v3 表现缓存以 `(资源路径、chunk 尺寸、layer、chunk 坐标)` 定位 CPU 分组；每组
+保存批次元数据和源动画 tile ID 对应的已解析帧。命中时只复用 GPU 网格与材质，
+不调用 `buildTilemapChunkBatches`；相关动画帧变化、网格逐出或首次建立才重新扫描
+瓦片并生成几何。材质仍在提交时解析，以便运行期材质变化生效。驻留上限同时约束
+空区块元数据，renderer 上下文清理会清除整套缓存；资源重载须显式清理动画缓存。
+`authoredChunksBatched` 统计实际执行 CPU 分组的区块，和 `cellsVisited`、
+`chunkMeshesBuilt` 分别用于辨别扫描及上传成本。回归用例为
+`AYEntity2DRenderSystems.authored_tilemap_reuses_static_batches_and_only_rebuilds_animated_chunk`。
+
 **验证**：`unittest/SkinnedAnimationTest.cpp::animation_system_priority_before_render_systems`
 在每次构建时跑 `bootstrapModule()` → 枚举 `World::systemCount()` → 断言
 三个 priority 值与上表一致。`unittest/AYTest_BlendSpaceSystem.cpp::blend_space_system_priority_before_animation_system`

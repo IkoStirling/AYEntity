@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace ayt::resource
@@ -38,6 +39,8 @@ public:
         uint32_t visibleChunks = 0;
         uint32_t drawItemsEmitted = 0;
         uint32_t chunkMeshesBuilt = 0;
+        // Authored v3 chunks whose tile cells were actually batched this frame.
+        uint32_t authoredChunksBatched = 0;
         uint32_t residentChunkMeshes = 0;
         uint32_t chunkMeshesEvicted = 0;
     };
@@ -60,6 +63,24 @@ private:
         ayt::render::MeshHandle mesh;
         uint64_t animationRevision = 0;
         uint64_t lastUsedFrame = 0;
+        std::string authoredGroupKey;
+    };
+    struct CachedAuthoredBatch {
+        std::string meshKey;
+        std::string texturePath;
+        uint32_t atlasId = 0;
+        uint32_t tintRgba = 0xffffffffu;
+        uint32_t atlasWidth = 0;
+        uint32_t atlasHeight = 0;
+    };
+    struct CachedAuthoredChunk {
+        // Only source tile IDs with an animation table entry are tracked.
+        // A global animation revision does not invalidate unrelated chunks.
+        std::vector<std::pair<uint32_t, uint32_t>> animationTiles;
+        std::vector<CachedAuthoredBatch> batches;
+        uint64_t lastUsedFrame = 0;
+        bool animationRuntimePresent = false;
+        bool ready = false;
     };
 
     struct CachedTilemapResources {
@@ -74,6 +95,7 @@ private:
         std::unordered_map<uint32_t, AuthoredAtlasGpu> authoredAtlases;
         ayt::render::MaterialHandle shadowMaterial;
         std::unordered_map<std::string, CachedChunkMesh> chunks;
+        std::unordered_map<std::string, CachedAuthoredChunk> authoredChunks;
     };
     struct CachedWorldLitMaterial {
         ayt::render::TextureHandle albedo;

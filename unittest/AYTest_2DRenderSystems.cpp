@@ -33,6 +33,7 @@
 #include <AYGameLoop.h>
 #include <AYGameLoop/SubSystemRegistry.h>
 #include <AYEntity/TilemapAnimationTickSystem.h>
+#include <AYEntity/TilemapAnimationRuntime.h>
 #include <AYEntity/TilemapRenderSystem.h>
 #include <AYEntity/TilemapStreamingSystem.h>
 
@@ -43,6 +44,7 @@
 
 #include <AYResource/assetsImpl/Texture.h>
 #include <AYResource/assetsImpl/TilemapAsset.h>
+#include <AYResource/ResourceManager.h>
 
 #include <AYIO/File.h>
 #include <AYTest.h>
@@ -492,6 +494,89 @@ TEST_CASE(cm3_tilemap_render_closed_loop)
     rss->shutdown();
     unregisterTestRenderer();
     World::instance().shutdown();
+    removeFile(texPath);
+    removeFile(mapPath);
+}
+
+TEST_CASE(authored_tilemap_reuses_static_batches_and_only_rebuilds_animated_chunk)
+{
+    if (!shadercAvailable()) return;
+    ayt::resource::Texture texture;
+    texture.createCheckerboard(8, 8, 2);
+    std::vector<ayt::resource::UInt8> textureBinary;
+    CHECK(texture.saveToBinary(textureBinary));
+    const std::string texPath = tempPath("authored_cache.aytex");
+    const std::string mapPath = tempPath("authored_cache.aytilemap");
+    CHECK(writeBinaryFile(texPath, textureBinary));
+
+    ayt::resource::TilemapAsset map;
+    map.create(4u, 1u, 2u, 2u,
+               ayt::resource::TilemapPackMode::Narrow16, 0u, nullptr, 0u);
+    CHECK(map.setTile(0u, 2u));
+    CHECK(map.setTile(1u, 2u));
+    CHECK(map.setTile(2u, 3u));
+    CHECK(map.setTile(3u, 3u));
+    CHECK(map.addAtlasSource(7u, texPath, 8u, 8u));
+    for (uint32_t id : {3u, 4u, 5u}) {
+        const ayt::resource::TilemapVisualEntry visual{
+            id, 7u, (id - 3u) * 2u, 0u, 2u, 2u, 0xffffffffu};
+        CHECK(map.addTileVisual(visual));
+    }
+    const ayt::resource::TileAnimationFrame frames[] = {{4u, 50u}, {5u, 50u}};
+    CHECK(map.setAnimationEntry(2u, frames, 2u));
+    std::vector<ayt::resource::UInt8> mapBinary;
+    CHECK(map.saveToBinary(mapBinary));
+    CHECK(writeBinaryFile(mapPath, mapBinary));
+
+    auto* rss = registerTestRenderer();
+    CHECK_NOT_NULL(rss);
+    if (rss == nullptr) return;
+    World& world = World::instance();
+    world.initialize();
+    Entity* entity = world.createEntity();
+    entity->addComponent<Transform>();
+    TilemapComponent* component = entity->addComponent<TilemapComponent>();
+    component->tilemapPath = mapPath;
+    component->chunkColumns = 2;
+    component->chunkRows = 1;
+
+    auto loaded = ayt::resource::ResourceManager::instance()
+        .load<ayt::resource::ITilemap>(mapPath);
+    CHECK_NOT_NULL(loaded.get());
+    auto& runtime = ayt::entity::TilemapAnimationRuntime::instance();
+    runtime.clear();
+    auto* animation = runtime.ensure(mapPath, *loaded);
+    CHECK_NOT_NULL(animation);
+    runtime.tick(*animation, 100000);
+
+    ayt::entity::TilemapRenderSystem system;
+    system.onStart();
+    ayt::render::RenderScene first;
+    system.buildRenderScene(first);
+    CHECK_INT_EQ(first.items().size(), 2u);
+    CHECK_INT_EQ(system.lastFrameStats().authoredChunksBatched, 2u);
+    CHECK_INT_EQ(system.lastFrameStats().chunkMeshesBuilt, 2u);
+    const auto staticMesh = first.items()[1].mesh;
+
+    ayt::render::RenderScene second;
+    system.buildRenderScene(second);
+    CHECK_INT_EQ(second.items().size(), 2u);
+    CHECK_INT_EQ(system.lastFrameStats().authoredChunksBatched, 0u);
+    CHECK_INT_EQ(system.lastFrameStats().chunkMeshesBuilt, 0u);
+    CHECK(second.items()[1].mesh.id == staticMesh.id);
+
+    runtime.tick(*animation, 150000);
+    ayt::render::RenderScene third;
+    system.buildRenderScene(third);
+    CHECK_INT_EQ(third.items().size(), 2u);
+    CHECK_INT_EQ(system.lastFrameStats().authoredChunksBatched, 1u);
+    CHECK_INT_EQ(system.lastFrameStats().chunkMeshesBuilt, 1u);
+    CHECK(third.items()[1].mesh.id == staticMesh.id);
+
+    rss->shutdown();
+    unregisterTestRenderer();
+    world.shutdown();
+    runtime.clear();
     removeFile(texPath);
     removeFile(mapPath);
 }

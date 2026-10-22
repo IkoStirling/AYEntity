@@ -55,6 +55,50 @@ std::string v3ChunkKey(uint32_t layer, uint32_t x, uint32_t y,
          + std::to_string(atlasId) + "/" + std::to_string(tintRgba);
 }
 
+std::string v3GroupKey(uint32_t layer, uint32_t x, uint32_t y)
+{
+    return "v3/" + std::to_string(layer) + "/"
+         + std::to_string(x) + "/" + std::to_string(y);
+}
+
+std::vector<std::pair<uint32_t, uint32_t>> animationDependencies(
+    const ayt::resource::ITilemap& map, uint32_t layer,
+    uint32_t beginCol, uint32_t beginRow, uint32_t endCol, uint32_t endRow,
+    const TilemapAnimationRuntimeEntry* animation)
+{
+    std::vector<std::pair<uint32_t, uint32_t>> result;
+    if (animation == nullptr || animation->table.empty()) return result;
+    const uint16_t* narrow = map.getLayerTileIds16(layer);
+    const uint32_t* wide = map.getLayerTileIds32(layer);
+    const uint32_t count = map.getLayerTileIdCount(layer);
+    for (uint32_t row = beginRow; row < endRow; ++row) {
+        for (uint32_t col = beginCol; col < endCol; ++col) {
+            const uint64_t index = static_cast<uint64_t>(row) * map.getCols() + col;
+            if (index >= count) continue;
+            const uint32_t id = narrow != nullptr ? narrow[index]
+                : wide != nullptr ? wide[index] : 0u;
+            if (id < animation->table.size() && !animation->table[id].empty()) {
+                result.emplace_back(id, animation->resolved[id]);
+            }
+        }
+    }
+    std::sort(result.begin(), result.end());
+    result.erase(std::unique(result.begin(), result.end()), result.end());
+    return result;
+}
+
+bool animationDependenciesChanged(
+    const std::vector<std::pair<uint32_t, uint32_t>>& dependencies,
+    const TilemapAnimationRuntimeEntry* animation) noexcept
+{
+    if (animation == nullptr) return !dependencies.empty();
+    for (const auto& [source, frame] : dependencies) {
+        if (source >= animation->resolved.size()
+            || animation->resolved[source] != frame) return true;
+    }
+    return false;
+}
+
 std::string shadowChunkKey(uint32_t x, uint32_t y)
 {
     return "shadow/" + std::to_string(x) + "/" + std::to_string(y);
@@ -423,76 +467,138 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                     for (uint32_t sourceLayer = 0u;
                          sourceLayer < layerCount; ++sourceLayer) {
                         if (!resources.tilemap->isLayerVisible(sourceLayer)) continue;
-                        std::vector<TilemapChunkBatch> batches =
-                            buildTilemapChunkBatches(
-                                *resources.tilemap, sourceLayer,
-                                beginCol, beginRow, endCol, endRow, resolved);
-                        for (TilemapChunkBatch& batch : batches) {
-                            const ayt::resource::TilemapAtlasEntry* atlasEntry = nullptr;
-                            for (uint32_t i = 0u; i < atlasCount; ++i) {
-                                if (atlasEntries[i].atlasId == batch.atlasId) {
-                                    atlasEntry = atlasEntries + i;
+                        const std::string groupKey =
+                            v3GroupKey(sourceLayer, chunkX, chunkY);
+                        CachedAuthoredChunk& group =
+                            resources.authoredChunks[groupKey];
+                        bool rebuild = !group.ready
+                            || group.animationRuntimePresent != (animation != nullptr)
+                            || animationDependenciesChanged(
+                                group.animationTiles, animation);
+                        if (!rebuild) {
+                            for (const CachedAuthoredBatch& batch : group.batches) {
+                                const auto mesh = resources.chunks.find(batch.meshKey);
+                                if (mesh == resources.chunks.end()
+                                    || !mesh->second.mesh.isValid()) {
+                                    rebuild = true;
                                     break;
                                 }
                             }
-                            if (atlasEntry == nullptr
-                                || atlasEntry->sourcePath == nullptr) continue;
-                            auto& atlasGpu =
-                                resources.authoredAtlases[batch.atlasId];
-                            ayt::render::MaterialHandle batchMaterial =
-                                resolveMaterial(
-                                    atlasEntry->sourcePath, quality,
-                                    atlasGpu.texture, atlasGpu.materials);
-                            if (!batchMaterial.isValid()) continue;
-
-                            const std::string key = v3ChunkKey(
-                                sourceLayer, chunkX, chunkY,
-                                batch.atlasId, batch.tintRgba);
-                            CachedChunkMesh& cached = resources.chunks[key];
-                            if (!cached.mesh.isValid()
-                                || cached.animationRevision != animationRevision) {
-                                if (cached.mesh.isValid()) {
-                                    renderer.destroyMesh(cached.mesh);
+                        }
+                        if (rebuild) {
+                            ++_lastStats.authoredChunksBatched;
+                            std::vector<TilemapChunkBatch> batches =
+                                buildTilemapChunkBatches(
+                                    *resources.tilemap, sourceLayer,
+                                    beginCol, beginRow, endCol, endRow, resolved);
+                            std::vector<CachedAuthoredBatch> nextBatches;
+                            nextBatches.reserve(batches.size());
+                            bool ready = true;
+                            for (TilemapChunkBatch& batch : batches) {
+                                const ayt::resource::TilemapAtlasEntry* atlasEntry = nullptr;
+                                for (uint32_t i = 0u; i < atlasCount; ++i) {
+                                    if (atlasEntries[i].atlasId == batch.atlasId) {
+                                        atlasEntry = atlasEntries + i;
+                                        break;
+                                    }
                                 }
+                                if (atlasEntry == nullptr
+                                    || atlasEntry->sourcePath == nullptr) {
+                                    ready = false;
+                                    continue;
+                                }
+                                auto& atlasGpu = resources.authoredAtlases[batch.atlasId];
+                                if (!resolveMaterial(atlasEntry->sourcePath, quality,
+                                                     atlasGpu.texture,
+                                                     atlasGpu.materials).isValid()) {
+                                    ready = false;
+                                    continue;
+                                }
+                                const std::string key = v3ChunkKey(
+                                    sourceLayer, chunkX, chunkY,
+                                    batch.atlasId, batch.tintRgba);
+                                CachedChunkMesh& cached = resources.chunks[key];
+                                if (cached.mesh.isValid()) renderer.destroyMesh(cached.mesh);
                                 _lastStats.cellsVisited += batch.geometry.cells;
+                                cached.mesh = {};
                                 if (!batch.geometry.vertices.empty()
                                     && !batch.geometry.indices.empty()) {
                                     cached.mesh = renderer.createMesh(
                                         batch.geometry.vertices.data(),
-                                        static_cast<uint32_t>(
-                                            batch.geometry.vertices.size()),
+                                        static_cast<uint32_t>(batch.geometry.vertices.size()),
                                         ayt::render::VertexLayoutDesc::position3TexCoord2(),
                                         batch.geometry.indices.data(),
-                                        static_cast<uint32_t>(
-                                            batch.geometry.indices.size()));
+                                        static_cast<uint32_t>(batch.geometry.indices.size()));
                                 }
                                 cached.animationRevision = animationRevision;
+                                cached.lastUsedFrame = _frameIndex;
+                                cached.authoredGroupKey = groupKey;
                                 ++_lastStats.chunkMeshesBuilt;
+                                if (!cached.mesh.isValid()) {
+                                    ready = false;
+                                    continue;
+                                }
+                                nextBatches.push_back({key, atlasEntry->sourcePath,
+                                    batch.atlasId, batch.tintRgba,
+                                    batch.atlasWidth, batch.atlasHeight});
                             }
-                            cached.lastUsedFrame = _frameIndex;
-                            if (!cached.mesh.isValid()) continue;
-
+                            for (const CachedAuthoredBatch& old : group.batches) {
+                                const auto stillUsed = std::find_if(
+                                    nextBatches.begin(), nextBatches.end(),
+                                    [&old](const CachedAuthoredBatch& current) {
+                                        return current.meshKey == old.meshKey;
+                                    });
+                                if (stillUsed == nextBatches.end()) {
+                                    const auto stale = resources.chunks.find(old.meshKey);
+                                    if (stale != resources.chunks.end()) {
+                                        if (stale->second.mesh.isValid())
+                                            renderer.destroyMesh(stale->second.mesh);
+                                        resources.chunks.erase(stale);
+                                    }
+                                }
+                            }
+                            group.batches = std::move(nextBatches);
+                            group.animationTiles = animationDependencies(
+                                *resources.tilemap, sourceLayer,
+                                beginCol, beginRow, endCol, endRow, animation);
+                            group.animationRuntimePresent = animation != nullptr;
+                            group.ready = ready;
+                        }
+                        group.lastUsedFrame = _frameIndex;
+                        for (const CachedAuthoredBatch& batch : group.batches) {
+                            auto mesh = resources.chunks.find(batch.meshKey);
+                            if (mesh == resources.chunks.end()
+                                || !mesh->second.mesh.isValid()) {
+                                group.ready = false;
+                                continue;
+                            }
+                            auto& atlasGpu = resources.authoredAtlases[batch.atlasId];
+                            const ayt::render::MaterialHandle batchMaterial =
+                                resolveMaterial(batch.texturePath, quality,
+                                                atlasGpu.texture,
+                                                atlasGpu.materials);
+                            if (!batchMaterial.isValid()) {
+                                group.ready = false;
+                                continue;
+                            }
+                            mesh->second.lastUsedFrame = _frameIndex;
                             ChunkDraw draw;
                             draw.payload.sourceRectMin = {0.0f, 0.0f};
                             draw.payload.sourceRectMax = {1.0f, 1.0f};
                             draw.payload.tintRGBA = unpackRgba(batch.tintRgba);
                             draw.payload.atlasTexelSize = {
                                 batch.atlasWidth > 0u
-                                    ? 1.0f / static_cast<float>(batch.atlasWidth)
-                                    : 0.0f,
+                                    ? 1.0f / static_cast<float>(batch.atlasWidth) : 0.0f,
                                 batch.atlasHeight > 0u
-                                    ? 1.0f / static_cast<float>(batch.atlasHeight)
-                                    : 0.0f};
+                                    ? 1.0f / static_cast<float>(batch.atlasHeight) : 0.0f};
                             draw.payload.packedSortKey = drawSortKey(
                                 component->layer,
-                                component->sortingKey
-                                    + static_cast<int32_t>(sourceLayer));
+                                component->sortingKey + static_cast<int32_t>(sourceLayer));
                             draw.payload.renderDomain = renderDomain;
-                            draw.payload.uvMapping =
-                                ayt::render::UvMapping2D::BakedAtlas;
+                            draw.payload.uvMapping = ayt::render::UvMapping2D::BakedAtlas;
                             draw.payload.samplingQuality =
                                 static_cast<ayt::render::TilemapSamplingQuality>(quality);
-                            draw.item.mesh = cached.mesh;
+                            draw.item.mesh = mesh->second.mesh;
                             draw.item.material = batchMaterial;
                             draw.item.world = worldMatrix;
                             draw.item.shadowFlags = worldLit
@@ -621,9 +727,27 @@ void TilemapRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 }
             }
             if (victim == resources.chunks.end()) break;
+            if (!victim->second.authoredGroupKey.empty()) {
+                resources.authoredChunks.erase(
+                    victim->second.authoredGroupKey);
+            }
             renderer.destroyMesh(victim->second.mesh);
             resources.chunks.erase(victim);
             ++_lastStats.chunkMeshesEvicted;
+        }
+        // Empty authored chunks have no GPU mesh to participate in the LRU.
+        // Keep their no-work cache bounded as the camera traverses the map.
+        while (resources.authoredChunks.size() > limit) {
+            auto victim = resources.authoredChunks.end();
+            for (auto it = resources.authoredChunks.begin();
+                 it != resources.authoredChunks.end(); ++it) {
+                if (it->second.lastUsedFrame == _frameIndex) continue;
+                if (victim == resources.authoredChunks.end()
+                    || it->second.lastUsedFrame < victim->second.lastUsedFrame)
+                    victim = it;
+            }
+            if (victim == resources.authoredChunks.end()) break;
+            resources.authoredChunks.erase(victim);
         }
     }
 
