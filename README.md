@@ -10,11 +10,13 @@
 运动学根实体使用 `moveSpatialEntityAcrossSpaces` 同步更新姿态、区域和速度；
 `raycastConnectedSpaces` 按入口区域查询，到门面后在目标区域续接。查询解析器须提供
 按区域隔离的物理世界或互斥层掩码。物理权威动态刚体不能使用运动学入口，游戏需在
-固定步边界结合 `travel` 结果提交物理身体更新。
+固定步边界用 `transferSpatialRigidBodyAcrossSpaces` 提交最新物理快照、位移和区域层路由；
+一次命令同时改变位姿、线/角速度及碰撞层/掩码，入队失败不改变 Entity。
 
 渲染集成的 `planSpacePortalView` 把实时观察者映射到出口并计算出口斜裁剪平面；
 `makeSpacePortalSurfaceDraw` 生成入口四边形，配合 Renderer 的离屏输出材质，
-按子视图先于父视图提交。`spaceRegionId` 让门内视图只显示目标区域。
+按子视图先于父视图提交。`SpacePortalViewScheduler` 可按可见面积和深度/视图预算
+自动建造递归批次，并复用每条门路径的输出资源。`spaceRegionId` 让门内视图只显示目标区域。
 普通主相机视图也按自身区域筛选网格及直接灯光，避免重叠区域互相照亮。
 主视图未指定区域时保持旧场景可见性；完整调度与边界见
 [跨模块说明](../../AYDocs/CONNECTED-SPACES.md)。

@@ -548,6 +548,7 @@ if(AY_ENABLE_PHYSICS)
     add_library(AYEntityPhysicsIntegration STATIC
         src/AYEntityPhysicsIntegrationModule.cpp
         src/AYConnectedSpacePhysicsQuery.cpp
+        src/AYConnectedSpacePhysicsTransfer.cpp
         src/AYCameraPhysicsCollision.cpp
         src/AYEntityPhysicsBridge.cpp
     )
