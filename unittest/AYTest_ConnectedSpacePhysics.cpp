@@ -70,6 +70,10 @@ TEST_CASE(dynamic_body_transfer_updates_region_only_after_one_command_is_admitte
     auto* component=entity->addComponent<RigidBodyComponent>();
     CHECK(component!=nullptr);
     physics::PhysicsBackendDescriptor desc;desc.kind3D=physics::BackendKind::Mock;
+    auto refusedManager=physics::PhysicsManager::create(desc);
+    CHECK(refusedManager!=nullptr);
+    auto* refusedWorld=refusedManager->world3D();
+    refusedManager->shutdown();
     auto manager=physics::PhysicsManager::create(desc);CHECK(manager!=nullptr);
     auto* physicsWorld=manager->world3D();
     physics::BodyHandle handle=physics::InvalidBodyHandle;
@@ -87,6 +91,11 @@ TEST_CASE(dynamic_body_transfer_updates_region_only_after_one_command_is_admitte
     CHECK(transferSpatialRigidBodyAcrossSpaces(*entity,snapshot,{0,0,-3},2,
         *physicsWorld,{},result)==physics::PhysResult::InvalidParam);
     CHECK(entity->spaceRegion()==1);
+    CHECK(transferSpatialRigidBodyAcrossSpaces(*entity,snapshot,{0,0,-3},2,
+        *refusedWorld,route,result)==physics::PhysResult::InvalidState);
+    CHECK(entity->spaceRegion()==1);
+    CHECK_FLOAT_EQ(component->getVelocityZ(),0,1e-5f);
+    CHECK(result.crossings==0);
     CHECK(transferSpatialRigidBodyAcrossSpaces(*entity,snapshot,{0,0,-3},2,
         *physicsWorld,route,result)==physics::PhysResult::Ok);
     CHECK(entity->spaceRegion()==2);CHECK(result.crossings==1);
