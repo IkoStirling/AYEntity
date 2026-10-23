@@ -3464,3 +3464,14 @@ scaling of the game clock do not apply automatically. `ensure(path, resource)`
 still caches the first animation table under a path until `clear()`. Clock
 source and resource reload semantics are separate integration decisions, not
 changed by this arithmetic alignment.
+
+# 2026-10-23 arbitrary-up presentation
+
+The 3D camera controller maps local yaw/pitch/roll through a frame that rotates
+Y onto its serialized `upVector`. Look-at first resolves forward in that frame,
+then applies optional bank. The default up/roll preserves old scene behavior;
+invalid up or roll leaves the prior pose untouched. The particle presentation
+system holds a borrowed `GravityQuery3D` pointer, passes it to CPU runtimes and
+forces a diagnosed GPU-to-CPU fallback while the pointer is installed. The
+owner clears it before destroying the provider. No physics module dependency
+is added to AYEntityCore or AYParticle.

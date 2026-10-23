@@ -51,6 +51,25 @@ particle::ParticleEffect burst(uint32_t count=100) {
 }
 }
 TEST_SUITE(AYEntityParticles)
+TEST_CASE(scene_spatial_gravity_query_drives_3d_cpu_particles) {
+    Fixture fixture;
+    struct Query final : particle::GravityQuery3D {
+        particle::Vec3 acceleration(particle::Vec3) const override { return {4,0,0}; }
+    } query;
+    auto effect=burst(1); effect.dimension=particle::Dimension::ThreeD;
+    effect.drag=0;
+    effect.backend=particle::Backend::Gpu;
+    auto* source=emitter(effect);
+    entity::ParticleSimulationSystem system;
+    system.setGravityQuery(&query);
+    system.onUpdate(0);
+    system.onUpdate(.5f);
+    CHECK(!source->usingGpu);
+    CHECK(source->backendStatus=="CPU: spatial gravity query");
+    CHECK_INT_EQ(source->runtime->particles().size(),1u);
+    CHECK_FLOAT_EQ(source->runtime->particles()[0].position.x,.5f,1e-4f);
+    system.setGravityQuery(nullptr);
+}
 TEST_CASE(particle_ground_surface_chooses_roof_and_spawns_impact_visual) {
     Fixture fixture;
     auto& world=entity::World::instance();

@@ -8,10 +8,27 @@ namespace {
 float damping(float rate, float dt) {
     return std::isfinite(rate) && rate > 0 ? 1 - std::exp(-rate * dt) : 1;
 }
-math::FQuaternion lookRotation(const math::FVector3& forward) {
-    const float horizontal = std::sqrt(forward.x * forward.x + forward.z * forward.z);
-    return math::FQuaternion::fromEulerAngles({-std::atan2(forward.y, horizontal),
-        std::atan2(forward.x, forward.z), 0});
+math::FQuaternion upFrame(const math::FVector3& up) {
+    const auto normalized=up.normalize();
+    const float dot=std::clamp(normalized.y,-1.f,1.f);
+    if (dot > 1.f-1e-6f) return {0,0,0,1};
+    if (dot < -1.f+1e-6f)
+        return math::FQuaternion::fromAxisAngle({1,0,0},3.14159265358979323846f);
+    return math::FQuaternion::fromAxisAngle(
+        math::FVector3{0,1,0}.cross(normalized).normalize(),std::acos(dot));
+}
+math::FQuaternion lookRotation(const math::FVector3& forward,
+                               const math::FVector3& up) {
+    const auto frame=upFrame(up);
+    const auto local=frame.conjugate()*forward;
+    const float horizontal = std::sqrt(local.x * local.x + local.z * local.z);
+    return frame * math::FQuaternion::fromEulerAngles({-std::atan2(local.y, horizontal),
+        std::atan2(local.x, local.z), 0});
+}
+math::FQuaternion viewRotation(float pitch,float yaw,float roll,
+                                const math::FVector3& up) {
+    return upFrame(up)*math::FQuaternion::fromEulerAngles(
+        {std::clamp(pitch,-1.553f,1.553f),yaw,roll});
 }
 uint64_t viewKey(int32_t viewport, bool twoD) {
     return (uint64_t(uint32_t(viewport)) << 1) | uint64_t(twoD);
@@ -76,6 +93,9 @@ void CameraRuntimeSystem::onUpdate(float dt) {
         updateShake(*c, _dt);
         c->hasCollisionAnchor = false;
         if (_dt == 0 || c->mode == 0 || c->mode < 0 || c->mode > 3) continue;
+        if (!c->twoD && (!camera_detail::finite(c->upVector)
+            || !std::isfinite(c->upVector.lengthSq())
+            || c->upVector.lengthSq()<1e-12f || !std::isfinite(c->rollRadians))) continue;
         if (!camera_detail::finite(transform->position) || !std::isfinite(transform->rotation.dot(transform->rotation))
             || transform->rotation.dot(transform->rotation) < 1e-12f) continue;
         math::FVector3 currentPosition; math::FQuaternion currentRotation;
@@ -86,7 +106,7 @@ void CameraRuntimeSystem::onUpdate(float dt) {
             if (!camera_detail::finite(c->movementInput) || !std::isfinite(c->moveSpeed)
                 || !std::isfinite(c->yawRadians) || !std::isfinite(c->pitchRadians)) continue;
             desiredRotation = c->twoD ? math::FQuaternion{0,0,0,1}
-                : math::FQuaternion::fromEulerAngles({std::clamp(c->pitchRadians,-1.553f,1.553f),c->yawRadians,0});
+                : viewRotation(c->pitchRadians,c->yawRadians,c->rollRadians,c->upVector);
             auto movement = c->movementInput;
             if (movement.lengthSq() > 1) movement = movement.normalize();
             if (c->twoD) movement.z = 0;
@@ -108,7 +128,7 @@ void CameraRuntimeSystem::onUpdate(float dt) {
                 if (!std::isfinite(c->yawRadians) || !std::isfinite(c->pitchRadians) || !std::isfinite(c->distance)) continue;
                 desiredRotation = c->twoD
                     ? math::FQuaternion::fromAxisAngle({0,0,1},c->yawRadians)
-                    : math::FQuaternion::fromEulerAngles({std::clamp(c->pitchRadians,-1.553f,1.553f),c->yawRadians,0});
+                    : viewRotation(c->pitchRadians,c->yawRadians,c->rollRadians,c->upVector);
                 anchor += c->offset;
                 desiredPosition = anchor - desiredRotation * (c->twoD
                     ? math::FVector3{0,std::max(.01f,c->distance),0}
@@ -149,7 +169,8 @@ void CameraRuntimeSystem::onUpdate(float dt) {
         if (!camera_detail::finite(desiredPosition)) continue;
         if (!c->twoD && c->lookAtTarget && c->hasCollisionAnchor
             && (c->collisionAnchor-desiredPosition).lengthSq()>1e-10f)
-            desiredRotation=lookRotation(c->collisionAnchor-desiredPosition);
+            desiredRotation=lookRotation(c->collisionAnchor-desiredPosition,c->upVector)
+                * math::FQuaternion::fromAxisAngle({0,0,1},c->rollRadians);
         (void)entity->setWorldPose(desiredPosition,
             currentRotation.slerp(desiredRotation,damping(c->rotationDamping,_dt)).normalize(),alpha);
     }

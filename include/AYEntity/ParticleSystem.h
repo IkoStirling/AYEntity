@@ -21,8 +21,13 @@ public:
     };
     const std::deque<ImpactVisual>& impactVisuals() const noexcept { return _impactVisuals; }
     const char* getName() const override { return "ParticleSimulationSystem"; }
+    /// Optional world-space gravity for CPU 3D particles. Caller owns query;
+    /// clear it before destroying the provider. GPU emitters fall back to CPU.
+    void setGravityQuery(const particle::GravityQuery3D* query) noexcept { _gravityQuery=query; }
+    const particle::GravityQuery3D* gravityQuery() const noexcept { return _gravityQuery; }
     void onUpdate(float dt) override;
 private:
+    const particle::GravityQuery3D* _gravityQuery=nullptr;
     std::deque<ImpactVisual> _impactVisuals;
 };
 class ParticleRenderSystem : public ISystem {

@@ -33,6 +33,11 @@ struct CameraControllerComponent : IComponent {
     AY_PROPERTY(bool, lookAtTarget, kAttrSerialize)
     AY_PROPERTY(float, yawRadians, kAttrSerialize)
     AY_PROPERTY(float, pitchRadians, kAttrSerialize)
+    /// World-space up reference for 3D orbit/free/look-at; update from the
+    /// character gravity sample to keep the horizon aligned with local ground.
+    AY_PROPERTY(math::FVector3, upVector, kAttrSerialize)
+    /// Optional camera-bank angle around its local forward axis, in radians.
+    AY_PROPERTY(float, rollRadians, kAttrSerialize)
     AY_PROPERTY(float, distance, kAttrSerialize)
     AY_PROPERTY(float, moveSpeed, kAttrSerialize)
     AY_PROPERTY(bool, collisionEnabled, kAttrSerialize)
@@ -44,7 +49,8 @@ struct CameraControllerComponent : IComponent {
     CameraControllerComponent() : mode(0), twoD(false), offset(0,0,-5),
         positionDamping(8), rotationDamping(8), deadZone(0,0), lookAheadSeconds(0),
         boundsEnabled(false), boundsMin(-10000,-10000,-10000), boundsMax(10000,10000,10000),
-        lookAtTarget(true), yawRadians(0), pitchRadians(0), distance(5), moveSpeed(6),
+        lookAtTarget(true), yawRadians(0), pitchRadians(0), upVector(0,1,0),
+        rollRadians(0), distance(5), moveSpeed(6),
         collisionEnabled(true), collisionLayerMask(0xFFFFFFFFu), ignoreTargetCollision(true),
         collisionRadius(.2f), collisionPadding(.05f) {}
 

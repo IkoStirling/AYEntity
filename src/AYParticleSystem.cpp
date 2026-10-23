@@ -156,8 +156,9 @@ void ParticleSimulationSystem::onUpdate(float dt) {
         const bool wasGpu=component.usingGpu;
         const auto other=used-before+reserved;
         const uint32_t allowance=other<maxParticles?uint32_t(maxParticles-other):0;
-        component.usingGpu=gpu&&gpu->select(key,asset,policy,allowance,component.backendStatus);
-        if(!gpu) component.backendStatus=policy==0?"CPU":"CPU fallback: scene renderer is unavailable";
+        component.usingGpu=!_gravityQuery&&gpu&&gpu->select(key,asset,policy,allowance,component.backendStatus);
+        if(_gravityQuery) component.backendStatus="CPU: spatial gravity query";
+        else if(!gpu) component.backendStatus=policy==0?"CPU":"CPU fallback: scene renderer is unavailable";
         component.gpuCapacity=0;
         if(component.usingGpu) {
             for(const auto& source:asset.emitters) component.gpuCapacity+=particle::layerEffect(source).capacity;
@@ -195,7 +196,7 @@ void ParticleSimulationSystem::onUpdate(float dt) {
         const auto allowed=used+reserved<maxParticles ? static_cast<uint32_t>(maxParticles-used-reserved) : 0;
         emitter->runtime->update(dt,poseOf(*entity,
             game::GameLoop::instance().getInterpolationFactor()),
-            allowed>before ? allowed-static_cast<uint32_t>(before) : 0,&collision);
+            allowed>before ? allowed-static_cast<uint32_t>(before) : 0,&collision,_gravityQuery);
         collectImpacts(*emitter->runtime,emitter->layer,emitter->sortingKey);
         used+=emitter->runtime->particles().size();
     }
@@ -210,7 +211,7 @@ void ParticleSimulationSystem::onUpdate(float dt) {
         const auto allowed=used+reserved<maxParticles ? static_cast<uint32_t>(maxParticles-used-reserved) : 0;
         effect->runtime->update(dt,poseOf(*entity,
             game::GameLoop::instance().getInterpolationFactor()),
-            allowed>before ? allowed-static_cast<uint32_t>(before) : 0,&collision);
+            allowed>before ? allowed-static_cast<uint32_t>(before) : 0,&collision,_gravityQuery);
         for(const auto& child:effect->runtime->instances())
             collectImpacts(child,effect->layer,effect->sortingKey);
         used+=effect->runtime->liveParticles();

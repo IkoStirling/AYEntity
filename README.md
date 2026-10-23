@@ -1,5 +1,14 @@
 # AYEntity
 
+## 任意朝向相机与粒子重力（2026-10-23）
+
+3D `CameraControllerComponent` 的 `upVector` 设定自由/环绕/注视镜头的世界上方向；
+`rollRadians` 在该朝向下增加镜头倾斜。默认仍为 Y 向上、零倾斜。可将角色物理快照的
+`state.up` 赋给相机，让局部地面成为镜头的上方向。无效或零长度 up 会跳过该次更新。
+`ParticleSimulationSystem::setGravityQuery` 可借用 `GravityQuery3D` 给场景 3D 粒子
+逐粒子采样世界加速度；启用时使用 CPU，并在 `backendStatus` 报告回退。调用方负责
+保持查询对象存活，并在销毁前清除指针。
+
 ## 网格重导入与资源上下文（2026-10-22）
 
 RenderSystem/SkinnedMeshRenderSystem使用Renderer随实际GPU网格发布的不可变提交快照。

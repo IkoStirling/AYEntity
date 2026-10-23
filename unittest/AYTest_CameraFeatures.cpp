@@ -178,6 +178,19 @@ TEST_CASE(free_input_is_local_normalized_and_shake_never_changes_entity_pose) {
     runtime.onUpdate(1); CHECK(evaluatePerspectiveCamera3D(fixture.world,1,1,frame));
     CHECK((frame.position-entity->getComponent<Transform>()->position).lengthSq()<1e-8f);
 }
+TEST_CASE(free_camera_uses_arbitrary_up_and_roll) {
+    CameraFixture fixture; auto* entity=fixture.make("SidewaysFree");
+    auto* c=entity->addComponent<CameraControllerComponent>();
+    c->mode=3; c->rotationDamping=0; c->upVector={1,0,0};
+    auto& runtime=cameraRuntime(fixture.world); runtime.onUpdate(1);
+    auto* transform=entity->getComponent<Transform>();
+    CHECK_FLOAT_EQ((transform->rotation*ayt::math::FVector3{0,1,0}).x,1,1e-4f);
+    c->rollRadians=ayt::math::radians(90.f); runtime.onUpdate(1);
+    CHECK_FLOAT_EQ((transform->rotation*ayt::math::FVector3{0,1,0}).y,1,1e-4f);
+    const auto before=transform->rotation;
+    c->upVector={}; runtime.onUpdate(1);
+    CHECK_FLOAT_EQ(transform->rotation.dot(before),1,1e-4f);
+}
 TEST_CASE(look_at_uses_final_bounded_eye_and_normalizes_authored_pose) {
     CameraFixture fixture; auto* target=fixture.make("Target"); target->getComponent<Transform>()->position={10,0,0};
     auto* entity=fixture.make("Look"); auto* pose=entity->getComponent<Transform>(); pose->rotation={0,0,0,2};
@@ -202,7 +215,8 @@ TEST_CASE(local_lens_offset_and_shake_cannot_bypass_camera_collision) {
 TEST_CASE(scene_roundtrip_persists_controller_and_new_lens_fields_but_not_effect_state) {
     CameraFixture fixture; auto* entity=fixture.make("PersistCamera"); auto* camera=entity->createComponent<PerspectiveCameraComponent>();
     camera->projectionMode=1; camera->orthographicHeight=30; camera->localOffset={1,2,3}; camera->viewportId=2; camera->blendDuration=.7f; camera->layerMask=8;
-    auto* c=entity->addComponent<CameraControllerComponent>(); c->mode=2; c->targetName="Player"; c->distance=12; CHECK(c->shake(1,1,.1f));
+    auto* c=entity->addComponent<CameraControllerComponent>(); c->mode=2; c->targetName="Player"; c->distance=12;
+    c->upVector={1,0,0}; c->rollRadians=.25f; CHECK(c->shake(1,1,.1f));
     auto& runtime=cameraRuntime(fixture.world); CameraFrame frame;
     CHECK(evaluatePerspectiveCamera3D(fixture.world,1,1,frame,2)); (void)runtime.present(frame,2,false,.7f);
     const char* path="camera_features_roundtrip.scn"; CHECK(saveScene(fixture.world,path)); CHECK(loadScene(fixture.world,path));
@@ -212,7 +226,8 @@ TEST_CASE(scene_roundtrip_persists_controller_and_new_lens_fields_but_not_effect
         camera=entity->getComponents<PerspectiveCameraComponent>()[0]; c=entity->getComponent<CameraControllerComponent>();
         CHECK(camera->projectionMode==1); CHECK(camera->viewportId==2); CHECK(camera->layerMask==8);
         CHECK_FLOAT_EQ(camera->localOffset.z,3,0); CHECK_FLOAT_EQ(camera->blendDuration,.7f,1e-5f);
-        CHECK(c && c->targetName=="Player"); if(c) { CHECK_FLOAT_EQ(c->distance,12,0); CHECK_FLOAT_EQ(c->shakeDuration,0,0); }
+        CHECK(c && c->targetName=="Player"); if(c) { CHECK_FLOAT_EQ(c->distance,12,0); CHECK_FLOAT_EQ(c->shakeDuration,0,0);
+            CHECK_FLOAT_EQ(c->upVector.x,1,0); CHECK_FLOAT_EQ(c->rollRadians,.25f,1e-5f); }
     }
     std::remove(path);
 }
