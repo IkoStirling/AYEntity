@@ -2,6 +2,16 @@
 #include <AYEntity/World.h>
 
 namespace ayt::entity {
+SpacePhysicsResolver makeSpacePhysicsResolver(physics::IPhysicsQuery& query,
+                                             const SpacePhysicsRoutes& routes) {
+    return [&query, &routes](SpaceRegionId region)
+        -> std::optional<SpacePhysicsRegion> {
+        const auto route = routes.resolve(region);
+        if (!route) return std::nullopt;
+        return SpacePhysicsRegion{&query, physics::PhysLayerMask{1u} << route->layer};
+    };
+}
+
 SpacePhysicsTrace raycastConnectedSpaces(const World& world, SpaceRegionId source,
     const math::Ray& ray, float maxDistance, uint32_t maxHops,
     const SpacePhysicsResolver& resolve) {

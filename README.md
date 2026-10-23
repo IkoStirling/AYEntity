@@ -13,6 +13,18 @@
 固定步边界用 `transferSpatialRigidBodyAcrossSpaces` 提交最新物理快照、位移和区域层路由；
 一次命令同时改变位姿、线/角速度及碰撞层/掩码，入队失败不改变 Entity。
 
+共享 Jolt World 可配置 `SpacePhysicsRoutes`（0–15 层保留给普通物理用途，
+16–31 层可承载最多16个分区）。将其借给
+`EntityPhysicsBridge::setSpacePhysicsRoutes` 后，桥在静态/动态身体创建及后来改变区域时
+自动设置互斥层/掩码；缺少区域路由会拒绝新身体创建。`makeSpaceBodyRouteResolver` 和
+`makeSpacePhysicsResolver` 从同一表生成跨门迁移与射线解析器，避免三处各自配置。
+游戏拥有的胶囊角色可经 `createCharacterForEntity` 建立来源路由；完成物理步后以
+`transferSpatialCharacterAcrossSpaces` 一次切换脚点、速度、朝上方向与碰撞路由。
+角色输入与后续快照同步仍由游戏负责。
+可运行的无素材双房间交互示例在
+[examples/connectedrooms](examples/connectedrooms/README.md)：角色和可移动物体往返穿门，
+并从重叠房间按区域探测碰撞体；门内画面由独立渲染测试覆盖。
+
 渲染集成的 `planSpacePortalView` 把实时观察者映射到出口并计算出口斜裁剪平面；
 `makeSpacePortalSurfaceDraw` 生成入口四边形，配合 Renderer 的离屏输出材质，
 按子视图先于父视图提交。`SpacePortalViewScheduler` 可按可见面积和深度/视图预算

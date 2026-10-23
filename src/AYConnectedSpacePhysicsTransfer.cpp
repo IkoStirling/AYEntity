@@ -43,4 +43,38 @@ physics::PhysResult transferSpatialRigidBodyAcrossSpaces(Entity& entity,
     output=candidate;
     return result;
 }
+
+physics::PhysResult transferSpatialCharacterAcrossSpaces(Entity& entity,
+    const physics::CharacterController3DState& currentState,
+    const math::FVector3& displacement, uint32_t maxHops,
+    physics::PhysicsWorld3D& physicsWorld,
+    const SpaceBodyRouteResolver& route, SpaceTraversal& output) {
+    auto* world = entity.getWorld();
+    if (!world || !entity.isSpatial() || entity.spatialParent() || !entity.spaceRegion()
+        || currentState.character == physics::InvalidCharacterHandle || !route)
+        return physics::PhysResult::InvalidParam;
+    if (const auto* body = entity.getComponent<RigidBodyComponent>(); body
+        && body->getSyncMode() == RigidBodyComponent::SyncMode::PhysicsToEntity)
+        return physics::PhysResult::InvalidParam;
+    math::FVector3 position; math::FQuaternion rotation;
+    if (!entity.worldPose(position, rotation)) return physics::PhysResult::InvalidParam;
+    SpaceTraversal candidate;
+    if (!world->connectedSpaces().travel({entity.spaceRegion(),
+            {currentState.position, rotation}, currentState.linearVelocity},
+            displacement, maxHops, candidate) || candidate.crossings == 0)
+        return physics::PhysResult::InvalidParam;
+    const auto destinationRoute = route(candidate.state.region);
+    if (!destinationRoute || destinationRoute->layer >= 32)
+        return physics::PhysResult::InvalidParam;
+    const auto passageRotation = candidate.state.pose.rotation * rotation.inverse();
+    const auto up = passageRotation * currentState.up;
+    const auto status = physicsWorld.transferCharacter(currentState.character,
+        candidate.state.pose.position, candidate.state.velocity, up,
+        destinationRoute->layer, destinationRoute->collideMask);
+    if (status != physics::PhysResult::Ok) return status;
+    (void)entity.setWorldPose(candidate.state.pose.position, candidate.state.pose.rotation);
+    (void)entity.setSpaceRegion(candidate.state.region);
+    output = candidate;
+    return status;
+}
 } // namespace ayt::entity

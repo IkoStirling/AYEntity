@@ -1,5 +1,6 @@
 #pragma once
 #include <AYEntity/ConnectedSpaces.h>
+#include <AYEntity/ConnectedSpacePhysicsRoutes.h>
 #include <AYPhysics/IPhysicsQuery.h>
 #include <functional>
 #include <optional>
@@ -12,6 +13,12 @@ struct SpacePhysicsRegion {
     physics::PhysLayerMask layerMask = 0xFFFFFFFFu;
 };
 using SpacePhysicsResolver = std::function<std::optional<SpacePhysicsRegion>(SpaceRegionId)>;
+
+/// Build a borrowed region-isolated resolver from the same routes used by
+/// EntityPhysicsBridge and body/character transfers. The query and routes must
+/// outlive calls using the returned function.
+SpacePhysicsResolver makeSpacePhysicsResolver(physics::IPhysicsQuery& query,
+                                             const SpacePhysicsRoutes& routes);
 
 struct SpacePhysicsTrace {
     SpaceTrace path{};

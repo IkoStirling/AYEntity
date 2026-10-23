@@ -42,8 +42,12 @@ Crossing nearestCrossing(const std::vector<SpacePortal>& portals, SpaceRegionId 
         const auto localStart = inverse * (start - portal.entrance.position);
         const auto localDelta = inverse * displacement;
         const float endZ = localStart.z + localDelta.z;
-        if (localStart.z <= kPlaneEpsilon || endZ >= -kPlaneEpsilon) continue;
-        const float t = -localStart.z / localDelta.z;
+        // A fixed step may finish exactly on the plane. Admit the next step
+        // from a narrow plane band when it moves through the opening; otherwise
+        // the actor can pass through geometrically and remain in the old region.
+        if (localStart.z < -kPlaneEpsilon || endZ >= -kPlaneEpsilon
+            || localDelta.z >= 0) continue;
+        const float t = std::max(0.0f, -localStart.z / localDelta.z);
         if (!(t >= 0 && t <= nearest.fraction)) continue;
         const auto intersection = localStart + localDelta * t;
         if (std::fabs(intersection.x) > portal.halfWidth

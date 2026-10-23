@@ -93,6 +93,19 @@ TEST_CASE(aperture_and_hop_budget_are_explicit) {
     CHECK(frontHit.status==SpaceTraceStatus::Hit);
     CHECK(frontHit.region==1);
 }
+TEST_CASE(fixed_step_landing_on_portal_plane_crosses_on_next_step) {
+    auto spaces=pair();
+    SpaceTraversal first, second;
+    CHECK(spaces.travel({1,{{0,0,.05f},{0,0,0,1}},{0,0,-3}},
+                        {0,0,-.05f},2,first));
+    CHECK(first.crossings==0);
+    CHECK_FLOAT_EQ(first.state.pose.position.z,0,1e-6f);
+    CHECK(spaces.travel(first.state,{0,0,-.05f},2,second));
+    CHECK(second.crossings==1);
+    CHECK(second.state.region==2);
+    CHECK_FLOAT_EQ(second.state.pose.position.x,10,1e-4f);
+    CHECK_FLOAT_EQ(second.state.pose.position.z,.05f,1e-4f);
+}
 TEST_CASE(invalid_and_failed_queries_do_not_masquerade_as_empty_space) {
     auto spaces=pair();
     SpaceTraversal unchanged; unchanged.state.region=42;

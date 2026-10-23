@@ -359,7 +359,22 @@ void EntityPhysicsBridge::syncEntityToPhysics()
         binding.dimension = dimension;
         binding.syncMode = syncMode;
         binding.seenEpoch = _bindingEpoch;
-        if (identityChanged) binding.hasSubmittedPose = false;
+        if (identityChanged) {
+            binding.hasSubmittedPose = false;
+            binding.routeSynced = false;
+        }
+
+        const SpaceRegionId region = dimension == RigidBodyComponent::PhysicsDimension::ThreeD
+            && entity->isSpatial() ? entity->effectiveSpaceRegion() : 0;
+        std::optional<SpaceBodyRoute> route;
+        if (region) {
+            if (_spacePhysicsRoutes) route = _spacePhysicsRoutes->resolve(region);
+            if (!route) {
+                if (rejectedCommands == 0) firstFailure = ayt::physics::PhysResult::InvalidState;
+                ++rejectedCommands;
+                continue;
+            }
+        }
 
         // --- Body creation (parameter bridge: component fields -> desc).
         if (binding.body == ayt::physics::InvalidBodyHandle) {
@@ -368,6 +383,10 @@ void EntityPhysicsBridge::syncEntityToPhysics()
             }
             ayt::physics::RigidbodyDesc desc;
             buildRigidbodyDesc(desc, worldTransform, *rigidBody);
+            if (route) {
+                desc.layer = route->layer;
+                desc.collideMask = route->collideMask;
+            }
             if (dimension == RigidBodyComponent::PhysicsDimension::ThreeD) {
                 const auto& g = *entity->spatialGravity();
                 desc.gravityScale = g.mode == SpatialGravityMode::World
@@ -386,6 +405,30 @@ void EntityPhysicsBridge::syncEntityToPhysics()
             binding.ownsBody = true;
             rigidBody->setBodyHandle(created);
             binding.hasSubmittedPose = false;
+            binding.routedRegion = region;
+            binding.routedBody = route.value_or(SpaceBodyRoute{0, 0xFFFFFFFFu});
+            binding.routeSynced = true;
+        }
+
+        // Adopted bodies and later region changes use one atomic layer/mask
+        // command. A transfer may have already applied the route; resubmitting
+        // the same route on the next bridge sync is harmless.
+        const SpaceBodyRoute desiredRoute = route.value_or(SpaceBodyRoute{0, 0xFFFFFFFFu});
+        if (dimension == RigidBodyComponent::PhysicsDimension::ThreeD
+            && ((!binding.routeSynced && region) || (binding.routeSynced
+                && (binding.routedRegion != region
+                    || binding.routedBody.layer != desiredRoute.layer
+                    || binding.routedBody.collideMask != desiredRoute.collideMask)))) {
+            const auto status = manager->world3D()->setRigidbodyRoute(
+                binding.body, desiredRoute.layer, desiredRoute.collideMask);
+            if (status != ayt::physics::PhysResult::Ok) {
+                if (rejectedCommands == 0) firstFailure = status;
+                ++rejectedCommands;
+                continue;
+            }
+            binding.routedRegion = region;
+            binding.routedBody = desiredRoute;
+            binding.routeSynced = true;
         }
 
         // --- Collider sync (create / rebuild / release).
@@ -767,6 +810,7 @@ void EntityPhysicsBridge::shutdown()
     _entityByBody.clear();
     _boundPhysicsManager = nullptr;
     _managerOverride = nullptr;
+    _spacePhysicsRoutes = nullptr;
     (void)_gravityField.replace({});
 }
 
@@ -803,6 +847,24 @@ ayt::physics::PhysResult EntityPhysicsBridge::setCharacterInputForEntity(
         input.gravity = {};
     }
     return manager->world3D()->setCharacterInput(character, input);
+}
+
+ayt::physics::PhysResult EntityPhysicsBridge::createCharacterForEntity(
+    const Entity& entity, ayt::physics::CharacterController3DDesc desc,
+    ayt::physics::CharacterHandle& outHandle)
+{
+    outHandle = ayt::physics::InvalidCharacterHandle;
+    auto* manager = resolveManager();
+    if (!entity.isSpatial() || manager == nullptr || manager->world3D() == nullptr)
+        return ayt::physics::PhysResult::InvalidState;
+    if (const SpaceRegionId region = entity.effectiveSpaceRegion()) {
+        const auto route = _spacePhysicsRoutes ? _spacePhysicsRoutes->resolve(region)
+                                               : std::nullopt;
+        if (!route) return ayt::physics::PhysResult::InvalidState;
+        desc.layer = route->layer;
+        desc.collideMask = route->collideMask;
+    }
+    return manager->world3D()->createCharacter(desc, outHandle);
 }
 
 void EntityPhysicsBridge::removeBodyLookup(uint32_t entityId,

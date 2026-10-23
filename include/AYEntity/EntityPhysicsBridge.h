@@ -29,6 +29,7 @@
 #include <AYEntity/components/ColliderComponent.h>
 #include <AYEntity/components/RigidBodyComponent.h>
 #include <AYEntity/components/TransformComponent.h>
+#include <AYEntity/ConnectedSpacePhysicsRoutes.h>
 
 #include <AYPhysics/PhysicsTypes.h>
 #include <AYPhysics/GravityField3D.h>
@@ -63,6 +64,14 @@ public:
     void setPhysicsManager(ayt::physics::PhysicsManager* mgr);
     ayt::physics::PhysicsManager* physicsManager() const;
 
+    /// Borrow shared-world routes for nonzero Spatial regions. When configured,
+    /// creation and later region changes use the same route as portal queries
+    /// and transfers. Missing routes reject creation; zero-region bodies keep
+    /// their legacy layer. The caller keeps routes alive through shutdown().
+    void setSpacePhysicsRoutes(const SpacePhysicsRoutes* routes) noexcept {
+        _spacePhysicsRoutes = routes;
+    }
+
     void syncEntityToPhysics();  // FixedPrePhysics
     void syncPhysicsToEntity();  // FixedPostPhysics
 
@@ -72,6 +81,13 @@ public:
     ayt::physics::PhysResult setCharacterInputForEntity(
         const Entity& entity, ayt::physics::CharacterHandle character,
         ayt::physics::CharacterController3DInput input);
+
+    /// Create a gameplay-owned controller with this Entity's region filter.
+    /// The caller supplies feet/up and destroys the returned handle. A missing
+    /// nonzero-region route rejects creation without publishing a handle.
+    ayt::physics::PhysResult createCharacterForEntity(
+        const Entity& entity, ayt::physics::CharacterController3DDesc desc,
+        ayt::physics::CharacterHandle& outHandle);
 
     // Drop all bindings WITHOUT destroying bodies (the PhysicsManager's own
     // shutdown tears down its backend world, which frees every body).
@@ -98,6 +114,9 @@ private:
         uint64_t lastSyncedColliderRevision = 0;
         std::vector<ColliderShapeSpec> lastSyncedShapes;
         bool ownsBody = false;  // body created by this bridge -> destroy on teardown
+        SpaceRegionId routedRegion = 0;
+        SpaceBodyRoute routedBody{};
+        bool routeSynced = false;
 
         // R10 runtime-parameter sync: values last pushed as incremental
         // commands. paramsSynced=false (fresh binding) baselines from the
@@ -167,6 +186,7 @@ private:
     ayt::physics::PhysicsManager* _managerOverride = nullptr;
     ayt::physics::PhysicsManager* _boundPhysicsManager = nullptr;
     ayt::physics::GravityField3D _gravityField;
+    const SpacePhysicsRoutes* _spacePhysicsRoutes = nullptr;
     uint64_t _bindingEpoch = 0;
 };
 
