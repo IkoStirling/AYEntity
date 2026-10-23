@@ -2,6 +2,7 @@
 #include <AYEntity/ConnectedSpaces.h>
 #include <AYRenderer/CameraViews.h>
 #include <deque>
+#include <limits>
 #include <map>
 #include <span>
 #include <vector>
@@ -39,9 +40,15 @@ bool makeSpacePortalSurfaceDraw(const SpacePortalView& plan,
     render::DrawItem& result) noexcept;
 
 struct SpacePortalScheduleOptions {
+    /// A game-owned recursion budget. Unexpanded openings need a game-provided
+    /// fallback surface; the scheduler never follows a path indefinitely.
     uint32_t maxDepth = 3;
     uint32_t maxViews = render::kMaximumCameraViews; // includes root
     float minProjectedPixels = 16.0f;
+    /// Maximum camera distance to the nearest point of an entrance rectangle,
+    /// in world units. Infinity disables this filter. Applies to each view
+    /// in the recursion, not to physical crossing or ray queries.
+    float maxEntranceDistance = std::numeric_limits<float>::infinity();
 };
 
 /// Builds a child-before-parent renderViews batch from the visible entrance

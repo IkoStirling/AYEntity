@@ -27,8 +27,10 @@
 
 渲染集成的 `planSpacePortalView` 把实时观察者映射到出口并计算出口斜裁剪平面；
 `makeSpacePortalSurfaceDraw` 生成入口四边形，配合 Renderer 的离屏输出材质，
-按子视图先于父视图提交。`SpacePortalViewScheduler` 可按可见面积和深度/视图预算
-自动建造递归批次，并复用每条门路径的输出资源。`spaceRegionId` 让门内视图只显示目标区域。
+按子视图先于父视图提交。`SpacePortalViewScheduler` 可按可见面积、相机到入口的距离，
+以及深度/视图预算建造有限递归批次，并复用每条门路径的输出资源。游戏通过
+`SpacePortalScheduleOptions` 设置限制，为未展开的门提供回退画面；渲染距离不限制物理穿门。
+`spaceRegionId` 让门内视图只显示目标区域。
 普通主相机视图也按自身区域筛选网格及直接灯光，避免重叠区域互相照亮。
 主视图未指定区域时保持旧场景可见性；完整调度与边界见
 [跨模块说明](../../AYDocs/CONNECTED-SPACES.md)。

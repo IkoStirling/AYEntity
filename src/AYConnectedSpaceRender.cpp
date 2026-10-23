@@ -94,6 +94,20 @@ float projectedPortalPixels(const SpacePortal& portal,
     const double pixels=std::fabs(twiceArea)*view.width*view.height/8.0;
     return std::isfinite(pixels) ? static_cast<float>(pixels) : 0;
 }
+
+bool withinEntranceDistance(const SpacePortal& portal,
+    const render::CameraRenderView& view, float maxDistance) noexcept {
+    if (std::isinf(maxDistance)) return true;
+    const auto local = portal.entrance.rotation.inverse()
+        * (view.position - portal.entrance.position);
+    const double dx = std::max(0.0, static_cast<double>(std::fabs(local.x))
+        - portal.halfWidth);
+    const double dy = std::max(0.0, static_cast<double>(std::fabs(local.y))
+        - portal.halfHeight);
+    const double dz = static_cast<double>(local.z);
+    const double limit = static_cast<double>(maxDistance);
+    return dx * dx + dy * dy + dz * dz <= limit * limit;
+}
 }
 
 bool planSpacePortalView(const World& world, SpacePortalId portalId,
@@ -233,6 +247,8 @@ void SpacePortalViewScheduler::buildNode(const World& world,
     std::vector<Candidate> candidates;
     if (depth<options.maxDepth && _plannedCount<options.maxViews) {
         for (const auto& portal:world.connectedSpaces().portals()) {
+            if (!withinEntranceDistance(portal,view,options.maxEntranceDistance))
+                continue;
             const float pixels=projectedPortalPixels(portal,view);
             if (pixels>=options.minProjectedPixels && pixels>0)
                 candidates.push_back({portal.id,pixels});
@@ -279,7 +295,9 @@ bool SpacePortalViewScheduler::build(const World& world,
         || !std::isfinite(root.position.z) || !options.maxViews
         || options.maxViews>render::kMaximumCameraViews
         || !std::isfinite(options.minProjectedPixels)
-        || options.minProjectedPixels<0) return false;
+        || options.minProjectedPixels<0
+        || std::isnan(options.maxEntranceDistance)
+        || options.maxEntranceDistance<0) return false;
     if (_context!=_renderer.resourceContextId()) {
         _resources.clear(); _quad={}; _context=_renderer.resourceContextId();
     }
