@@ -8,6 +8,7 @@
 #include <string>
 #include <memory>
 #include <AYMath/MathTypes.h>
+#include <AYEntity/SpatialGravitySettings.h>
 
 namespace ayt::entity
 {
@@ -54,6 +55,12 @@ public:
     /// Intrinsic LOCAL pose. Null for Data; never removable from Spatial entities.
     Transform* transform() noexcept { return _transform.get(); }
     const Transform* transform() const noexcept { return _transform.get(); }
+    /// Built-in Spatial physics/gravity settings; null on Data entities.
+    const SpatialGravitySettings* spatialGravity() const noexcept {
+        return isSpatial() ? &_spatialGravity : nullptr;
+    }
+    /// Rejects invalid values and Data entities without changing current settings.
+    bool setSpatialGravity(const SpatialGravitySettings& settings) noexcept;
     const std::string& persistentId() const noexcept { return _persistentId; }
     bool restorePersistentId(const std::string& id);
     /// Explicit conversion; failure does not change pose, components or relations.
@@ -148,6 +155,7 @@ private:
     bool _migratingLegacySpatialFields = false;
     std::string _persistentId;
     std::unique_ptr<Transform> _transform;
+    SpatialGravitySettings _spatialGravity{};
     EntityHandle _spatialParent{}, _owner{};
     uint32_t _id = INVALID_ID;
     std::string _name;

@@ -12,6 +12,7 @@
 #include <AYPhysics/PhysicsSubSystem.h>
 #include <AYPhysics/PhysicsWorld2D.h>
 #include <AYPhysics/PhysicsWorld3D.h>
+#include <algorithm>
 
 namespace ayt::entity
 {
@@ -267,6 +268,41 @@ void EntityPhysicsBridge::syncEntityToPhysics()
         _boundPhysicsManager = manager;
     }
 
+    // Authoring sources follow their Spatial world position. A replacement
+    // clears removed sources and uses stable Entity IDs for tie ordering.
+    std::vector<ayt::physics::GravitySource3D> sources;
+    for (Entity* entity : World::instance().getAllEntities()) {
+        if (entity == nullptr || !entity->isSpatial()) continue;
+        const auto* g = entity->spatialGravity();
+        if (g == nullptr || !g->sourceEnabled) continue;
+        math::FVector3 center; math::FQuaternion rotation;
+        if (!entity->worldPose(center, rotation)) continue;
+        ayt::physics::GravitySource3D source;
+        source.id = static_cast<uint64_t>(entity->getId()) + 1u;
+        switch (g->sourceShape) {
+        case SpatialGravityShape::Uniform: source.shape = ayt::physics::GravityShape3D::Uniform; break;
+        case SpatialGravityShape::Box: source.shape = ayt::physics::GravityShape3D::Box; break;
+        case SpatialGravityShape::Radial: source.shape = ayt::physics::GravityShape3D::Radial; break;
+        }
+        source.priority = g->sourcePriority;
+        source.direction = g->sourceDirection;
+        source.center = center;
+        source.halfExtent = g->sourceHalfExtent;
+        source.radius = g->sourceRadius;
+        source.acceleration = g->sourceAcceleration;
+        source.linearFalloff = g->sourceLinearFalloff;
+        source.channelMask = g->sourceChannels;
+        sources.push_back(source);
+    }
+    std::sort(sources.begin(), sources.end(), [](const auto& a, const auto& b) { return a.id < b.id; });
+    if (sources.size() > 64) {
+        ayt::log::warn("[Entity] Spatial gravity source limit exceeded; using first 64 entity IDs");
+        sources.resize(64);
+    }
+    std::string gravityError;
+    if (!_gravityField.replace(std::move(sources), &gravityError))
+        ayt::log::warn("[Entity] Spatial gravity sources rejected: %s", gravityError.c_str());
+
     ++_bindingEpoch;
     if (_bindingEpoch == 0) {
         _bindingsByEntity.clear();
@@ -332,6 +368,11 @@ void EntityPhysicsBridge::syncEntityToPhysics()
             }
             ayt::physics::RigidbodyDesc desc;
             buildRigidbodyDesc(desc, worldTransform, *rigidBody);
+            if (dimension == RigidBodyComponent::PhysicsDimension::ThreeD) {
+                const auto& g = *entity->spatialGravity();
+                desc.gravityScale = g.mode == SpatialGravityMode::World
+                    ? rigidBody->getGravityScale() * g.multiplier : 0.0f;
+            }
             ayt::physics::BodyHandle created = ayt::physics::InvalidBodyHandle;
             const ayt::physics::PhysResult result =
                 createBodyOn(desc, dimension, created);
@@ -353,6 +394,26 @@ void EntityPhysicsBridge::syncEntityToPhysics()
         // --- R10 runtime-parameter sync + force/torque flush.
         syncRuntimeParams(binding, rejectedCommands, firstFailure);
         flushEntityForces(binding, rejectedCommands, firstFailure);
+
+        if (dimension == RigidBodyComponent::PhysicsDimension::ThreeD
+            && !rigidBody->isStatic() && !rigidBody->isKinematic()
+            && syncMode != RigidBodyComponent::SyncMode::None) {
+            const auto& g = *entity->spatialGravity();
+            math::FVector3 acceleration{};
+            if (g.mode == SpatialGravityMode::Field)
+                acceleration = _gravityField.sample(worldTransform.position,
+                    g.receiverChannels).acceleration * g.multiplier;
+            else if (g.mode == SpatialGravityMode::Custom)
+                acceleration = g.customAcceleration * g.multiplier;
+            if (acceleration.lengthSq() > 0.0f) {
+                const auto result = manager->world3D()->applyAcceleration(
+                    binding.body, acceleration);
+                if (result != ayt::physics::PhysResult::Ok) {
+                    if (rejectedCommands == 0) firstFailure = result;
+                    ++rejectedCommands;
+                }
+            }
+        }
 
         if (syncMode == RigidBodyComponent::SyncMode::PhysicsToEntity) {
             _entityByBody[bodyKey(binding.body, dimension)] = entityId;
@@ -492,7 +553,11 @@ void EntityPhysicsBridge::syncRuntimeParams(
         binding.lastSyncedMass = rigidBody->getMass();
         binding.lastSyncedFriction = rigidBody->getFriction();
         binding.lastSyncedRestitution = rigidBody->getRestitution();
-        binding.lastSyncedGravityScale = rigidBody->getGravityScale();
+        const auto* g = binding.entity ? binding.entity->spatialGravity() : nullptr;
+        binding.lastSyncedGravityScale = is2D || g == nullptr
+            ? rigidBody->getGravityScale()
+            : (g->mode == SpatialGravityMode::World
+                ? rigidBody->getGravityScale() * g->multiplier : 0.0f);
         binding.lastSyncedVelocity[0] = rigidBody->getVelocityX();
         binding.lastSyncedVelocity[1] = rigidBody->getVelocityY();
         binding.lastSyncedVelocity[2] = rigidBody->getVelocityZ();
@@ -543,7 +608,10 @@ void EntityPhysicsBridge::syncRuntimeParams(
     }
 
     // --- gravity scale
-    const float gs = rigidBody->getGravityScale();
+    const auto* g = binding.entity ? binding.entity->spatialGravity() : nullptr;
+    const float gs = is2D || g == nullptr ? rigidBody->getGravityScale()
+        : (g->mode == SpatialGravityMode::World
+            ? rigidBody->getGravityScale() * g->multiplier : 0.0f);
     if (gs != binding.lastSyncedGravityScale) {
         ayt::physics::PhysResult result = ayt::physics::PhysResult::InvalidState;
         if (is2D) {
@@ -699,6 +767,42 @@ void EntityPhysicsBridge::shutdown()
     _entityByBody.clear();
     _boundPhysicsManager = nullptr;
     _managerOverride = nullptr;
+    (void)_gravityField.replace({});
+}
+
+ayt::physics::PhysResult EntityPhysicsBridge::setCharacterInputForEntity(
+    const Entity& entity, ayt::physics::CharacterHandle character,
+    ayt::physics::CharacterController3DInput input)
+{
+    auto* manager = resolveManager();
+    if (!entity.isSpatial() || manager == nullptr || manager->world3D() == nullptr)
+        return ayt::physics::PhysResult::InvalidState;
+    math::FVector3 position; math::FQuaternion rotation;
+    if (!entity.worldPose(position, rotation))
+        return ayt::physics::PhysResult::InvalidParam;
+    const auto& g = *entity.spatialGravity();
+    if (g.mode != SpatialGravityMode::World || g.multiplier != 1.0f) {
+        input.useGravityOverride = true;
+        switch (g.mode) {
+        case SpatialGravityMode::World:
+            input.gravity = manager->descriptor().gravity3D * g.multiplier;
+            break;
+        case SpatialGravityMode::None:
+            input.gravity = {};
+            break;
+        case SpatialGravityMode::Field:
+            input.gravity = _gravityField.sample(position, g.receiverChannels).acceleration
+                * g.multiplier;
+            break;
+        case SpatialGravityMode::Custom:
+            input.gravity = g.customAcceleration * g.multiplier;
+            break;
+        }
+    } else {
+        input.useGravityOverride = false;
+        input.gravity = {};
+    }
+    return manager->world3D()->setCharacterInput(character, input);
 }
 
 void EntityPhysicsBridge::removeBodyLookup(uint32_t entityId,

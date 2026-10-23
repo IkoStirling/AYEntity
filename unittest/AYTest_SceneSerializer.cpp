@@ -83,6 +83,43 @@ Entity* createCharacterAuthoringEntity(const char* name)
 
 TEST_SUITE(SceneSerializer)
 
+TEST_CASE(intrinsic_spatial_gravity_roundtrip_and_validation)
+{
+    World& world = World::instance();
+    world.initialize(); registerEntityComponents();
+    Entity* spatial = world.createEntity(EntityKind::Spatial);
+    spatial->setName("GravityReceiver");
+    SpatialGravitySettings g;
+    g.mode = SpatialGravityMode::Field;
+    g.receiverChannels = 2;
+    g.multiplier = 1.5f;
+    g.sourceEnabled = true;
+    g.sourceShape = SpatialGravityShape::Radial;
+    g.sourceChannels = 4;
+    g.sourcePriority = 7;
+    g.sourceRadius = 12.0f;
+    CHECK(spatial->setSpatialGravity(g));
+    g.sourceRadius = -1.0f;
+    CHECK_FALSE(spatial->setSpatialGravity(g));
+    CHECK_FLOAT_EQ(spatial->spatialGravity()->sourceRadius, 12.0f, 0.001f);
+    Entity* data = world.createEntity(EntityKind::Data);
+    CHECK(data->spatialGravity() == nullptr);
+    CHECK_FALSE(data->setSpatialGravity(SpatialGravitySettings{}));
+    const char* path = "test_scene_spatial_gravity.scn";
+    CHECK(saveScene(world, path));
+    ayt::serializer::SerializeError error;
+    CHECK(loadScene(world, path, &error));
+    CHECK(error.ok());
+    const auto* loaded = world.findEntity("GravityReceiver");
+    CHECK_NOT_NULL(loaded);
+    CHECK(loaded->spatialGravity()->mode == SpatialGravityMode::Field);
+    CHECK_INT_EQ(loaded->spatialGravity()->receiverChannels, 2u);
+    CHECK_INT_EQ(loaded->spatialGravity()->sourceChannels, 4u);
+    CHECK_INT_EQ(loaded->spatialGravity()->sourcePriority, 7);
+    CHECK_FLOAT_EQ(loaded->spatialGravity()->sourceRadius, 12.0f, 0.001f);
+    std::remove(path); world.shutdown();
+}
+
 TEST_CASE(multiple_same_type_components_survive_scene_roundtrip)
 {
     World& world = World::instance();

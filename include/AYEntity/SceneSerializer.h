@@ -12,7 +12,7 @@ namespace ayt::entity
 
 class World;
 
-constexpr uint32_t kSceneSchemaVersion = 5;
+constexpr uint32_t kSceneSchemaVersion = 6;
 /// JSON-only project migration can repair component identities without registered spatial semantics.
 constexpr uint32_t kSceneComponentIdentitySchemaVersion = 4;
 constexpr const char* kSceneSchemaVersionField = "__schemaVersion";

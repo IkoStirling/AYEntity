@@ -31,6 +31,8 @@
 #include <AYEntity/components/TransformComponent.h>
 
 #include <AYPhysics/PhysicsTypes.h>
+#include <AYPhysics/GravityField3D.h>
+#include <AYPhysics/CharacterController3D.h>
 
 #include <cstdint>
 #include <unordered_map>
@@ -63,6 +65,13 @@ public:
 
     void syncEntityToPhysics();  // FixedPrePhysics
     void syncPhysicsToEntity();  // FixedPostPhysics
+
+    /// Submit character movement with this Spatial Entity's gravity response.
+    /// Call after the bridge's FixedPrePhysics sync and before the physics step.
+    /// The caller still owns character creation and movement intent.
+    ayt::physics::PhysResult setCharacterInputForEntity(
+        const Entity& entity, ayt::physics::CharacterHandle character,
+        ayt::physics::CharacterController3DInput input);
 
     // Drop all bindings WITHOUT destroying bodies (the PhysicsManager's own
     // shutdown tears down its backend world, which frees every body).
@@ -157,6 +166,7 @@ private:
     std::unordered_map<uint64_t, uint32_t> _entityByBody;
     ayt::physics::PhysicsManager* _managerOverride = nullptr;
     ayt::physics::PhysicsManager* _boundPhysicsManager = nullptr;
+    ayt::physics::GravityField3D _gravityField;
     uint64_t _bindingEpoch = 0;
 };
 

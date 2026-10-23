@@ -3475,3 +3475,34 @@ system holds a borrowed `GravityQuery3D` pointer, passes it to CPU runtimes and
 forces a diagnosed GPU-to-CPU fallback while the pointer is installed. The
 owner clears it before destroying the provider. No physics module dependency
 is added to AYEntityCore or AYParticle.
+
+## Intrinsic Spatial gravity (2026-10-23)
+
+`SpatialGravitySettings` is value data on Spatial Entity, independent of
+Transform and not a removable component. `setSpatialGravity` validates values
+before replacement. Data Entity has no gravity settings. Scene schema6 writes
+it under `spatial.gravity`; schema5 and earlier load with default World mode.
+Editor history, duplication and Scene save preserve the value.
+
+`Entity.PhysicsIntegration` gathers enabled sources at each FixedPrePhysics,
+using world position as center and Entity ID as tie key. The 64-source cap is
+deterministic by Entity ID. Uniform/box direction is world-space; boxes remain
+axis-aligned, independent of source rotation. Channel masks filter before
+priority selection. A Field receiver samples only matching sources; uncovered
+space produces zero field acceleration. A Custom receiver applies its authored
+world-space acceleration. None uses no gravity. World uses PhysicsManager's
+global gravity, multiplied by intrinsic multiplier and the legacy
+`RigidBodyComponent::gravityScale`. The legacy scale remains authoritative for
+2D and compatible 3D scenes, but is not exposed a second time in the new
+Spatial gravity inspector. Field/Custom/None set backend gravityScale to zero;
+the former two enqueue mass-independent acceleration for dynamic 3D bodies.
+Static and kinematic bodies do not receive acceleration. Nonzero global
+gravity may still affect other bodies that are not Field/Custom/None.
+
+Character handles remain gameplay-owned. The bridge's explicit
+`setCharacterInputForEntity` reads the same Spatial value and field after
+pre-physics sync, then sends a gravity override when needed. World mode with
+default multiplier leaves the character descriptor's own gravity scale alone.
+Changing Entity gravity does not rotate the camera; camera up/roll are a
+separate presentation choice. Runtime field sampling is float/Jolt based and
+does not join deterministic lockstep state.

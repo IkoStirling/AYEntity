@@ -1884,3 +1884,14 @@ Camera controllers bind persistent Entity identity with a World-scoped runtime h
 Entity.PhysicsIntegration installs the default Jolt sphere-sweep adapter. Host custom queries override it; collisionEnabled explicitly disables per controller. The finite-volume query ignores sensors/self/target bodies, checks generation handles and reports initial penetration at zero center travel. Null/Mock/2D return Unsupported. Orbit distance plus collision radius/padding implement the camera arm and damped recovery. Explicit manager adapters must be detached before manager destruction.
 
 Editor has stable target selection, collision parameters, and undoable main-window hierarchy dragging. CameraRigProject is a portable visual/authoring fixture; its Wall is visual-only, while AYEntity_CameraRigIntegrationTests exercises actual Jolt wall avoidance, lens effects/blending, self-ignore and recovery. See ../../AYDocs/CAMERA-SYSTEM.md and the integration evidence in ../../AYDocs/ENTITY-SPATIAL-HIERARCHY.md. Native Computer Use acceptance is deferred by user request.
+
+## Spatial gravity authoring
+
+Spatial entities own intrinsic `SpatialGravitySettings` alongside their pose.
+Use `Entity::spatialGravity()` and the validated `setSpatialGravity()` setter;
+Data entities reject it. With `AYEntity.PhysicsIntegration`, 3D dynamic
+`RigidBodyComponent` bodies apply World, None, Field or Custom response each
+fixed step. Enabled Spatial sources can target receivers through 32-bit
+channels. Characters created by gameplay can submit movement through
+`EntityPhysicsBridge::setCharacterInputForEntity` after the bridge's pre-physics
+sync. The Editor exposes the settings under **Physics / Gravity / Advanced**.

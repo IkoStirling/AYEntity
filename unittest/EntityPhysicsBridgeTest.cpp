@@ -69,6 +69,84 @@ size_t countCommands(const std::vector<ayt::physics::PhysicsCommand>& cmds,
 
 TEST_SUITE(EntityPhysicsBridge)
 
+TEST_CASE(spatial_gravity_field_matches_only_selected_receiver)
+{
+    ayt::physics::PhysicsBackendDescriptor desc;
+    desc.kind3D = ayt::physics::BackendKind::Mock;
+    TestRig rig(desc);
+    Entity* source = World::instance().createEntity(EntityKind::Spatial);
+    auto sourceSettings = *source->spatialGravity();
+    sourceSettings.sourceEnabled = true;
+    sourceSettings.sourceShape = SpatialGravityShape::Box;
+    sourceSettings.sourceChannels = 1;
+    sourceSettings.sourceDirection = {1,0,0};
+    sourceSettings.sourceAcceleration = 8;
+    sourceSettings.sourceHalfExtent = {10,10,10};
+    CHECK(source->setSpatialGravity(sourceSettings));
+    Entity* matching = World::instance().createEntity(EntityKind::Spatial);
+    auto* matchingBody = matching->addComponent<RigidBodyComponent>();
+    auto matchingSettings = *matching->spatialGravity();
+    matchingSettings.mode = SpatialGravityMode::Field;
+    matchingSettings.receiverChannels = 1;
+    CHECK(matching->setSpatialGravity(matchingSettings));
+    Entity* other = World::instance().createEntity(EntityKind::Spatial);
+    other->addComponent<RigidBodyComponent>();
+    auto otherSettings = *other->spatialGravity();
+    otherSettings.mode = SpatialGravityMode::Field;
+    otherSettings.receiverChannels = 2;
+    CHECK(other->setSpatialGravity(otherSettings));
+    rig.bridge.syncEntityToPhysics(); rig.step();
+    const auto& cmds = ayt::physics::testaccess::mockBackendCommands();
+    CHECK(countCommands(cmds, ayt::physics::PhysicsCommandType::ApplyAcceleration) == 1u);
+    bool matched = false;
+    for (const auto& cmd : cmds) {
+        if (cmd.type != ayt::physics::PhysicsCommandType::ApplyAcceleration) continue;
+        matched = cmd.body == matchingBody->getBodyHandle();
+        CHECK_FLOAT_EQ(cmd.u.vec4.x, 8, 0.001f);
+    }
+    CHECK(matched);
+    World::instance().destroyEntity(other);
+    World::instance().destroyEntity(matching);
+    World::instance().destroyEntity(source);
+    rig.manager->shutdown(); World::instance().shutdown();
+}
+
+TEST_CASE(spatial_gravity_mode_changes_update_backend_scale)
+{
+    ayt::physics::PhysicsBackendDescriptor desc;
+    desc.kind3D = ayt::physics::BackendKind::Mock;
+    TestRig rig(desc);
+    Entity* entity = World::instance().createEntity(EntityKind::Spatial);
+    auto* body = entity->addComponent<RigidBodyComponent>();
+    body->setGravityScale(0.5f);
+    rig.bridge.syncEntityToPhysics(); rig.step();
+    const auto& created = ayt::physics::testaccess::mockBackendCreatePayloads();
+    CHECK_FLOAT_EQ(created[0].rigidDesc.gravityScale, 0.5f, 0.001f);
+    ayt::physics::testaccess::reset();
+    auto settings = *entity->spatialGravity();
+    settings.mode = SpatialGravityMode::None;
+    CHECK(entity->setSpatialGravity(settings));
+    rig.bridge.syncEntityToPhysics(); rig.step();
+    size_t scales = 0;
+    for (const auto& cmd : ayt::physics::testaccess::mockBackendCommands()) {
+        if (cmd.type != ayt::physics::PhysicsCommandType::SetGravityScale) continue;
+        ++scales;
+        CHECK_FLOAT_EQ(cmd.u.vec4.x, 0, 0.001f);
+    }
+    CHECK_INT_EQ(scales, 1u);
+    ayt::physics::testaccess::reset();
+    settings.mode = SpatialGravityMode::Custom;
+    settings.customAcceleration = {0, 3, 0};
+    CHECK(entity->setSpatialGravity(settings));
+    rig.bridge.syncEntityToPhysics(); rig.step();
+    CHECK(countCommands(ayt::physics::testaccess::mockBackendCommands(),
+        ayt::physics::PhysicsCommandType::SetGravityScale) == 0u);
+    CHECK(countCommands(ayt::physics::testaccess::mockBackendCommands(),
+        ayt::physics::PhysicsCommandType::ApplyAcceleration) == 1u);
+    World::instance().destroyEntity(entity);
+    rig.manager->shutdown(); World::instance().shutdown();
+}
+
 // =============================================================================
 // Body creation (parameter bridge)
 // =============================================================================

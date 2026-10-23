@@ -38,6 +38,50 @@ void writeIdentity(ayt::serializer::ISerializer& s, const Entity& entity,
     s.field(kDisplayNameField, label);
 }
 
+void writeGravity(ayt::serializer::ISerializer& s, const SpatialGravitySettings& g) {
+    s.beginObject("gravity");
+    Int32 mode = static_cast<Int32>(g.mode), shape = static_cast<Int32>(g.sourceShape);
+    UInt32 receiverChannels = g.receiverChannels, sourceChannels = g.sourceChannels;
+    Int32 priority = g.sourcePriority;
+    float multiplier = g.multiplier, radius = g.sourceRadius, acceleration = g.sourceAcceleration;
+    bool enabled = g.sourceEnabled, falloff = g.sourceLinearFalloff;
+    float customX = g.customAcceleration.x, customY = g.customAcceleration.y, customZ = g.customAcceleration.z;
+    float directionX = g.sourceDirection.x, directionY = g.sourceDirection.y, directionZ = g.sourceDirection.z;
+    float extentX = g.sourceHalfExtent.x, extentY = g.sourceHalfExtent.y, extentZ = g.sourceHalfExtent.z;
+    s.field("mode", mode); s.field("receiverChannels", receiverChannels);
+    s.field("multiplier", multiplier);
+    s.field("customX", customX); s.field("customY", customY); s.field("customZ", customZ);
+    s.field("sourceEnabled", enabled); s.field("sourceShape", shape);
+    s.field("sourceChannels", sourceChannels); s.field("sourcePriority", priority);
+    s.field("sourceDirectionX", directionX); s.field("sourceDirectionY", directionY); s.field("sourceDirectionZ", directionZ);
+    s.field("sourceExtentX", extentX); s.field("sourceExtentY", extentY); s.field("sourceExtentZ", extentZ);
+    s.field("sourceRadius", radius); s.field("sourceAcceleration", acceleration);
+    s.field("sourceLinearFalloff", falloff);
+    s.endObject();
+}
+
+bool readGravity(ayt::serializer::ISerializer& s, Entity& entity) {
+    if (static_cast<ayt::serializer::TokenType>(s.peekFieldTokenType("gravity"))
+        != ayt::serializer::TokenType::ObjectBegin) return false;
+    SpatialGravitySettings g;
+    s.beginObject("gravity");
+    Int32 mode = 0, shape = 1;
+    s.field("mode", mode); s.field("receiverChannels", g.receiverChannels);
+    s.field("multiplier", g.multiplier);
+    s.field("customX", g.customAcceleration.x); s.field("customY", g.customAcceleration.y); s.field("customZ", g.customAcceleration.z);
+    s.field("sourceEnabled", g.sourceEnabled); s.field("sourceShape", shape);
+    s.field("sourceChannels", g.sourceChannels); s.field("sourcePriority", g.sourcePriority);
+    s.field("sourceDirectionX", g.sourceDirection.x); s.field("sourceDirectionY", g.sourceDirection.y); s.field("sourceDirectionZ", g.sourceDirection.z);
+    s.field("sourceExtentX", g.sourceHalfExtent.x); s.field("sourceExtentY", g.sourceHalfExtent.y); s.field("sourceExtentZ", g.sourceHalfExtent.z);
+    s.field("sourceRadius", g.sourceRadius); s.field("sourceAcceleration", g.sourceAcceleration);
+    s.field("sourceLinearFalloff", g.sourceLinearFalloff);
+    s.endObject();
+    if (mode < 0 || mode > 3 || shape < 0 || shape > 2) return false;
+    g.mode = static_cast<SpatialGravityMode>(mode);
+    g.sourceShape = static_cast<SpatialGravityShape>(shape);
+    return entity.setSpatialGravity(g);
+}
+
 struct SceneMigKey {
     uint32_t from = 0;
     uint32_t to = 0;
@@ -107,6 +151,7 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world,
             s.beginObject("spatial");
             writeIdentity(s, *entity, *entity->transform());
             ComponentFactory::serializeComponent(s, *entity->transform());
+            writeGravity(s, *entity->spatialGravity());
             s.endObject();
         }
         s.beginArray("components");
@@ -281,6 +326,11 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                     return false;
                 }
                 entity->setComponentDisplayName(entity->transform(), displayName);
+                if (wireVersion >= 6 && !readGravity(s, *entity)) {
+                    s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
+                                  "invalid intrinsic spatial gravity");
+                    return false;
+                }
                 s.endObject();
             }
             relations.push_back({entity, parentId, ownerId});

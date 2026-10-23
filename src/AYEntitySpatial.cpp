@@ -3,6 +3,34 @@
 #include <cmath>
 
 namespace ayt::entity {
+bool validateSpatialGravitySettings(const SpatialGravitySettings& s) noexcept {
+    const auto finite = [](const math::FVector3& v) {
+        return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+    };
+    if (s.mode > SpatialGravityMode::Custom
+        || s.sourceShape > SpatialGravityShape::Radial
+        || !std::isfinite(s.multiplier) || s.multiplier < 0.0f
+        || s.multiplier > 1000.0f || !finite(s.customAcceleration)
+        || !finite(s.sourceDirection) || !finite(s.sourceHalfExtent)
+        || !std::isfinite(s.sourceRadius) || !std::isfinite(s.sourceAcceleration)
+        || s.sourceAcceleration < 0.0f || s.sourceAcceleration > 10000.0f
+        || s.sourceRadius <= 0.0f || s.sourceRadius > 1.0e6f
+        || s.sourceHalfExtent.x <= 0.0f || s.sourceHalfExtent.y <= 0.0f
+        || s.sourceHalfExtent.z <= 0.0f || s.sourceHalfExtent.x > 1.0e6f
+        || s.sourceHalfExtent.y > 1.0e6f || s.sourceHalfExtent.z > 1.0e6f
+        || s.sourceDirection.lengthSq() < 1.0e-12f
+        || s.sourceDirection.lengthSq() > 1.0e12f) return false;
+    return std::abs(s.customAcceleration.x) <= 10000.0f
+        && std::abs(s.customAcceleration.y) <= 10000.0f
+        && std::abs(s.customAcceleration.z) <= 10000.0f;
+}
+
+bool Entity::setSpatialGravity(const SpatialGravitySettings& settings) noexcept {
+    if (!isSpatial() || !validateSpatialGravitySettings(settings)) return false;
+    _spatialGravity = settings;
+    return true;
+}
+
 namespace {
 bool fail(std::string* error, const char* message) {
     if (error) *error = message;
@@ -111,6 +139,7 @@ bool Entity::convertKind(EntityKind kind, std::string* error) {
         _componentInstances.erase(std::remove_if(_componentInstances.begin(), _componentInstances.end(),
             [pointer](const auto& instance) { return instance.component == pointer; }), _componentInstances.end());
         pointer->onDetach(); _transform.reset();
+        _spatialGravity = {};
     } else {
         _transform = std::make_unique<Transform>();
         auto& storage = _world->_componentStorages[typeid(Transform).hash_code()];
