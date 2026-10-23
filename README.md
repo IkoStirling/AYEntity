@@ -1,5 +1,24 @@
 # AYEntity
 
+## 可连接空间区域与传送门（2026-10-23）
+
+`World::connectedSpaces()` 管理稳定区域 ID 和有方向的矩形门。Spatial Entity 的
+`spaceRegion` 是固有空间属性，可由空间父节点继承；Scene schema7 保存区域、门和实体归属。
+`ConnectedSpaces::travel/mapPose/traceRay` 共用同一刚体映射，入口局部 +Z 是可见侧，
+越过门面后从出口局部 +Z 出现。反向通行需显式添加反向门。
+
+运动学根实体使用 `moveSpatialEntityAcrossSpaces` 同步更新姿态、区域和速度；
+`raycastConnectedSpaces` 按入口区域查询，到门面后在目标区域续接。查询解析器须提供
+按区域隔离的物理世界或互斥层掩码。物理权威动态刚体不能使用运动学入口，游戏需在
+固定步边界结合 `travel` 结果提交物理身体更新。
+
+渲染集成的 `planSpacePortalView` 把实时观察者映射到出口并计算出口斜裁剪平面；
+`makeSpacePortalSurfaceDraw` 生成入口四边形，配合 Renderer 的离屏输出材质，
+按子视图先于父视图提交。`spaceRegionId` 让门内视图只显示目标区域。
+普通主相机视图也按自身区域筛选网格及直接灯光，避免重叠区域互相照亮。
+主视图未指定区域时保持旧场景可见性；完整调度与边界见
+[跨模块说明](../../AYDocs/CONNECTED-SPACES.md)。
+
 ## 任意朝向相机与粒子重力（2026-10-23）
 
 3D `CameraControllerComponent` 的 `upVector` 设定自由/环绕/注视镜头的世界上方向；

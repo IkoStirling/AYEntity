@@ -1,4 +1,5 @@
 #pragma once
+#include <AYEntity/ConnectedSpaces.h>
 #include <cstdint>
 namespace ayt::render { struct SceneLights; }
 namespace ayt::entity {
@@ -11,6 +12,9 @@ struct SceneLightingBuildResult {
 /// lights, sorted by descending priority then persistent identity. Invalid
 /// runtime values/poses are skipped; no pointers escape. Authored==0 lets the
 /// Host retain its existing lighting; authored>0 plus emitted==0 explicitly disables direct lights (environment/emission remain).
+/// A nonzero region admits only lights in that region before priority selection;
+/// authored still counts all scene lights to suppress fallback lighting.
 SceneLightingBuildResult collectSceneLighting(World& world, render::SceneLights& output,
-                                              float interpolationAlpha=1.0f);
+                                              float interpolationAlpha=1.0f,
+                                              SpaceRegionId region=0);
 } // namespace ayt::entity

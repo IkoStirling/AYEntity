@@ -1,4 +1,5 @@
 #include <AYEntity/PerspectiveCameraUpdateSystem.h>
+#include <AYEntity.h>
 #include <AYEntity/PerspectiveCameraSelection.h>
 #include <AYEntity/World.h>
 #include <AYRenderer/RendererSubSystem.h>
@@ -28,6 +29,7 @@ void PerspectiveCameraUpdateSystem::onStart() {
             frame = static_cast<CameraRuntimeSystem*>(system)->present(frame,viewport,false,selected.camera->blendDuration);
         output = {frame.view, frame.projection, frame.position,
                   frame.identity, frame.cutGeneration,frame.layerMask};
+        output.spaceRegionId = selected.entity->effectiveSpaceRegion();
         return true;
     });
 }

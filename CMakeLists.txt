@@ -61,6 +61,8 @@ add_library(AYEntityCore STATIC
     src/AYWorldLifecycle.cpp
     src/AYEntity.cpp
     src/AYEntitySpatial.cpp
+    src/AYConnectedSpaces.cpp
+    src/AYConnectedSpaceEntity.cpp
     src/AYComponentRegistry.cpp
     src/AYEntityReflection.cpp
     src/AYPerspectiveCameraSelection.cpp
@@ -491,6 +493,7 @@ if(AY_ENABLE_RENDERER)
     endif()
     add_library(AYEntityRenderIntegration STATIC
         src/AYEntityRenderIntegrationModule.cpp
+        src/AYConnectedSpaceRender.cpp
         src/AYSceneLighting.cpp
         src/AYPerspectiveCameraUpdateSystem.cpp
         src/AYRenderSystem.cpp
@@ -507,6 +510,12 @@ if(AY_ENABLE_RENDERER)
         AYMath
     )
     list(APPEND _ay_entity_integrations AYEntityRenderIntegration)
+
+    if(BUILD_TESTING)
+        add_executable(AYEntity_ConnectedSpaceRenderTests unittest/AYTest_ConnectedSpaceRender.cpp)
+        target_link_libraries(AYEntity_ConnectedSpaceRenderTests PRIVATE AYEntityRenderIntegration AYTest)
+        ay_add_test(AYEntity_ConnectedSpaceRenderTests LABELS "ayentity;portal;render" TIMEOUT 60)
+    endif()
 
     if(AY_ENABLE_AY2D)
         add_library(AYEntity2DIntegration STATIC
@@ -538,6 +547,7 @@ endif()
 if(AY_ENABLE_PHYSICS)
     add_library(AYEntityPhysicsIntegration STATIC
         src/AYEntityPhysicsIntegrationModule.cpp
+        src/AYConnectedSpacePhysicsQuery.cpp
         src/AYCameraPhysicsCollision.cpp
         src/AYEntityPhysicsBridge.cpp
     )
@@ -651,6 +661,9 @@ if(BUILD_TESTING)
     add_executable(AYEntity_SpatialTests unittest/AYTest_SpatialEntity.cpp)
     target_link_libraries(AYEntity_SpatialTests PRIVATE AYEntityCore AYTest)
     ay_add_test(AYEntity_SpatialTests LABELS "ayentity;spatial" TIMEOUT 60)
+    add_executable(AYEntity_ConnectedSpacesTests unittest/AYTest_ConnectedSpaces.cpp)
+    target_link_libraries(AYEntity_ConnectedSpacesTests PRIVATE AYEntityCore AYTest)
+    ay_add_test(AYEntity_ConnectedSpacesTests LABELS "ayentity;spatial;portal" TIMEOUT 60)
     add_executable(AYEntity_PerspectiveCameraTests
         unittest/PerspectiveCameraTestMain.cpp unittest/AYTest_PerspectiveCamera.cpp
         unittest/AYTest_CameraFeatures.cpp)
@@ -661,6 +674,9 @@ endif()
 add_executable(AYEntity_CameraRigExample examples/camera-rig/main.cpp)
 target_link_libraries(AYEntity_CameraRigExample PRIVATE AYEntityCore)
 if(BUILD_TESTING AND TARGET AYEntityPhysicsIntegration)
+    add_executable(AYEntity_ConnectedSpacePhysicsTests unittest/AYTest_ConnectedSpacePhysics.cpp)
+    target_link_libraries(AYEntity_ConnectedSpacePhysicsTests PRIVATE AYEntityPhysicsIntegration AYTest)
+    ay_add_test(AYEntity_ConnectedSpacePhysicsTests LABELS "ayentity;portal;physics" TIMEOUT 60)
     add_executable(AYEntity_CameraRigIntegrationTests unittest/AYTest_CameraRigIntegration.cpp)
     target_link_libraries(AYEntity_CameraRigIntegrationTests PRIVATE AYEntityPhysicsIntegration AYTest)
     target_compile_definitions(AYEntity_CameraRigIntegrationTests PRIVATE

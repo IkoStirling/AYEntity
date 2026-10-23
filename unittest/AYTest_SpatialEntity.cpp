@@ -82,10 +82,17 @@ TEST_CASE(ownership_and_attachment_have_independent_lifetimes) {
 }
 TEST_CASE(scene_roundtrip_restores_types_identity_and_forward_relations) {
     Fixture f;
+    CHECK(f.world.connectedSpaces().addRegion(1));
+    CHECK(f.world.connectedSpaces().addRegion(2));
+    SpacePortal portal; portal.id=17; portal.source=1; portal.destination=2;
+    portal.exit.position={30,0,0};
+    CHECK(f.world.connectedSpaces().setPortal(portal));
     auto* child = f.world.createSpatialEntity(); auto* parent = f.world.createSpatialEntity(); auto* data = f.world.createDataEntity();
     child->setName("Child"); parent->setName("Parent"); data->setName("State");
     CHECK(child->setSpatialParent(parent)); CHECK(data->setOwner(parent));
     parent->transform()->position = {6,0,0}; child->transform()->position = {1,0,0};
+    CHECK(parent->setSpaceRegion(1));
+    CHECK(child->effectiveSpaceRegion()==1);
     const auto id = child->persistentId();
     CHECK(saveScene(f.world,"spatial-roundtrip.scn")); CHECK(loadScene(f.world,"spatial-roundtrip.scn"));
     child = f.world.findEntity("Child"); parent = f.world.findEntity("Parent"); data = f.world.findEntity("State");
@@ -94,6 +101,9 @@ TEST_CASE(scene_roundtrip_restores_types_identity_and_forward_relations) {
         CHECK(child->persistentId() == id); CHECK(child->spatialParent() == parent);
         CHECK(data->kind() == EntityKind::Data); CHECK(data->transform() == nullptr); CHECK(data->owner() == parent);
         CHECK_FLOAT_EQ(child->worldMatrix()(0,3),7,1e-5f);
+        CHECK(parent->spaceRegion()==1); CHECK(child->effectiveSpaceRegion()==1);
+        CHECK(f.world.connectedSpaces().portal(17)!=nullptr);
+        CHECK(f.world.connectedSpaces().regions().size()==2);
     }
     std::remove("spatial-roundtrip.scn");
 }

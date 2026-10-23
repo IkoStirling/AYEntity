@@ -1,5 +1,5 @@
 #pragma once
-// AYEntity/SceneSerializer.h — P4-B World scene save/load (.ayscene v0).
+// AYEntity/SceneSerializer.h — World scene save/load (.scn schema7).
 
 #include <AYSerializer/SerializeError.h>
 #include <AYSerializer/SerializerCore.h>
@@ -12,7 +12,9 @@ namespace ayt::entity
 
 class World;
 
-constexpr uint32_t kSceneSchemaVersion = 6;
+/// Schema7 persists connected-space regions, directed portals and Spatial
+/// Entity region membership; prior schemas load with an empty graph.
+constexpr uint32_t kSceneSchemaVersion = 7;
 /// JSON-only project migration can repair component identities without registered spatial semantics.
 constexpr uint32_t kSceneComponentIdentitySchemaVersion = 4;
 constexpr const char* kSceneSchemaVersionField = "__schemaVersion";

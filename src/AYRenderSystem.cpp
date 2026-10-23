@@ -168,9 +168,12 @@ void RenderSystem::onUpdate(float /*dt*/)
 void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
 {
+    ayt::render::RendererSubSystem* rendererSubSystem =
+        ayt::render::RendererSubSystem::findRegistered();
     ayt::render::SceneLights authoredLights;
     const auto lighting=collectSceneLighting(World::instance(),authoredLights,
-        ayt::game::GameLoop::instance().getInterpolationFactor());
+        ayt::game::GameLoop::instance().getInterpolationFactor(),
+        rendererSubSystem ? rendererSubSystem->activeCameraSpaceRegion() : 0);
     if(lighting.authored) scene.setSceneLights(authoredLights);
 
 
@@ -179,10 +182,6 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
     const uint32_t frameIndex = s_frameIndex++;
 
 
-
-    ayt::render::RendererSubSystem* rendererSubSystem =
-
-        ayt::render::RendererSubSystem::findRegistered();
 
     if (rendererSubSystem == nullptr) {
 
@@ -339,6 +338,7 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         item.mesh         = resources.mesh;
         item.material     = material;
         item.world        = transformToWorldMatrix(*entity);
+        item.spaceRegionId = entity->effectiveSpaceRegion();
         // Temporal passes match this rigid draw to its previous transform.
         item.motionObjectId = temporalObjectIdentity(world, *entity);
         item.cameraLayerMask = meshComp->layer >= 0 && meshComp->layer < 32 ? 1u << meshComp->layer : 0;

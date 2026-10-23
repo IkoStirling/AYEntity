@@ -2,6 +2,19 @@
 #include "RenderSubmissionFixture.h"
 
 TEST_SUITE(EntityRenderSubmissionTests)
+TEST_CASE(spatial_region_reaches_static_and_skinned_draw_packets)
+{
+    for(bool skinned:{false,true}){
+        SubmissionFixture fixture(skinned);CHECK(fixture.ready);if(!fixture.ready)return;
+        auto entities=fixture.world.getAllEntities();CHECK(entities.size()==1);
+        CHECK(fixture.world.connectedSpaces().addRegion(2));
+        CHECK(entities.front()->setSpaceRegion(2));
+        fixture.subsystem->update(0);
+        const auto& items=fixture.subsystem->renderScene().items();
+        CHECK(items.size()==2);
+        for(const auto& item:items) CHECK(item.spaceRegionId==2);
+    }
+}
 TEST_CASE(replaced_renderer_does_not_reuse_a_resident_numeric_handle_from_the_old_context)
 {
     for(bool skinned:{false,true}){

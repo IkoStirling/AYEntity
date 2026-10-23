@@ -82,6 +82,55 @@ bool readGravity(ayt::serializer::ISerializer& s, Entity& entity) {
     return entity.setSpatialGravity(g);
 }
 
+void spacePoseFields(ayt::serializer::ISerializer& s, const char* name, SpacePose& pose) {
+    s.beginObject(name);
+    s.field("x", pose.position.x); s.field("y", pose.position.y); s.field("z", pose.position.z);
+    s.field("qx", pose.rotation.x); s.field("qy", pose.rotation.y);
+    s.field("qz", pose.rotation.z); s.field("qw", pose.rotation.w);
+    s.endObject();
+}
+
+void writeConnectedSpaces(ayt::serializer::ISerializer& s, const ConnectedSpaces& spaces) {
+    s.beginArray("spaceRegions");
+    for (SpaceRegionId id : spaces.regions()) {
+        s.beginObject(nullptr); UInt32 value = id; s.field("id", value); s.endObject();
+    }
+    s.endArray();
+    s.beginArray("spacePortals");
+    for (const auto& p : spaces.portals()) {
+        s.beginObject(nullptr);
+        UInt64 id = p.id; UInt32 source = p.source, destination = p.destination;
+        s.field("id", id); s.field("source", source); s.field("destination", destination);
+        auto entrance = p.entrance, exit = p.exit;
+        spacePoseFields(s, "entrance", entrance); spacePoseFields(s, "exit", exit);
+        float width = p.halfWidth, height = p.halfHeight; bool enabled = p.enabled;
+        s.field("halfWidth", width); s.field("halfHeight", height); s.field("enabled", enabled);
+        s.endObject();
+    }
+    s.endArray();
+}
+
+bool readConnectedSpaces(ayt::serializer::ISerializer& s, ConnectedSpaces& spaces) {
+    s.beginArray("spaceRegions");
+    while (s.hasMoreArrayElements()) {
+        s.beginObject(nullptr); UInt32 id = 0; s.field("id", id); s.endObject();
+        if (!spaces.addRegion(id)) return false;
+    }
+    s.endArray();
+    s.beginArray("spacePortals");
+    while (s.hasMoreArrayElements()) {
+        s.beginObject(nullptr);
+        SpacePortal p;
+        s.field("id", p.id); s.field("source", p.source); s.field("destination", p.destination);
+        spacePoseFields(s, "entrance", p.entrance); spacePoseFields(s, "exit", p.exit);
+        s.field("halfWidth", p.halfWidth); s.field("halfHeight", p.halfHeight);
+        s.field("enabled", p.enabled); s.endObject();
+        if (spaces.portal(p.id) || !spaces.setPortal(p)) return false;
+    }
+    s.endArray();
+    return s.lastError().ok();
+}
+
 struct SceneMigKey {
     uint32_t from = 0;
     uint32_t to = 0;
@@ -129,6 +178,8 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world,
     std::string coordConvention = ayt::math::EngineCoordinateConvention::cacheTag;
     s.field(kCoordinateConventionField, coordConvention);
 
+    writeConnectedSpaces(s, world.connectedSpaces());
+
     s.beginArray("entities");
     for (Entity* entity : world.getAllEntities()) {
         if (entity == nullptr || !entity->isValid()) {
@@ -152,6 +203,7 @@ bool writeSceneEnvelope(ayt::serializer::ISerializer& s, const World& world,
             writeIdentity(s, *entity, *entity->transform());
             ComponentFactory::serializeComponent(s, *entity->transform());
             writeGravity(s, *entity->spatialGravity());
+            UInt32 region = entity->spaceRegion(); s.field("spaceRegion", region);
             s.endObject();
         }
         s.beginArray("components");
@@ -273,6 +325,13 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                      ayt::math::EngineCoordinateConvention::cacheTag);
     }
 
+    if (wireVersion >= 7 && !readConnectedSpaces(s, world.connectedSpaces())) {
+        s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
+                      "invalid connected space graph");
+        if (outError) *outError = s.lastError();
+        return false;
+    }
+
     struct PendingRelation { Entity* entity; std::string parent, owner; };
     std::vector<PendingRelation> relations;
     s.beginArray("entities");
@@ -330,6 +389,14 @@ bool readSceneEnvelope(ayt::serializer::ISerializer& s, World& world,
                     s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
                                   "invalid intrinsic spatial gravity");
                     return false;
+                }
+                if (wireVersion >= 7) {
+                    UInt32 region = 0; s.field("spaceRegion", region);
+                    if (!entity->setSpaceRegion(region)) {
+                        s.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
+                                      "invalid intrinsic space region");
+                        return false;
+                    }
                 }
                 s.endObject();
             }

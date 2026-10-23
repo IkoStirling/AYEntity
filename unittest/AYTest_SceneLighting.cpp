@@ -51,6 +51,22 @@ TEST_CASE(extraction_is_bounded_deterministically_ordered_and_reports_disabled_i
         if(original)CHECK_FLOAT_EQ(output.lights[i].position.x,original->transform()->position.x,1e-5f);}
     world.shutdown();
 }
+TEST_CASE(region_filter_precedes_light_budget_and_suppresses_cross_room_fallback)
+{
+    auto& world=entity::World::processWorld();world.shutdown();CHECK(world.initialize());
+    CHECK(world.connectedSpaces().addRegion(1));CHECK(world.connectedSpaces().addRegion(2));
+    for(int i=0;i<9;++i){auto* object=world.createSpatialEntity();CHECK(object->setSpaceRegion(1));
+        auto* light=object->createComponent<entity::LightComponent>();light->priority=100-i;}
+    auto* other=world.createSpatialEntity();CHECK(other->setSpaceRegion(2));
+    auto* local=other->createComponent<entity::LightComponent>();local->color={0,1,0};
+    render::SceneLights output;
+    auto result=entity::collectSceneLighting(world,output,1,2);
+    CHECK(result.authored==10);CHECK(result.emitted==1);CHECK(result.overflow==0);
+    CHECK(output.count==1);CHECK_FLOAT_EQ(output.lights[0].color.y,1,0);
+    result=entity::collectSceneLighting(world,output,1,3);
+    CHECK(result.authored==10);CHECK(result.emitted==0);CHECK(output.count==0);
+    world.shutdown();
+}
 TEST_CASE(disabled_or_invalid_authored_lights_are_explicit_empty_and_no_light_preserves_host_policy)
 {
     auto& world=entity::World::processWorld();world.shutdown();CHECK(world.initialize());render::SceneLights output;output.add(render::Light::directional({0,-1,0},{1,1,1}));

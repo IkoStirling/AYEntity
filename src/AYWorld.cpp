@@ -96,6 +96,7 @@ void World::shutdown() {
     _entityNameMap.clear();
     _componentStorages.clear();
     _systems.clear();
+    _connectedSpaces = {};
     _nextEntityId = 1;
     _initialized = false;
 

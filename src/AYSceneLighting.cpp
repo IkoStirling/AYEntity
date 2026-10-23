@@ -9,7 +9,8 @@
 #include <cmath>
 
 namespace ayt::entity {
-SceneLightingBuildResult collectSceneLighting(World& world, render::SceneLights& output, float alpha)
+SceneLightingBuildResult collectSceneLighting(World& world, render::SceneLights& output,
+                                               float alpha, SpaceRegionId region)
 {
     SceneLightingBuildResult result;render::SceneLights next;
     struct Candidate {render::Light light;int32_t priority=0;const std::string* identity=nullptr;};
@@ -18,6 +19,7 @@ SceneLightingBuildResult collectSceneLighting(World& world, render::SceneLights&
         ||(a.priority==b.priority&&*a.identity<*b.identity);};
     for(auto* object:world.query<LightComponent>()){
         const auto* component=object->getComponent<LightComponent>();++result.authored;
+        if(region && object->effectiveSpaceRegion()!=region) continue;
         if(!component->enabled){++result.disabled;continue;}
         math::FVector3 position;math::FQuaternion rotation;
         if(!component->valid()||!std::isfinite(alpha)||!object->worldPose(position,rotation,std::clamp(alpha,0.f,1.f))){++result.invalid;continue;}

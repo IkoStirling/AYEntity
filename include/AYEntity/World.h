@@ -6,6 +6,7 @@
 #include <AYEntity/ComponentRegistry.h>
 #include <AYEntity/SparseSet.h>
 #include <AYEntity/EntityHandle.h>
+#include <AYEntity/ConnectedSpaces.h>
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -68,6 +69,10 @@ public:
     void updatePresentation(float dt, float interpolationAlpha);
     /// Alpha of the current presentation tick, shared by tracking cameras and Sim pose sampling.
     float presentationInterpolationAlpha() const noexcept { return _presentationAlpha; }
+    /// One topology authority per World. Configure at a quiescent frame/scene
+    /// boundary; movement, portal views and queries consume this same graph.
+    ConnectedSpaces& connectedSpaces() noexcept { return _connectedSpaces; }
+    const ConnectedSpaces& connectedSpaces() const noexcept { return _connectedSpaces; }
 
     /// Legacy creation: initially Data and promotes on first spatial acquisition.
     /// New gameplay uses createSpatialEntity/createDataEntity explicitly.
@@ -160,6 +165,7 @@ private:
     uint32_t _nextEntityId = 1;
     bool _initialized = false;
     float _presentationAlpha = 1.f;
+    ConnectedSpaces _connectedSpaces;
 
     friend class Entity;
     // AYScene PR-1: Scene::Impl owns independent World instances to avoid

@@ -337,6 +337,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
             item.firstIndex = submesh.firstIndex;
             item.indexCount = submesh.indexCount;
             item.world = worldM;
+            item.spaceRegionId = e->effectiveSpaceRegion();
             // All sections share one entity identity. MotionVectorPass adds
             // mesh identity internally, then snapshots the complete skeleton
             // once all sections have consumed the previous pose.
@@ -391,6 +392,7 @@ void SkinnedMeshRenderSystem::buildSkinnedScene(ayt::render::RenderScene& scene)
             item.mesh = meshSubmission->mesh;
             item.material = fallbackMat;
             item.world = worldM;
+            item.spaceRegionId = e->effectiveSpaceRegion();
             item.motionObjectId = temporalObjectIdentity(world, *e);
             item.cameraLayerMask = meshComp->layer >= 0 && meshComp->layer < 32 ? 1u << meshComp->layer : 0;
             scene.add(item);

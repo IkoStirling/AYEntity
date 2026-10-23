@@ -31,6 +31,24 @@ bool Entity::setSpatialGravity(const SpatialGravitySettings& settings) noexcept 
     return true;
 }
 
+bool Entity::setSpaceRegion(SpaceRegionId region) noexcept {
+    if (!isSpatial() || !_world || (region && !_world->connectedSpaces().containsRegion(region)))
+        return false;
+    _spaceRegion = region;
+    return true;
+}
+
+SpaceRegionId Entity::effectiveSpaceRegion() const noexcept {
+    if (!isSpatial()) return 0;
+    if (_spaceRegion) return _spaceRegion;
+    const Entity* current = spatialParent();
+    for (uint32_t depth = 0; current && depth < 256; ++depth) {
+        if (current->_spaceRegion) return current->_spaceRegion;
+        current = current->spatialParent();
+    }
+    return 0;
+}
+
 namespace {
 bool fail(std::string* error, const char* message) {
     if (error) *error = message;
@@ -96,6 +114,7 @@ void World::clearEntities() {
         if (id < _entityPool.size()) EntityHandlePool::instance().release(_entityPool[id]);
     }
     _entities.clear(); _entityNameMap.clear();
+    _connectedSpaces = {};
     // Preserve monotonically issued runtime IDs and vector indexing after a scene reload.
     _entities.resize(_nextEntityId - 1);
 }
@@ -140,6 +159,7 @@ bool Entity::convertKind(EntityKind kind, std::string* error) {
             [pointer](const auto& instance) { return instance.component == pointer; }), _componentInstances.end());
         pointer->onDetach(); _transform.reset();
         _spatialGravity = {};
+        _spaceRegion = 0;
     } else {
         _transform = std::make_unique<Transform>();
         auto& storage = _world->_componentStorages[typeid(Transform).hash_code()];

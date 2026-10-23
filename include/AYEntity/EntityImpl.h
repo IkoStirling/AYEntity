@@ -9,6 +9,7 @@
 #include <memory>
 #include <AYMath/MathTypes.h>
 #include <AYEntity/SpatialGravitySettings.h>
+#include <AYEntity/ConnectedSpaces.h>
 
 namespace ayt::entity
 {
@@ -61,6 +62,14 @@ public:
     }
     /// Rejects invalid values and Data entities without changing current settings.
     bool setSpatialGravity(const SpatialGravitySettings& settings) noexcept;
+    /// Zero means ordinary unpartitioned space. Connected-space participants
+    /// carry a region identity with their intrinsic Spatial state, not a
+    /// removable component. The region must exist in World::connectedSpaces()
+    /// before traversal or portal-aware queries.
+    SpaceRegionId spaceRegion() const noexcept { return isSpatial() ? _spaceRegion : 0; }
+    bool setSpaceRegion(SpaceRegionId region) noexcept;
+    /// A zero local region inherits the nearest Spatial parent's region.
+    SpaceRegionId effectiveSpaceRegion() const noexcept;
     const std::string& persistentId() const noexcept { return _persistentId; }
     bool restorePersistentId(const std::string& id);
     /// Explicit conversion; failure does not change pose, components or relations.
@@ -156,6 +165,7 @@ private:
     std::string _persistentId;
     std::unique_ptr<Transform> _transform;
     SpatialGravitySettings _spatialGravity{};
+    SpaceRegionId _spaceRegion = 0;
     EntityHandle _spatialParent{}, _owner{};
     uint32_t _id = INVALID_ID;
     std::string _name;
