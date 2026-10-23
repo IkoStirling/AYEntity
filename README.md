@@ -1920,6 +1920,10 @@ Entity.PhysicsIntegration installs the default Jolt sphere-sweep adapter. Host c
 
 Editor has stable target selection, collision parameters, and undoable main-window hierarchy dragging. CameraRigProject is a portable visual/authoring fixture; its Wall is visual-only, while AYEntity_CameraRigIntegrationTests exercises actual Jolt wall avoidance, lens effects/blending, self-ignore and recovery. See ../../AYDocs/CAMERA-SYSTEM.md and the integration evidence in ../../AYDocs/ENTITY-SPATIAL-HIERARCHY.md. Native Computer Use acceptance is deferred by user request.
 
+## 2D action sprite presentation
+
+`AYEntity/ActionSpritePresenter2D.h` applies an active `ActionStep2D` frame's UV and facing to `SpriteComponent` without advancing the action clock. Use it after the fixed-step `ActionRuntime2D::step`; disable `SpriteAnimationSystem` for that Sprite to avoid competing UV writers. The action runtime remains in AY2D, and this adapter does not join the deterministic Session/rollback profile.
+
 ## Spatial gravity authoring
 
 Spatial entities own intrinsic `SpatialGravitySettings` alongside their pose.

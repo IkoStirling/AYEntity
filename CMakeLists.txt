@@ -537,6 +537,7 @@ if(AY_ENABLE_RENDERER)
         add_library(AYEntity::TwoDIntegration ALIAS AYEntity2DIntegration)
         ay_configure_entity_target(AYEntity2DIntegration)
         target_link_libraries(AYEntity2DIntegration PUBLIC
+            AY2D
             AYEntity2DComponents
             AYEntityCore
             AYRenderer

@@ -3558,3 +3558,12 @@ default multiplier leaves the character descriptor's own gravity scale alone.
 Changing Entity gravity does not rotate the camera; camera up/roll are a
 separate presentation choice. Runtime field sampling is float/Jolt based and
 does not join deterministic lockstep state.
+
+## 2D authored-action presentation adapter (2026-10-24)
+
+`presentActionFrame2D` is a small optional bridge from AY2D's completed
+`ActionStep2D` to `SpriteComponent`. It changes the source UV rectangle and
+horizontal flip bit while preserving vertical flip and all other Sprite
+properties. It does not step the action runtime, infer gameplay hits, or
+claim rollback authority. A game selects this presenter instead of the
+independent `SpriteAnimationSystem` for any one Sprite.
