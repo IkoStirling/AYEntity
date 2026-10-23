@@ -47,6 +47,15 @@ TEST_CASE(live_camera_mapping_clip_plane_and_surface_share_portal) {
     CHECK(planSpacePortalView(world,9,source,8,{45},plan));
     CHECK_FLOAT_EQ(plan.view.position.x,9.5f,1e-4f);
     CHECK(plan.view.view(0,2)!=unchanged.view.view(0,2));
+    CHECK(graph.addRegion(3));
+    SpacePortal second; second.id=10; second.source=2; second.destination=3;
+    second.entrance.position={10,0,0}; second.entrance.rotation={0,1,0,0};
+    second.exit.position={20,0,0};
+    CHECK(graph.setPortal(second));
+    SpacePortalView nested;
+    CHECK(planSpacePortalView(world,10,plan.view,9,{46},nested));
+    CHECK(nested.view.spaceRegionId==3);
+    CHECK_FLOAT_EQ(nested.view.position.x,19.5f,1e-4f);
     source.position={100,0,2};
     CHECK_FALSE(planSpacePortalView(world,9,source,8,{45},plan));
     source.position={.5f,0,2};

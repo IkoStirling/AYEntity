@@ -11,6 +11,32 @@ bool finiteMatrix(const math::Float4x4& value) noexcept {
     return true;
 }
 float sign(float value) noexcept { return value < 0 ? -1.0f : 1.0f; }
+bool clipCorner(const math::Float4x4& projection, const math::FVector4& clip,
+                math::FVector4& corner) noexcept {
+    double rows[4][5]{};
+    for (int row=0; row<4; ++row) {
+        for (int col=0; col<4; ++col) rows[row][col]=projection(row,col);
+        rows[row][4]=clip.f[row];
+    }
+    for (int col=0; col<4; ++col) {
+        int pivot=col;
+        for (int row=col+1; row<4; ++row)
+            if (std::fabs(rows[row][col])>std::fabs(rows[pivot][col])) pivot=row;
+        if (std::fabs(rows[pivot][col])<1.0e-12) return false;
+        if (pivot!=col) for (int c=col;c<5;++c) std::swap(rows[pivot][c],rows[col][c]);
+        const double diagonal=rows[col][col];
+        for (int c=col;c<5;++c) rows[col][c]/=diagonal;
+        for (int row=0; row<4; ++row) if (row!=col) {
+            const double factor=rows[row][col];
+            for (int c=col;c<5;++c) rows[row][c]-=factor*rows[col][c];
+        }
+    }
+    for (int row=0; row<4; ++row) {
+        if (!std::isfinite(rows[row][4])) return false;
+        corner.f[row]=static_cast<float>(rows[row][4]);
+    }
+    return true;
+}
 }
 
 bool planSpacePortalView(const World& world, SpacePortalId portalId,
@@ -55,19 +81,16 @@ bool planSpacePortalView(const World& world, SpacePortalId portalId,
     const math::FVector4 plane{normalCamera.x,normalCamera.y,normalCamera.z,
                                -normalCamera.dot(pointCamera)};
     auto projection = sourceView.projection;
-    // A perspective matrix has w=z in camera space. Reject orthographic or
-    // singular/unsupported custom matrices rather than emitting invalid clips.
-    if (std::fabs(projection(3,2)) < 1.0e-6f || std::fabs(projection(3,3)) > 1.0e-6f
-        || std::fabs(projection(0,0)) < 1.0e-6f
-        || std::fabs(projection(1,1)) < 1.0e-6f
-        || std::fabs(projection(2,3)) < 1.0e-6f)
+    // A perspective matrix has homogeneous w from camera z. Solve the far
+    // clip corner directly: recursively planned views already have an oblique
+    // row 2, and AYMath's generic inverse need not be used for projections.
+    if (std::fabs(projection(3,0)) > 1.0e-6f
+        || std::fabs(projection(3,1)) > 1.0e-6f
+        || std::fabs(projection(3,2)) < 1.0e-6f
+        || std::fabs(projection(3,3)) > 1.0e-6f)
         return false;
-    const float qz = 1.0f/projection(3,2);
-    const float qw = (1.0f-projection(2,2)*qz)/projection(2,3);
-    const math::FVector4 corner{
-        (sign(plane.x)-projection(0,2)*qz-projection(0,3)*qw)/projection(0,0),
-        (sign(plane.y)-projection(1,2)*qz-projection(1,3)*qw)/projection(1,1),
-        qz,qw};
+    math::FVector4 corner{};
+    if (!clipCorner(projection,{sign(plane.x),sign(plane.y),1,1},corner)) return false;
     const float denominator = plane.x*corner.x + plane.y*corner.y
         + plane.z*corner.z + plane.w*corner.w;
     if (!std::isfinite(denominator) || denominator <= 1.0e-6f) return false;
