@@ -119,6 +119,10 @@ Core 新增 CameraFrame/CameraRuntime/CameraControllerComponent，无 Renderer/P
 priority399 的 World-owned Present system 生成跟随/环绕/自由姿态；目标逐帧解析并采样
 World presentation alpha，identity/generation 变化清除速度历史。震屏仅施加到快照。
 镜头过渡按 viewportId/domain 隔离，单表现 tick 单次推进；中断以当前呈现姿态继续，
+3D 电影镜头租约由 World-owned CameraRuntimeSystem 以 viewport 和非零 owner 保存。
+选镜先尝试租约中的代际实体句柄，再回退常规 active/priority 排序；租用镜头
+可保持作者组件 inactive，组件本身不被改写。呈现过渡使用租约时长，释放后
+再次使用普通组件时长；World 销毁会清理租约。不同 owner 不可抢占或清除。
 CameraCut 和投影类型变化硬切。3D 镜头补局部姿态/正交/layerMask，2D/3D 补 viewportId
 与 blendDuration/teleport；层级整合后的 Scene writer 使用 schema5，并兼容旧字段缺省值。
 查询使用左上像素/视口偏移/LH深度[0,1]，double带主元求解检测失败；不依赖快速透视逆路径。

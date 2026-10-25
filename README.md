@@ -149,6 +149,9 @@ Core 注册可保存的 FOV（度）、near/far、active、priority，支持 Hea
 安装 RenderIntegration 后自动选最高优先级活动相机，在提取几何前同步；同分按 Entity id
 和持久组件 id 排序。Transform 的 scale 不影响镜头，朝向为 LH / Y-up / 本地 +Z。
 Editor/Host 覆盖优先，清除覆盖恢复游戏相机；无有效相机回退默认镜头。
+`CameraRuntimeSystem::setCinematicCamera` 可为某个 3D viewport 临时租用相机实体，
+并以指定时长过渡；不同 owner 不能覆盖或清除此租约。它不修改或序列化相机组件，
+失效的实体句柄自动回退到普通优先级选择。`clearCinematicCamera` 恢复作者选择。
 3D 组件新增正交投影、局部 pose、layerMask、viewportId 和 blendDuration；2D 也支持
 viewportId、过渡与 teleport。teleport 同时清除 pose 插值和 render cut；单独
 requestCameraCut 只标记渲染历史。换 World/相机/覆盖来源仍重置时域历史。

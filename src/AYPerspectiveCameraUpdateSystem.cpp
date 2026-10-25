@@ -25,8 +25,13 @@ void PerspectiveCameraUpdateSystem::onStart() {
             return false;
         }
         const auto selected = selectPerspectiveCamera3D(*owner,viewport);
-        if (auto* system = owner->findSystemByName("CameraRuntimeSystem"))
-            frame = static_cast<CameraRuntimeSystem*>(system)->present(frame,viewport,false,selected.camera->blendDuration);
+        if (auto* system = owner->findSystemByName("CameraRuntimeSystem")) {
+            auto& runtime = *static_cast<CameraRuntimeSystem*>(system);
+            const auto forced = runtime.cinematicCamera(viewport);
+            const auto duration = forced.entity == owner->getEntityHandle(selected.entity->getId())
+                ? forced.blendSeconds : selected.camera->blendDuration;
+            frame = runtime.present(frame,viewport,false,duration);
+        }
         output = {frame.view, frame.projection, frame.position,
                   frame.identity, frame.cutGeneration,frame.layerMask};
         output.spaceRegionId = selected.entity->effectiveSpaceRegion();

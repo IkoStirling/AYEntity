@@ -190,6 +190,32 @@ CameraFrame CameraRuntimeSystem::present(const CameraFrame& frame, int32_t viewp
     return presented;
 }
 void CameraRuntimeSystem::resetView(int32_t viewport, bool twoD) { _transitions.erase(viewKey(viewport,twoD)); }
+bool CameraRuntimeSystem::setCinematicCamera(int32_t viewportId,
+    std::uint64_t owner, EntityHandle entity, float blendSeconds)
+{
+    if (viewportId < 0 || !owner || !entity.isValid() || !_owner
+        || !std::isfinite(blendSeconds) || blendSeconds < 0
+        || !_owner->getEntityByHandle(entity)) return false;
+    const auto found = _cinematicCameras.find(viewportId);
+    if (found != _cinematicCameras.end() && found->second.owner != owner)
+        return false;
+    _cinematicCameras.insert_or_assign(viewportId,
+        CinematicLease{owner, CinematicCamera{entity, blendSeconds}});
+    return true;
+}
+void CameraRuntimeSystem::clearCinematicCamera(int32_t viewportId,
+    std::uint64_t owner) noexcept
+{
+    const auto found = _cinematicCameras.find(viewportId);
+    if (found != _cinematicCameras.end() && found->second.owner == owner)
+        _cinematicCameras.erase(found);
+}
+CameraRuntimeSystem::CinematicCamera CameraRuntimeSystem::cinematicCamera(
+    int32_t viewportId) const noexcept
+{
+    const auto found = _cinematicCameras.find(viewportId);
+    return found == _cinematicCameras.end() ? CinematicCamera{} : found->second.camera;
+}
 bool CameraRuntimeSystem::snapshot(int32_t viewport, bool twoD, CameraFrame& output) const noexcept {
     const auto found = _transitions.find(viewKey(viewport,twoD));
     return found != _transitions.end() && found->second.transition.snapshot(output);

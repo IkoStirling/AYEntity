@@ -15,6 +15,30 @@ bool validPose(const math::FVector3& p, const math::FQuaternion& q) {
 
 SelectedPerspectiveCamera3D selectPerspectiveCamera3D(World& world, int32_t viewportId) {
     SelectedPerspectiveCamera3D selected;
+    if (auto* system = world.findSystemByName("CameraRuntimeSystem")) {
+        const auto forced = static_cast<CameraRuntimeSystem*>(system)
+            ->cinematicCamera(viewportId);
+        if (auto* entity = world.getEntityByHandle(forced.entity)) {
+            auto* transform = entity->getComponent<Transform>();
+            math::FVector3 position; math::FQuaternion rotation;
+            if (transform && validPose(transform->position, transform->rotation)
+                && entity->worldPose(position, rotation)) {
+                for (auto* camera : entity->getComponents<PerspectiveCameraComponent>()) {
+                    if (!camera || camera->viewportId != viewportId
+                        || !camera_detail::finite(camera->localOffset)
+                        || !validPose({}, camera->localRotation)) continue;
+                    const auto* candidate = entity->componentInstance(camera);
+                    const auto* previous = selected.camera
+                        ? entity->componentInstance(selected.camera) : nullptr;
+                    if (!selected || camera->priority > selected.camera->priority
+                        || (camera->priority == selected.camera->priority
+                            && candidate && previous && candidate->id < previous->id))
+                        selected = {entity, transform, camera};
+                }
+                if (selected) return selected;
+            }
+        }
+    }
     for (Entity* entity : world.query<Transform, PerspectiveCameraComponent>()) {
         if (!entity) continue;
         auto* transform = entity->getComponent<Transform>();

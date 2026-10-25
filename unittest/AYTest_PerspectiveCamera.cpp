@@ -1,6 +1,7 @@
 #include <AYEntity.h>
 #include <AYEntity/EntityModule.h>
 #include <AYEntity/PerspectiveCameraSelection.h>
+#include <AYEntity/CameraRuntime.h>
 #include <AYEntity/SceneSerializer.h>
 #include <AYEntity/components/PerspectiveCameraComponent.h>
 #include <AYTest.h>
@@ -23,6 +24,34 @@ struct CameraWorld {
 };
 }
 TEST_SUITE(PerspectiveCamera3DTests)
+
+TEST_CASE(cinematic_selection_lease_is_owner_scoped_and_not_serialized)
+{
+    CameraWorld f;
+    auto* ordinary = f.camera();
+    auto* cinematic = f.camera(4);
+    auto* authored = cinematic->getComponents<PerspectiveCameraComponent>()[0];
+    authored->active = false;
+    auto& runtime = cameraRuntime(f.world);
+    CHECK(selectPerspectiveCamera3D(f.world).entity == ordinary);
+    const auto handle = f.world.getEntityHandle(cinematic->getId());
+    CHECK(runtime.setCinematicCamera(0, 17, handle, 0.25f));
+    CHECK(selectPerspectiveCamera3D(f.world).entity == cinematic);
+    CHECK(runtime.cinematicCamera(0).blendSeconds == 0.25f);
+    CHECK_FALSE(runtime.setCinematicCamera(0, 18,
+        f.world.getEntityHandle(ordinary->getId()), 0));
+    runtime.clearCinematicCamera(0, 18);
+    CHECK(selectPerspectiveCamera3D(f.world).entity == cinematic);
+    runtime.clearCinematicCamera(0, 17);
+    CHECK(selectPerspectiveCamera3D(f.world).entity == ordinary);
+    CHECK_FALSE(runtime.setCinematicCamera(0, 17, {}, 0));
+    CHECK(runtime.setCinematicCamera(0, 17, handle, 0));
+    runtime.resetAllViews();
+    CHECK(selectPerspectiveCamera3D(f.world).entity == ordinary);
+    CHECK(runtime.setCinematicCamera(0, 17, handle, 0));
+    f.world.destroyEntity(cinematic);
+    CHECK(selectPerspectiveCamera3D(f.world).entity == ordinary);
+}
 
 TEST_CASE(selection_is_active_priority_then_entity_and_persistent_component_id)
 {

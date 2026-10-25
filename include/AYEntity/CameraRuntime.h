@@ -1,6 +1,7 @@
 #pragma once
 #include <AYEntity/IEntity.h>
 #include <AYEntity/CameraFrame.h>
+#include <AYEntity/EntityHandle.h>
 #include <functional>
 #include <unordered_map>
 #include <vector>
@@ -24,6 +25,10 @@ using CameraCollisionQuery = std::function<float(const CameraCollisionProbe&)>;
 /// Standard Entity.Runtime installs it; standalone/headless callers use registerCameraRuntimeSystem.
 class CameraRuntimeSystem : public ISystem {
 public:
+    struct CinematicCamera {
+        EntityHandle entity{};
+        float blendSeconds = 0;
+    };
     const char* getName() const override { return "CameraRuntimeSystem"; }
     void onUpdate(float dt) override;
     /// Custom sphere-sweep adapter. Empty restores the integration fallback; collisionEnabled disables per controller.
@@ -36,8 +41,16 @@ public:
                         float duration, bool smooth = true);
     /// Reset a domain when no selected camera exists, avoiding stale transitions on reappearance.
     void resetView(int32_t viewportId, bool twoD);
-    /// Clear presentation snapshots/transitions after a Scene reload in the same World.
-    void resetAllViews() noexcept { _transitions.clear(); }
+    /// Borrow a 3D viewport for a sequence without editing serialized camera
+    /// components. A different owner cannot replace or clear this lease.
+    /// The World owns the lease; invalidated handles fall back to normal selection.
+    bool setCinematicCamera(int32_t viewportId, std::uint64_t owner,
+                            EntityHandle entity, float blendSeconds);
+    void clearCinematicCamera(int32_t viewportId, std::uint64_t owner) noexcept;
+    [[nodiscard]] CinematicCamera cinematicCamera(int32_t viewportId) const noexcept;
+    /// Clear presentation snapshots/transitions and transient leases after a
+    /// Scene reload in the same World.
+    void resetAllViews() noexcept { _transitions.clear(); _cinematicCameras.clear(); }
     /// Copy the last Scene presentation snapshot for picking/UI during transitions. False leaves output unchanged.
     /// Host/Editor overrides use their own camera snapshots, not this World-owned Scene source.
     /// Before first extraction, evaluate the lens directly; a snapshot is the last sampled presentation.
@@ -60,6 +73,8 @@ private:
     World* _owner = nullptr;
     struct TransitionState { CameraTransition transition; uint64_t tick = UINT64_MAX; };
     std::unordered_map<uint64_t, TransitionState> _transitions;
+    struct CinematicLease { std::uint64_t owner = 0; CinematicCamera camera; };
+    std::unordered_map<int32_t, CinematicLease> _cinematicCameras;
     CameraCollisionQuery _collision;
     CameraCollisionQuery _defaultCollision;
     uint64_t _tick = 0;
