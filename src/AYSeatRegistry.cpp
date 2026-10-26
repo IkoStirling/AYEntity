@@ -2,8 +2,10 @@
 
 #include <AYEntity/EntityImpl.h>
 #include <AYEntity/World.h>
+#include <AYEntity.h>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <new>
 
@@ -13,6 +15,20 @@ bool SeatRegistry::liveSpatial(EntityHandle handle) const noexcept {
     if (!handle.isValid()) return false;
     const auto* entity = _world->getEntityByHandle(handle);
     return entity && entity->isSpatial();
+}
+SeatStatus SeatRegistry::setAnchor(SeatKey key, SeatAnchor anchor) noexcept {
+    auto* row = find(key);
+    if (!row) return SeatStatus::Missing;
+    if (!liveSpatial(key.vehicle)) return SeatStatus::Stale;
+    if (row->lease.serial) return SeatStatus::Occupied;
+    const auto& p = anchor.localPosition;
+    const auto norm = anchor.localRotation.dot(anchor.localRotation);
+    if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)
+        || !std::isfinite(norm) || norm < 1.0e-12f)
+        return SeatStatus::Invalid;
+    anchor.localRotation = anchor.localRotation.normalize();
+    row->anchor = anchor;
+    return SeatStatus::Ok;
 }
 SeatRegistry::Row* SeatRegistry::find(SeatKey key) noexcept {
     const auto it = std::find_if(_rows.begin(), _rows.end(),
@@ -129,6 +145,45 @@ SeatDecision SeatRegistry::leave(SeatLease lease) noexcept {
     result.driverAfter = driver(lease.key.vehicle);
     result.status = SeatStatus::Ok;
     return result;
+}
+SeatStatus SeatRegistry::seatWorldPose(SeatLease lease, SeatPose& pose,
+                                        float alpha) const {
+    const auto* row = find(lease.key);
+    if (!row) return SeatStatus::Missing;
+    if (!lease.serial || row->lease != lease
+        || !liveSpatial(lease.key.vehicle) || !liveSpatial(lease.occupant))
+        return SeatStatus::Stale;
+    if (!std::isfinite(alpha) || alpha < 0.0f || alpha > 1.0f)
+        return SeatStatus::Invalid;
+    const auto* vehicle = _world->getEntityByHandle(lease.key.vehicle);
+    math::FVector3 vehiclePosition;
+    math::FQuaternion vehicleRotation;
+    if (!vehicle->worldPose(vehiclePosition, vehicleRotation, alpha))
+        return SeatStatus::PoseUnavailable;
+    const auto local = row->anchor.localPosition;
+    const auto transformed = vehicle->worldMatrix(alpha)
+        * math::FVector4{local.x, local.y, local.z, 1.0f};
+    const math::FVector3 position{transformed.x, transformed.y, transformed.z};
+    const auto rotation = (vehicleRotation * row->anchor.localRotation).normalize();
+    if (!std::isfinite(position.x) || !std::isfinite(position.y)
+        || !std::isfinite(position.z) || !std::isfinite(rotation.dot(rotation)))
+        return SeatStatus::PoseUnavailable;
+    pose = {position, rotation};
+    return SeatStatus::Ok;
+}
+SeatStatus SeatRegistry::applyPresentationPose(SeatLease lease, float alpha) {
+    SeatPose pose;
+    const auto status = seatWorldPose(lease, pose, alpha);
+    if (status != SeatStatus::Ok) return status;
+    auto* actor = _world->getEntityByHandle(lease.occupant);
+    if (actor->hasComponent<SimTransformComponent>()
+        || actor->hasComponent<DetSimTransformComponent>())
+        return SeatStatus::AuthorityConflict;
+    auto* rigid = actor->getComponent<RigidBodyComponent>();
+    if (rigid && !rigid->isKinematic() && !rigid->isStatic())
+        return SeatStatus::AuthorityConflict;
+    return actor->setWorldPose(pose.position, pose.rotation, alpha)
+        ? SeatStatus::Ok : SeatStatus::PoseUnavailable;
 }
 std::vector<SeatLease> SeatRegistry::pruneStale() {
     std::vector<SeatLease> ejected;

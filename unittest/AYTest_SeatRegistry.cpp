@@ -1,6 +1,10 @@
 #include <AYEntity/SeatRegistry.h>
 #include <AYEntity/World.h>
 #include <AYEntity/EntityImpl.h>
+#include <AYEntity/components/TransformComponent.h>
+#include <AYEntity/components/SimTransformComponent.h>
+#include <AYEntity/components/RigidBodyComponent.h>
+#include <AYMath/MathUtils.h>
 #include <AYTest.h>
 
 using namespace ayt::entity;
@@ -90,6 +94,73 @@ TEST_CASE(destroyed_entities_revoke_control_and_prune_stale_leases) {
     const auto ejected = seats.pruneStale();
     CHECK(ejected.size() == 1 && ejected.front() == second.lease);
     CHECK(seats.leave(second.lease).status == SeatStatus::Missing);
+    world.shutdown();
+}
+
+TEST_CASE(vehicle_local_anchor_follows_vehicle_and_rejects_stale_lease) {
+    auto& world = World::instance();
+    CHECK(world.initialize());
+    auto* vehicle = world.createSpatialEntity();
+    auto* actor = world.createSpatialEntity();
+    const SeatKey front{world.getEntityHandle(vehicle->getId()), 1};
+    const SeatKey rear{front.vehicle, 2};
+    SeatRegistry seats(world);
+    CHECK(seats.define(front, SeatRole::Driver) == SeatStatus::Ok);
+    CHECK(seats.define(rear, SeatRole::Passenger) == SeatStatus::Ok);
+    SeatAnchor anchor;
+    anchor.localPosition = {1, 0, 0};
+    anchor.localRotation = ayt::math::FQuaternion::fromAxisAngle(
+        {0, 1, 0}, ayt::math::radians(90.f));
+    CHECK(seats.setAnchor(front, anchor) == SeatStatus::Ok);
+    vehicle->transform()->position = {10, 0, 0};
+    vehicle->transform()->scale = {2, 1, 1};
+    vehicle->transform()->rotation = anchor.localRotation;
+    const auto boarding = seats.board(front, world.getEntityHandle(actor->getId()));
+    CHECK(boarding.status == SeatStatus::Ok);
+    CHECK(seats.setAnchor(front, anchor) == SeatStatus::Occupied);
+    SeatPose pose;
+    CHECK(seats.seatWorldPose(boarding.lease, pose) == SeatStatus::Ok);
+    CHECK_FLOAT_EQ(pose.position.x, 10, 1e-4f);
+    CHECK_FLOAT_EQ(pose.position.z, -2, 1e-4f);
+    CHECK(seats.applyPresentationPose(boarding.lease) == SeatStatus::Ok);
+    ayt::math::FVector3 actualPosition;
+    ayt::math::FQuaternion actualRotation;
+    CHECK(actor->worldPose(actualPosition, actualRotation));
+    CHECK_FLOAT_EQ(actualPosition.z, -2, 1e-4f);
+    vehicle->transform()->position = {20, 0, 0};
+    CHECK(seats.applyPresentationPose(boarding.lease) == SeatStatus::Ok);
+    CHECK(actor->worldPose(actualPosition, actualRotation));
+    CHECK_FLOAT_EQ(actualPosition.x, 20, 1e-4f);
+    const auto moved = seats.move(boarding.lease, rear);
+    CHECK(moved.status == SeatStatus::Ok);
+    CHECK(seats.seatWorldPose(boarding.lease, pose) == SeatStatus::Stale);
+    CHECK(seats.applyPresentationPose(boarding.lease) == SeatStatus::Stale);
+    world.shutdown();
+}
+
+TEST_CASE(authoritative_actor_pose_is_not_overwritten) {
+    auto& world = World::instance();
+    CHECK(world.initialize());
+    auto* vehicle = world.createSpatialEntity();
+    auto* actor = world.createSpatialEntity();
+    const SeatKey seat{world.getEntityHandle(vehicle->getId()), 1};
+    SeatRegistry seats(world);
+    CHECK(seats.define(seat, SeatRole::Passenger) == SeatStatus::Ok);
+    auto anchor = SeatAnchor{};
+    anchor.localRotation = {0, 0, 0, 0};
+    CHECK(seats.setAnchor(seat, anchor) == SeatStatus::Invalid);
+    CHECK(seats.setAnchor(seat, SeatAnchor{}) == SeatStatus::Ok);
+    const auto lease = seats.board(seat, world.getEntityHandle(actor->getId())).lease;
+    actor->transform()->position = {7, 0, 0};
+    CHECK(actor->addComponent<SimTransformComponent>() != nullptr);
+    CHECK(seats.applyPresentationPose(lease) == SeatStatus::AuthorityConflict);
+    CHECK_FLOAT_EQ(actor->transform()->position.x, 7, 0);
+    actor->removeComponent<SimTransformComponent>();
+    auto* rigid = actor->addComponent<RigidBodyComponent>();
+    CHECK(rigid != nullptr);
+    CHECK(seats.applyPresentationPose(lease) == SeatStatus::AuthorityConflict);
+    rigid->setKinematic(true);
+    CHECK(seats.applyPresentationPose(lease) == SeatStatus::Ok);
     world.shutdown();
 }
 

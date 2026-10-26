@@ -1,6 +1,7 @@
 #pragma once
 
 #include <AYEntity/EntityHandle.h>
+#include <AYMath/MathTypes.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -16,7 +17,16 @@ struct SeatKey {
 };
 enum class SeatRole : std::uint8_t { Passenger, Driver };
 enum class SeatStatus : std::uint8_t {
-    Ok, Invalid, Stale, Missing, Occupied, AlreadySeated, Capacity
+    Ok, Invalid, Stale, Missing, Occupied, AlreadySeated, Capacity,
+    AuthorityConflict, PoseUnavailable
+};
+struct SeatAnchor {
+    math::FVector3 localPosition{};
+    math::FQuaternion localRotation{0, 0, 0, 1};
+};
+struct SeatPose {
+    math::FVector3 position{};
+    math::FQuaternion rotation{0, 0, 0, 1};
 };
 struct SeatLease {
     SeatKey key{};
@@ -42,6 +52,9 @@ public:
 
     /// One live Spatial vehicle may have multiple seats but at most one Driver.
     [[nodiscard]] SeatStatus define(SeatKey key, SeatRole role);
+    /// Store a finite vehicle-local visual anchor. The seat must be empty;
+    /// changing an occupied anchor requires an explicit game transition.
+    [[nodiscard]] SeatStatus setAnchor(SeatKey key, SeatAnchor anchor) noexcept;
     [[nodiscard]] SeatStatus erase(SeatKey key) noexcept;
     /// Successful boarding grants a unique lease. An occupant may hold one
     /// seat in this registry; a failed request changes nothing.
@@ -50,6 +63,15 @@ public:
     /// an empty-seat intermediate state. The old lease becomes stale.
     [[nodiscard]] SeatDecision move(SeatLease lease, SeatKey destination) noexcept;
     [[nodiscard]] SeatDecision leave(SeatLease lease) noexcept;
+    /// Resolve a current lease against the sampled vehicle world pose. A
+    /// stale lease never yields a pose, even if its actor occupies another seat.
+    [[nodiscard]] SeatStatus seatWorldPose(SeatLease lease, SeatPose& pose,
+                                           float interpolationAlpha = 1.0f) const;
+    /// Move a presentation-owned occupant to its seat anchor. Call after the
+    /// vehicle pose update. Dynamic bodies and authoritative Sim poses are
+    /// refused; games still own their physics and input transitions.
+    [[nodiscard]] SeatStatus applyPresentationPose(SeatLease lease,
+                                                   float interpolationAlpha = 1.0f);
     [[nodiscard]] EntityHandle occupant(SeatKey key) const noexcept;
     [[nodiscard]] EntityHandle driver(EntityHandle vehicle) const noexcept;
     /// Resolve an actor's current command target. A live Driver controls its
@@ -63,7 +85,7 @@ public:
     [[nodiscard]] std::vector<SeatLease> pruneStale();
 
 private:
-    struct Row { SeatKey key; SeatRole role; SeatLease lease; };
+    struct Row { SeatKey key; SeatRole role; SeatLease lease; SeatAnchor anchor; };
     World* _world;
     std::vector<Row> _rows;
     std::uint64_t _nextSerial = 1;

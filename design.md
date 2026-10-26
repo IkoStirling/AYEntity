@@ -24,6 +24,12 @@ resource is introduced. The presenter does not create a native tracking source.
 对象 ID 与新句柄。实体层级、刚体、角色控制器和输入动作的实际切换属于
 宿主固定步边界，不由 Registry 在 World 中隐式修改。
 
+锚点是随座位定义存在的载具局部位置和旋转，空座时才可改，验证有限值并
+归一化旋转。`seatWorldPose` 先验租约再采样载具完整世界矩阵：位置保留载具
+非均匀缩放，朝向由无缩放世界旋转与局部锚点旋转组合。`applyPresentationPose`
+仅为表现层写入，通过 Entity 的 `setWorldPose` 转换已有父节点坐标；动态刚体
+及 Sim/DetSim 权威角色拒绝写入。游戏控制调用时机、物理接管与离座姿态。
+
 ## 2026-10-23 — 连接空间图与传送门
 
 World 持有 `ConnectedSpaces`，区域与有方向门均用稳定非零 ID。门的入口/出口是单位四元数
