@@ -164,4 +164,117 @@ TEST_CASE(authoritative_actor_pose_is_not_overwritten) {
     world.shutdown();
 }
 
+TEST_CASE(persistent_restore_recovers_driver_and_anchor_with_fresh_lease) {
+    auto& world = World::instance();
+    CHECK(world.initialize());
+    auto* vehicle = world.createSpatialEntity();
+    auto* actor = world.createSpatialEntity();
+    const auto vehicleHandle = world.getEntityHandle(vehicle->getId());
+    const auto actorHandle = world.getEntityHandle(actor->getId());
+    const SeatKey key{vehicleHandle, 1};
+    SeatRegistry seats(world);
+    CHECK(seats.define(key, SeatRole::Driver) == SeatStatus::Ok);
+    SeatAnchor anchor;
+    anchor.localPosition = {2, 0, 0};
+    CHECK(seats.setAnchor(key, anchor) == SeatStatus::Ok);
+    const auto oldLease = seats.board(key, actorHandle).lease;
+    PersistentSeatState saved;
+    const auto stableId = [&](EntityHandle handle) -> std::string {
+        if (handle == vehicleHandle) return "vehicle-1";
+        if (handle == actorHandle) return "actor-1";
+        return {};
+    };
+    const auto resolve = [&](std::string_view id) -> EntityHandle {
+        if (id == "vehicle-1") return vehicleHandle;
+        if (id == "actor-1") return actorHandle;
+        return {};
+    };
+    CHECK(seats.capturePersistent(stableId, saved) == SeatStatus::Ok);
+    CHECK(saved.seats.size() == 1);
+    CHECK(saved.seats[0].occupantId == "actor-1");
+    CHECK(seats.restorePersistent(saved, resolve) == SeatStatus::Ok);
+    const auto current = seats.lease(key);
+    CHECK(current.serial > oldLease.serial);
+    CHECK(seats.leave(oldLease).status == SeatStatus::Stale);
+    CHECK(seats.driver(vehicleHandle) == actorHandle);
+    CHECK(seats.controlTarget(actorHandle) == vehicleHandle);
+    vehicle->transform()->position = {10, 0, 0};
+    SeatPose pose;
+    CHECK(seats.seatWorldPose(current, pose) == SeatStatus::Ok);
+    CHECK_FLOAT_EQ(pose.position.x, 12, 1e-4f);
+    world.shutdown();
+}
+
+TEST_CASE(persistent_restore_rejects_partial_or_ambiguous_state_atomically) {
+    auto& world = World::instance();
+    CHECK(world.initialize());
+    auto* vehicle = world.createSpatialEntity();
+    auto* actor = world.createSpatialEntity();
+    const auto vh = world.getEntityHandle(vehicle->getId());
+    const auto ah = world.getEntityHandle(actor->getId());
+    const SeatKey key{vh, 1};
+    SeatRegistry seats(world);
+    CHECK(seats.define(key, SeatRole::Driver) == SeatStatus::Ok);
+    const auto original = seats.board(key, ah).lease;
+    PersistentSeatState saved;
+    const auto id = [&](EntityHandle h) -> std::string {
+        return h == vh ? "vehicle" : h == ah ? "actor" : "";
+    };
+    const auto resolve = [&](std::string_view value) -> EntityHandle {
+        return value == "vehicle" ? vh : value == "actor" ? ah : EntityHandle{};
+    };
+    CHECK(seats.capturePersistent(id, saved) == SeatStatus::Ok);
+    auto bad = saved;
+    bad.seats.push_back(bad.seats[0]);
+    CHECK(seats.restorePersistent(bad, resolve) == SeatStatus::Occupied);
+    CHECK(seats.lease(key) == original);
+    bad = saved; bad.seats[0].occupantId = "missing";
+    CHECK(seats.restorePersistent(bad, resolve) == SeatStatus::Stale);
+    CHECK(seats.lease(key) == original);
+    bad = saved; bad.seats[0].anchor.localRotation = {0,0,0,0};
+    CHECK(seats.restorePersistent(bad, resolve) == SeatStatus::Invalid);
+    CHECK(seats.lease(key) == original);
+    PersistentSeatState retained = saved;
+    CHECK(seats.capturePersistent([](EntityHandle) { return std::string("same"); },
+                                  retained) == SeatStatus::Invalid);
+    CHECK(retained.seats[0].vehicleId == "vehicle");
+    world.shutdown();
+}
+
+TEST_CASE(persistent_state_rebinds_to_new_world_handles_after_reload) {
+    auto& world = World::instance();
+    CHECK(world.initialize());
+    auto* oldVehicle = world.createSpatialEntity();
+    auto* oldActor = world.createSpatialEntity();
+    const auto oldVehicleHandle = world.getEntityHandle(oldVehicle->getId());
+    const auto oldActorHandle = world.getEntityHandle(oldActor->getId());
+    PersistentSeatState saved;
+    {
+        SeatRegistry old(world);
+        const SeatKey key{oldVehicleHandle, 7};
+        CHECK(old.define(key, SeatRole::Driver) == SeatStatus::Ok);
+        CHECK(old.board(key, oldActorHandle).status == SeatStatus::Ok);
+        CHECK(old.capturePersistent([&](EntityHandle handle) {
+            return handle == oldVehicleHandle ? std::string("car") :
+                handle == oldActorHandle ? std::string("player") : std::string{};
+        }, saved) == SeatStatus::Ok);
+    }
+    world.shutdown();
+    CHECK(world.initialize());
+    auto* newActor = world.createSpatialEntity();
+    auto* newVehicle = world.createSpatialEntity();
+    const auto newActorHandle = world.getEntityHandle(newActor->getId());
+    const auto newVehicleHandle = world.getEntityHandle(newVehicle->getId());
+    CHECK(newVehicleHandle != oldVehicleHandle);
+    SeatRegistry restored(world);
+    CHECK(restored.restorePersistent(saved, [&](std::string_view id) {
+        return id == "car" ? newVehicleHandle :
+            id == "player" ? newActorHandle : EntityHandle{};
+    }) == SeatStatus::Ok);
+    CHECK(restored.driver(newVehicleHandle) == newActorHandle);
+    CHECK(restored.controlTarget(newActorHandle) == newVehicleHandle);
+    CHECK(restored.lease({newVehicleHandle,7}).occupant == newActorHandle);
+    world.shutdown();
+}
+
 TEST_SUITE_END

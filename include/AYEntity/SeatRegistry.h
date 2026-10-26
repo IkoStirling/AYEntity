@@ -5,6 +5,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <string>
+#include <string_view>
 #include <vector>
 
 namespace ayt::entity {
@@ -40,6 +43,20 @@ struct SeatDecision {
     EntityHandle driverBefore{}, driverAfter{};
 };
 
+/// Durable identity is supplied by game content or a World state ledger;
+/// EntityHandle generations are deliberately absent from this snapshot.
+struct PersistentSeatRow {
+    std::string vehicleId;
+    std::uint32_t slot = 0;
+    SeatRole role = SeatRole::Passenger;
+    SeatAnchor anchor{};
+    std::string occupantId; // Empty means vacant.
+};
+struct PersistentSeatState {
+    std::uint32_t schema = 1;
+    std::vector<PersistentSeatRow> seats;
+};
+
 /// World-local seat occupancy and driver identity. Games define seat anchors,
 /// eligibility, controls and vehicle physics. The registry never parents an
 /// Entity or changes its input/physics authority; a successful decision gives
@@ -73,6 +90,9 @@ public:
     [[nodiscard]] SeatStatus applyPresentationPose(SeatLease lease,
                                                    float interpolationAlpha = 1.0f);
     [[nodiscard]] EntityHandle occupant(SeatKey key) const noexcept;
+    /// Current live lease for a seat, including a freshly restored serial.
+    /// An empty lease has serial zero.
+    [[nodiscard]] SeatLease lease(SeatKey key) const noexcept;
     [[nodiscard]] EntityHandle driver(EntityHandle vehicle) const noexcept;
     /// Resolve an actor's current command target. A live Driver controls its
     /// vehicle; a Passenger or unseated actor controls itself. Stale actors
@@ -83,6 +103,19 @@ public:
     /// leases identify still-live occupants ejected by vehicle destruction;
     /// the game handles their pose and collision. Call at a quiescent boundary.
     [[nodiscard]] std::vector<SeatLease> pruneStale();
+    /// Capture all live seats with caller-provided stable object IDs. A bad
+    /// mapping or stale entity leaves out untouched. Persist this alongside
+    /// the game's World object state at a quiescent save boundary.
+    [[nodiscard]] SeatStatus capturePersistent(
+        const std::function<std::string(EntityHandle)>& stableId,
+        PersistentSeatState& out) const;
+    /// Resolve stable IDs only after World objects have been restored. Validate
+    /// the complete table before replacing it; all occupancy leases receive
+    /// fresh serials, so pre-restore leases cannot regain authority. The host
+    /// reconciles driver control/camera after success.
+    [[nodiscard]] SeatStatus restorePersistent(
+        const PersistentSeatState& state,
+        const std::function<EntityHandle(std::string_view)>& resolve);
 
 private:
     struct Row { SeatKey key; SeatRole role; SeatLease lease; SeatAnchor anchor; };

@@ -10,6 +10,23 @@
 #include <new>
 
 namespace ayt::entity {
+namespace {
+bool validStableId(const std::string& id) noexcept {
+    if (id.empty() || id.size() > 128) return false;
+    for (const auto character : id)
+        if (static_cast<unsigned char>(character) < 0x20u ||
+            static_cast<unsigned char>(character) == 0x7fu) return false;
+    return true;
+}
+bool validAnchor(SeatAnchor& anchor) noexcept {
+    const auto& p = anchor.localPosition;
+    const auto norm = anchor.localRotation.dot(anchor.localRotation);
+    if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)
+        || !std::isfinite(norm) || norm < 1.0e-12f) return false;
+    anchor.localRotation = anchor.localRotation.normalize();
+    return true;
+}
+}
 
 bool SeatRegistry::liveSpatial(EntityHandle handle) const noexcept {
     if (!handle.isValid()) return false;
@@ -21,12 +38,7 @@ SeatStatus SeatRegistry::setAnchor(SeatKey key, SeatAnchor anchor) noexcept {
     if (!row) return SeatStatus::Missing;
     if (!liveSpatial(key.vehicle)) return SeatStatus::Stale;
     if (row->lease.serial) return SeatStatus::Occupied;
-    const auto& p = anchor.localPosition;
-    const auto norm = anchor.localRotation.dot(anchor.localRotation);
-    if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)
-        || !std::isfinite(norm) || norm < 1.0e-12f)
-        return SeatStatus::Invalid;
-    anchor.localRotation = anchor.localRotation.normalize();
+    if (!validAnchor(anchor)) return SeatStatus::Invalid;
     row->anchor = anchor;
     return SeatStatus::Ok;
 }
@@ -67,6 +79,11 @@ EntityHandle SeatRegistry::occupant(SeatKey key) const noexcept {
     return row && liveSpatial(row->key.vehicle)
         && liveSpatial(row->lease.occupant) ? row->lease.occupant
         : EntityHandle{};
+}
+SeatLease SeatRegistry::lease(SeatKey key) const noexcept {
+    const auto* row = find(key);
+    return row && row->lease.serial && liveSpatial(row->key.vehicle) &&
+        liveSpatial(row->lease.occupant) ? row->lease : SeatLease{};
 }
 EntityHandle SeatRegistry::driver(EntityHandle vehicle) const noexcept {
     if (!liveSpatial(vehicle)) return {};
@@ -200,6 +217,116 @@ std::vector<SeatLease> SeatRegistry::pruneStale() {
         }
     }
     return ejected;
+}
+
+SeatStatus SeatRegistry::capturePersistent(
+    const std::function<std::string(EntityHandle)>& stableId,
+    PersistentSeatState& out) const {
+    if (!stableId) return SeatStatus::Invalid;
+    try {
+        PersistentSeatState candidate;
+        candidate.seats.reserve(_rows.size());
+        std::vector<std::pair<std::string, EntityHandle>> identities;
+        identities.reserve(_rows.size() * 2u);
+        const auto checkIdentity = [&](const std::string& id,
+                                       EntityHandle handle) {
+            if (!validStableId(id)) return false;
+            for (const auto& [priorId, priorHandle] : identities)
+                if ((priorId == id && priorHandle != handle) ||
+                    (priorId != id && priorHandle == handle)) return false;
+            identities.emplace_back(id, handle);
+            return true;
+        };
+        for (const auto& row : _rows) {
+            if (!liveSpatial(row.key.vehicle) ||
+                (row.lease.serial && !liveSpatial(row.lease.occupant)))
+                return SeatStatus::Stale;
+            PersistentSeatRow saved;
+            saved.vehicleId = stableId(row.key.vehicle);
+            saved.slot = row.key.slot;
+            saved.role = row.role;
+            saved.anchor = row.anchor;
+            if (row.lease.serial)
+                saved.occupantId = stableId(row.lease.occupant);
+            if (!checkIdentity(saved.vehicleId, row.key.vehicle) ||
+                (row.lease.serial &&
+                 !checkIdentity(saved.occupantId, row.lease.occupant)))
+                return SeatStatus::Invalid;
+            candidate.seats.push_back(std::move(saved));
+        }
+        std::sort(candidate.seats.begin(), candidate.seats.end(),
+            [](const PersistentSeatRow& a, const PersistentSeatRow& b) {
+                return a.vehicleId == b.vehicleId ? a.slot < b.slot :
+                    a.vehicleId < b.vehicleId;
+            });
+        out = std::move(candidate);
+        return SeatStatus::Ok;
+    } catch (const std::bad_alloc&) { return SeatStatus::Capacity; }
+      catch (...) { return SeatStatus::Invalid; }
+}
+
+SeatStatus SeatRegistry::restorePersistent(
+    const PersistentSeatState& state,
+    const std::function<EntityHandle(std::string_view)>& resolve) {
+    if (!resolve || state.schema != 1 || state.seats.size() > kMaxSeats)
+        return SeatStatus::Invalid;
+    try {
+        std::vector<Row> candidate;
+        candidate.reserve(state.seats.size());
+        std::vector<std::pair<std::string, EntityHandle>> vehicleIds;
+        vehicleIds.reserve(state.seats.size());
+        std::vector<std::pair<std::string, EntityHandle>> occupantIds;
+        occupantIds.reserve(state.seats.size());
+        std::size_t occupied = 0;
+        for (const auto& saved : state.seats) {
+            if (!validStableId(saved.vehicleId) || !saved.slot ||
+                (saved.role != SeatRole::Passenger && saved.role != SeatRole::Driver) ||
+                (!saved.occupantId.empty() && !validStableId(saved.occupantId)))
+                return SeatStatus::Invalid;
+            auto anchor = saved.anchor;
+            if (!validAnchor(anchor)) return SeatStatus::Invalid;
+            const auto vehicle = resolve(saved.vehicleId);
+            if (!liveSpatial(vehicle)) return SeatStatus::Stale;
+            for (const auto& [id, handle] : vehicleIds)
+                if ((id == saved.vehicleId && handle != vehicle) ||
+                    (id != saved.vehicleId && handle == vehicle))
+                    return SeatStatus::Invalid;
+            vehicleIds.emplace_back(saved.vehicleId, vehicle);
+            const SeatKey key{vehicle, saved.slot};
+            for (const auto& previous : candidate)
+                if (previous.key == key ||
+                    (saved.role == SeatRole::Driver &&
+                     previous.key.vehicle == vehicle &&
+                     previous.role == SeatRole::Driver))
+                    return SeatStatus::Occupied;
+            EntityHandle occupant;
+            if (!saved.occupantId.empty()) {
+                occupant = resolve(saved.occupantId);
+                if (!liveSpatial(occupant)) return SeatStatus::Stale;
+                if (occupant == vehicle) return SeatStatus::Invalid;
+                for (const auto& [id, handle] : occupantIds)
+                    if ((id == saved.occupantId && handle != occupant) ||
+                        (id != saved.occupantId && handle == occupant))
+                        return SeatStatus::Invalid;
+                occupantIds.emplace_back(saved.occupantId, occupant);
+                for (const auto& previous : candidate)
+                    if (previous.lease.serial && previous.lease.occupant == occupant)
+                        return SeatStatus::AlreadySeated;
+                ++occupied;
+            }
+            candidate.push_back({key, saved.role,
+                {key, occupant, occupant.isValid() ? 1ull : 0ull}, anchor});
+        }
+        if (occupied >= std::numeric_limits<std::uint64_t>::max() - _nextSerial)
+            return SeatStatus::Capacity;
+        auto nextSerial = _nextSerial;
+        for (auto& row : candidate)
+            if (row.lease.serial) row.lease.serial = nextSerial++;
+        _rows.swap(candidate);
+        _nextSerial = nextSerial;
+        return SeatStatus::Ok;
+    } catch (const std::bad_alloc&) { return SeatStatus::Capacity; }
+      catch (...) { return SeatStatus::Invalid; }
 }
 
 } // namespace ayt::entity
