@@ -1,5 +1,6 @@
 #include "AYEntity/RenderSystem.h"
 #include <AYEntity/SceneLighting.h>
+#include <AYEntity/SceneDecals.h>
 
 
 
@@ -121,7 +122,16 @@ struct RenderSystem::ResourceCache {
 };
 
 RenderSystem::RenderSystem()=default;
-RenderSystem::~RenderSystem()=default;
+RenderSystem::~RenderSystem(){
+    if(!_ownsDecals)return;
+    if(auto* subsystem=ayt::render::RendererSubSystem::findRegistered()){
+        auto& renderer=subsystem->renderer();
+        if(renderer.resourceContextId()==_decalContext){
+            renderer.setDeferredDecals({});
+            renderer.setDeferredDecalsEnabled(false);
+        }
+    }
+}
 
 
 void RenderSystem::onStart()
@@ -201,6 +211,7 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
 
     if(!_resources)_resources=std::make_unique<ResourceCache>();
     const auto context=renderer.resourceContextId();
+    if(_decalContext!=context){_ownsDecals=false;_decalContext=context;}
     const auto& roots=ayt::resource::assetRoots();
     if(_resources->context!=context||_resources->roots!=roots){
         _resources->clear();_resources->context=context;_resources->roots=roots;
@@ -229,6 +240,38 @@ void RenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         }
         return record.handle;
     };
+
+    std::vector<SceneDecalCandidate> decalCandidates;
+    // Camera viewport batches currently use the Forward path, which has no
+    // deferred decal pass. Do not leave one viewport's projectors in the
+    // global main-view state while extracting the next viewport.
+    const bool deferredView=rendererSubSystem->cameraViewports().empty();
+    const auto decalReport=deferredView
+        ? collectSceneDecals(World::instance(),decalCandidates,
+            ayt::game::GameLoop::instance().getInterpolationFactor(),
+            rendererSubSystem->activeCameraSpaceRegion())
+        : SceneDecalBuildResult{};
+    if(decalReport.authored || _ownsDecals){
+        std::vector<ayt::render::DeferredDecal> decals;
+        decals.reserve(decalCandidates.size());
+        for(auto& candidate:decalCandidates){
+            auto& decal=candidate.decal;
+            if(!candidate.albedoPath.empty()){
+                const auto& path=resolvePath(candidate.albedoPath);
+                decal.albedo=renderer.loadTexture(path,true);
+                if(!decal.albedo.isValid())continue;
+            }
+            if(!candidate.normalPath.empty()){
+                const auto& path=resolvePath(candidate.normalPath);
+                decal.normal=renderer.loadTexture(path,false);
+                if(!decal.normal.isValid())continue;
+            }
+            decals.push_back(decal);
+        }
+        renderer.setDeferredDecals(decals);
+        renderer.setDeferredDecalsEnabled(!decals.empty());
+        _ownsDecals=decalReport.authored>0;
+    }
 
     uint32_t matched = 0;
 

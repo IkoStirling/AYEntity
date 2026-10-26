@@ -1,5 +1,24 @@
 # AYEntity Design
 
+## Scene decal extraction (2026-10-27)
+
+`SceneDecalComponent` lives in the optional RenderIntegration module and is
+Scene-serializable. Numeric ranges and portable relative texture paths are
+validated at serialization; direct invalid writes are skipped by extraction.
+The owned extraction snapshot selects at most 16 valid projectors by priority
+then persistent Entity identity, after connected-space region filtering. It
+rejects nonorthogonal, mirrored or singular world matrices because the
+Renderer's tangent-space projection assumes a positive orthogonal basis.
+
+RenderSystem resolves optional sRGB albedo and linear normal maps in the
+current Renderer resource context, then owns the main Deferred decal state
+while Scene decals exist. It clears that state after removal and when its
+matching Renderer context is destroyed. Camera viewport batches currently
+use Forward rendering, so their scene extraction does not publish projectors
+to the global Deferred state. Texture failure skips that projector. The host
+must not concurrently write the Renderer advanced decal state while Scene
+decals own it.
+
 ## Parametric Sprite presentation adapter (2026-10-26)
 
 `presentParametricSpriteLayer2D` is an optional boundary from AY2D's owned

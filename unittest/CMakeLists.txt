@@ -56,6 +56,7 @@ if(TARGET AYEntityParticleIntegration)
 endif()
 if(TARGET AYEntityRenderIntegration)
     list(APPEND SOURCES AYTest_SceneLighting.cpp)
+    list(APPEND SOURCES AYTest_SceneDecals.cpp)
     add_executable(AYEntity_RenderSubmissionTests
         RenderSubmissionTestMain.cpp AYTest_RenderSubmission.cpp)
     target_link_libraries(AYEntity_RenderSubmissionTests PRIVATE AYEntity AYTest)

@@ -496,6 +496,7 @@ if(AY_ENABLE_RENDERER)
         src/AYEntityRenderIntegrationModule.cpp
         src/AYConnectedSpaceRender.cpp
         src/AYSceneLighting.cpp
+        src/AYSceneDecals.cpp
         src/AYPerspectiveCameraUpdateSystem.cpp
         src/AYRenderSystem.cpp
         src/AYSkinnedMeshRenderSystem.cpp

@@ -1,5 +1,17 @@
 # AYEntity
 
+## Scene 投影贴花
+
+空间实体可持有 `SceneDecalComponent`，在 Scene 中保存投影颜色、表面混合、
+可选的颜色/法线纹理路径和优先级。实体世界 Transform 把局部 [-1,1] 立方体
+映射到投影体积，局部 +Z 指向接收面。`collectSceneDecals` 按区域筛选、优先级
+和稳定实体身份选择最多 16 个有效投影；RenderSystem 解析资源并交给已有的
+Deferred Decal pass。移除最后一个贴花后会清掉自己提交的 Renderer 状态。
+
+纹理路径须为项目内便携相对路径，变换不能有镜像或剪切。当前多相机 Forward
+viewport 批次没有 Deferred Decal pass，场景贴花只接标准主 Deferred 视图。
+贴花不参与碰撞或伤害判定。验证见 `AYTest_SceneDecals.cpp`。
+
 ## Parameterized 2D Sprite avatar presenter
 
 `AYEntity/ParametricSpritePresenter2D.h` applies one evaluated AY2D rig layer

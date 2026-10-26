@@ -2,6 +2,7 @@
 
 #include <AYEntity/IEntity.h>
 #include <AYRenderer/RenderScene.h>
+#include <cstdint>
 #include <memory>
 
 namespace ayt::entity
@@ -18,6 +19,8 @@ public:
 private:
     struct ResourceCache;
     std::unique_ptr<ResourceCache> _resources;
+    bool _ownsDecals = false;
+    std::uint64_t _decalContext = 0;
     void buildRenderScene(ayt::render::RenderScene& scene);
 
     bool _started = false;

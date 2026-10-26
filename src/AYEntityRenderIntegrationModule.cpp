@@ -11,8 +11,10 @@
 #include <AYEntity/WorldLifecycle.h>
 #include <AYEntity/components/MeshComponent.h>
 #include <AYEntity/components/LightComponent.h>
+#include <AYEntity/components/SceneDecalComponent.h>
 #include <AYRenderer/RendererRuntimeModule.h>
 #include <AYRenderer/RendererSubSystem.h>
+#include <AYIO/PathSafety.h>
 
 #include <cstring>
 #include <string>
@@ -22,9 +24,15 @@ namespace ayt::entity
 
 // One finalizer in the integration TU; Core stays independent of light schema.
 AY_FINALIZE_REGISTRATION_METADATA(LightComponent)
+AY_FINALIZE_REGISTRATION_METADATA(SceneDecalComponent)
 
 namespace
 {
+bool validSceneDecal(const SceneDecalComponent& value) {
+    return value.valid()
+        && (value.albedoPath.empty() || ayt::io::path::isPortableRelative(value.albedoPath))
+        && (value.normalPath.empty() || ayt::io::path::isPortableRelative(value.normalPath));
+}
 
 bool hasSystemNamed(const World& world, const char* name)
 {
@@ -70,7 +78,27 @@ ComponentRegistryResult registerEntityRenderComponents(
         ayt::serializer::SerializerForReflect<LightComponent>::applyReadFields(reader,value);
         if(!value.valid()) reader.reportError(ayt::serializer::SerializeError::Code::InvalidInput,"Invalid Scene light values");
     };
-    return registry.registerComponent(std::move(light));
+    const auto lightResult=registry.registerComponent(std::move(light));
+    if(!lightResult) return lightResult;
+    auto decal=detail::makeComponentDescriptor<SceneDecalComponent>(
+        "SceneDecalComponent","Scene Decal","Rendering");
+    decal.requiresSpatial=true;decal.sceneSerializable=true;
+    decal.serialize=[](ayt::serializer::ISerializer& writer,const IComponent& base){
+        auto& value=const_cast<SceneDecalComponent&>(static_cast<const SceneDecalComponent&>(base));
+        if(!validSceneDecal(value)){
+            writer.reportError(ayt::serializer::SerializeError::Code::InvalidInput,
+                "Invalid Scene decal values or texture paths");return;
+        }
+        ayt::serializer::SerializerForReflect<SceneDecalComponent>::applyFields(writer,value);
+    };
+    decal.deserialize=[](ayt::serializer::ISerializer& reader,IComponent& base){
+        auto& value=static_cast<SceneDecalComponent&>(base);
+        ayt::serializer::SerializerForReflect<SceneDecalComponent>::applyReadFields(reader,value);
+        if(!validSceneDecal(value)) reader.reportError(
+            ayt::serializer::SerializeError::Code::InvalidInput,
+            "Invalid Scene decal values or texture paths");
+    };
+    return registry.registerComponent(std::move(decal));
 }
 
 void registerEntityRenderSystems()
