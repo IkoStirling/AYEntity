@@ -63,6 +63,7 @@ add_library(AYEntityCore STATIC
     src/AYEntitySpatial.cpp
     src/AYConnectedSpaces.cpp
     src/AYConnectedSpaceEntity.cpp
+    src/AYSeatRegistry.cpp
     src/AYComponentRegistry.cpp
     src/AYEntityReflection.cpp
     src/AYPerspectiveCameraSelection.cpp

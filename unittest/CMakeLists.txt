@@ -10,6 +10,7 @@ set(SOURCES
     SparseSetTest.cpp
     WorldTest.cpp
     EntityHandleTest.cpp
+    AYTest_SeatRegistry.cpp
     SystemTest.cpp
     AYTest_DeterministicLane.cpp
     AYTest_DetFloatSim.cpp

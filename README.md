@@ -1,5 +1,18 @@
 # AYEntity
 
+## 载具与坐骑座位归属
+
+`AYEntity/SeatRegistry.h` 提供 World 本地的座位占用和驾驶归属。游戏为存活的
+Spatial 载具定义稳定槽位，可设置一个 Driver 槽及多个 Passenger 槽；乘员只能
+占一个座位。`board`、同车 `move` 和 `leave` 返回租约与驾驶者变更，旧租约
+不能撤销后来换座的乘员。`controlTarget(actor)` 在驾驶者入座时返回载具，其他
+情况返回角色自身，供游戏在安全边界路由动作。实体销毁后查询立即失效，
+`pruneStale` 清理座位并报告仍存活的被弹出乘员。
+
+Registry 不自动修改输入映射、Transform、父子关系或物理控制器；游戏负责
+座位锚点、上下车许可、碰撞与运动接线，也负责在读档后用新的 World 句柄
+重新建立座位及乘员。见 `AYTest_SeatRegistry.cpp`。
+
 ## 可连接空间区域与传送门（2026-10-23）
 
 `World::connectedSpaces()` 管理稳定区域 ID 和有方向的矩形门。Spatial Entity 的
