@@ -28,6 +28,8 @@ local Transform pose/scale and Sprite texture, UV, alpha and order. Z position,
 RGB tint and the Entity hierarchy are retained. The game/host owns one Entity
 per layer and links their parents; no separate rendering lane or GPU mesh
 resource is introduced. The presenter does not create a native tracking source.
+It validates an optional rig-selected texture variant before any Transform or
+Sprite mutation, then changes the texture and UV together with the local pose.
 
 ## 2026-10-26 — 座位租约与驾驶归属
 

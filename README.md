@@ -20,6 +20,8 @@ UV, opacity, texture and stable draw ordering before SpriteRenderSystem builds
 the scene. The host creates and parents layer Entities; this adapter does not
 advance tracking or animation time. Use an independent Sprite per layer and
 avoid another presentation system writing the same transform or UV in a frame.
+The evaluator may choose an authored texture/UV variant for a thresholded
+expression; the presenter applies that selection without changing layer order.
 
 ## 载具与坐骑座位归属
 

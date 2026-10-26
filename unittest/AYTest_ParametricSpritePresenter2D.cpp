@@ -51,4 +51,30 @@ TEST_CASE(invalid_pose_leaves_both_components_unmodified) {
     CHECK_FALSE(entity::presentParametricSpriteLayer2D(
         rig, 1, {}, transform, sprite));
 }
+TEST_CASE(selected_texture_variant_updates_atlas_without_changing_layer_order) {
+    ay2d::ParametricSpriteRig2D rig;
+    ay2d::PuppetLayer2D layer;
+    layer.name = "eyes";
+    layer.texturePath = "open.png";
+    layer.variants.push_back({0, 0.5f, "closed.png",
+                              0.25f, 0.1f, 0.75f, 0.9f});
+    CHECK(rig.load({{"blink", 0, 0, 1}}, {layer}));
+    CHECK(rig.setParameters(
+        std::vector<ay2d::PuppetParameterValue2D>{{0, 1}}));
+    std::vector<ay2d::PuppetLayerPose2D> pose;
+    CHECK(rig.evaluate(pose));
+    entity::Transform transform;
+    entity::SpriteComponent sprite;
+    CHECK(entity::presentParametricSpriteLayer2D(
+        rig, 0, pose[0], transform, sprite, 42));
+    CHECK(sprite.texturePath == "closed.png");
+    CHECK(std::abs(sprite.sourceRectMin.x - 0.25f) < 0.0001f);
+    CHECK_INT_EQ(sprite.sortingKey, 42);
+    pose[0].variantIndex = 8;
+    const auto previousRevision = transform.revision;
+    CHECK_FALSE(entity::presentParametricSpriteLayer2D(
+        rig, 0, pose[0], transform, sprite));
+    CHECK_INT_EQ(transform.revision, previousRevision);
+    CHECK(sprite.texturePath == "closed.png");
+}
 TEST_SUITE_END

@@ -23,18 +23,25 @@ inline bool presentParametricSpriteLayer2D(
         !std::isfinite(pose.rotation) ||
         !std::isfinite(pose.scaleX) || !std::isfinite(pose.scaleY) ||
         !std::isfinite(pose.opacity) || pose.scaleX <= 0 ||
-        pose.scaleY <= 0 || pose.opacity < 0 || pose.opacity > 1)
+        pose.scaleY <= 0 || pose.opacity < 0 || pose.opacity > 1 ||
+        pose.variantIndex < -1 ||
+        (pose.variantIndex >= 0 && static_cast<std::size_t>(pose.variantIndex) >=
+            rig.layer(layerIndex).variants.size()))
         return false;
     const auto& layer = rig.layer(layerIndex);
+    const auto* variant = pose.variantIndex < 0 ? nullptr
+        : &layer.variants[static_cast<std::size_t>(pose.variantIndex)];
     const auto rotation = math::FQuaternion::fromAxisAngle(
         math::FVector3{0, 0, 1}, pose.rotation);
     transform.setPresentationPose(
         math::FVector3{pose.x, pose.y, transform.position.z}, rotation);
     transform.setScale(pose.scaleX, pose.scaleY, transform.scale.z);
-    if (sprite.texturePath != layer.texturePath)
-        sprite.texturePath = layer.texturePath;
-    sprite.sourceRectMin = math::FVector2(layer.u0, layer.v0);
-    sprite.sourceRectMax = math::FVector2(layer.u1, layer.v1);
+    const auto& texture = variant ? variant->texturePath : layer.texturePath;
+    if (sprite.texturePath != texture) sprite.texturePath = texture;
+    sprite.sourceRectMin = math::FVector2(
+        variant ? variant->u0 : layer.u0, variant ? variant->v0 : layer.v0);
+    sprite.sourceRectMax = math::FVector2(
+        variant ? variant->u1 : layer.u1, variant ? variant->v1 : layer.v1);
     sprite.colorRGBA.w = pose.opacity;
     sprite.layer = layer.renderLayer;
     sprite.sortingKey = static_cast<std::int32_t>(sortBase + layerIndex);
