@@ -1,5 +1,15 @@
 # AYEntity Design
 
+## Parametric Sprite presentation adapter (2026-10-26)
+
+`presentParametricSpriteLayer2D` is an optional boundary from AY2D's owned
+parameter pose to the standard Sprite Entity render path. It validates the
+layer index and finite positive pose before mutation, then writes immediate
+local Transform pose/scale and Sprite texture, UV, alpha and order. Z position,
+RGB tint and the Entity hierarchy are retained. The game/host owns one Entity
+per layer and links their parents; no separate rendering lane or GPU mesh
+resource is introduced. The presenter does not create a native tracking source.
+
 ## 2026-10-26 — 座位租约与驾驶归属
 
 `SeatRegistry` 借用单个 World，仅接受当前代次的 Spatial EntityHandle。

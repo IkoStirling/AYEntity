@@ -1,5 +1,14 @@
 # AYEntity
 
+## Parameterized 2D Sprite avatar presenter
+
+`AYEntity/ParametricSpritePresenter2D.h` applies one evaluated AY2D rig layer
+to one matching Sprite Entity. It updates local XY/Z rotation and scale, atlas
+UV, opacity, texture and stable draw ordering before SpriteRenderSystem builds
+the scene. The host creates and parents layer Entities; this adapter does not
+advance tracking or animation time. Use an independent Sprite per layer and
+avoid another presentation system writing the same transform or UV in a frame.
+
 ## 载具与坐骑座位归属
 
 `AYEntity/SeatRegistry.h` 提供 World 本地的座位占用和驾驶归属。游戏为存活的
