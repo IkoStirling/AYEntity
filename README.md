@@ -1,5 +1,16 @@
 # AYEntity
 
+## Generic 3D world interaction
+
+`WorldInteraction3D` turns a game-provided actor view into a current physics
+ray focus and a set of authored action IDs. The host resolves the hit body to a
+live Spatial Entity and supplies action offers, permission, and an atomic commit
+callback. Activation repeats the raycast and checks the same Entity generation,
+persistent ID, body, collider, and offered action before committing. A selected
+focus is only a UI hint, not authority. The host owns request deduplication,
+game rules, presentation, and durable side effects. See
+`AYTest_WorldInteraction3D.cpp`.
+
 ## Scene 投影贴花
 
 空间实体可持有 `SceneDecalComponent`，在 Scene 中保存投影颜色、表面混合、

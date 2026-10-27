@@ -50,6 +50,7 @@ set(SOURCES
     # (body creation params + collider create/rebuild/destroy against a
     # live PhysicsManager with Mock/Null backends).
     EntityPhysicsBridgeTest.cpp
+    AYTest_WorldInteraction3D.cpp
 )
 
 if(TARGET AYEntityParticleIntegration)

@@ -1,5 +1,18 @@
 # AYEntity Design
 
+## Generic 3D world interaction (2026-10-27)
+
+`WorldInteraction3D` is an optional PhysicsIntegration protocol over a borrowed
+World and `IPhysicsQuery`. The game supplies a fresh actor ray and reach, maps
+the hit body to a Spatial Entity with a matching RigidBody, and returns up to
+16 unique nonzero authored action IDs. The nearest non-offering solid blocks
+objects behind it. Activation requeries focus and offers, compares versioned
+Entity and persistent object identity plus body/collider, then calls permission
+and failure-atomic commit. A nonzero request ID is passed through; the host
+must deduplicate it durably if commands may be retried. Neither focus nor a
+success receipt is a savegame or event record. The host owns callback lifetimes
+and invokes this protocol on the World/Sim owner thread.
+
 ## Managed rigid puppet layer assembly (2026-10-27)
 
 `ParametricSpriteAssembly2D` is an optional World-facing owner for a validated

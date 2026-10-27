@@ -558,6 +558,7 @@ if(AY_ENABLE_PHYSICS)
         src/AYConnectedSpacePhysicsTransfer.cpp
         src/AYCameraPhysicsCollision.cpp
         src/AYEntityPhysicsBridge.cpp
+        src/AYWorldInteraction3D.cpp
     )
     add_library(AYEntity::PhysicsIntegration ALIAS
         AYEntityPhysicsIntegration)
