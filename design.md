@@ -3661,3 +3661,6 @@ texture ID. The game creates/owns the visual hierarchy, chooses clips and
 advances its presentation clock before SpriteRenderSystem. One Sprite has one
 writer: it must not also carry SpriteAnimationComponent. Root motion, gameplay
 events, save state and Pak residency are outside this presenter.
+The explicit mirrorX overload sets the horizontal UV flip and reflects the
+trimmed quad center around the authored logical pivot. The legacy overload
+does not own Sprite.flip. Games mirror sockets with AY2D's matching overload.

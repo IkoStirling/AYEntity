@@ -152,7 +152,7 @@ TEST_CASE(named_clip_presenter_places_visual_without_moving_actor)
     frame.height = 24;
     frame.canvasWidth = 32;
     frame.canvasHeight = 32;
-    frame.trimX = 6;
+    frame.trimX = 4;
     frame.trimY = 4;
     frame.pivotX = 16;
     frame.pivotY = 30;
@@ -168,11 +168,20 @@ TEST_CASE(named_clip_presenter_places_visual_without_moving_actor)
                                            visual, sprite));
     CHECK_FLOAT_EQ(actor.position.x, 100.0f, 1e-6f);
     CHECK_FLOAT_EQ(actor.position.y, 200.0f, 1e-6f);
-    CHECK_FLOAT_EQ(visual.position.x, 0.0f, 1e-6f);
+    CHECK_FLOAT_EQ(visual.position.x, -4.0f, 1e-6f);
     CHECK_FLOAT_EQ(visual.position.y, 28.0f, 1e-6f);
     CHECK_FLOAT_EQ(visual.scale.x, 40.0f, 1e-6f);
     CHECK_FLOAT_EQ(visual.scale.y, 48.0f, 1e-6f);
     CHECK(sprite.texturePath == "textures/actor.png");
+    sprite.flip = 2;
+    CHECK(ayt::entity::presentSpriteClip2D(set, player, 2.0f,
+                                           visual, sprite, true));
+    CHECK_FLOAT_EQ(visual.position.x, 4.0f, 1e-6f);
+    CHECK(sprite.flip == 3);
+    CHECK(ayt::entity::presentSpriteClip2D(set, player, 2.0f,
+                                           visual, sprite, false));
+    CHECK_FLOAT_EQ(visual.position.x, -4.0f, 1e-6f);
+    CHECK(sprite.flip == 2);
 }
 
 TEST_SUITE_END

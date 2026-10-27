@@ -305,6 +305,8 @@ Sprite/Tilemap 美术和碰撞区域需要分别配置。当前仅支持轴对�
 `SpriteClipSet2D` 与 `SpriteClipPlayer2D`；游戏在独立视觉实体上调用
 `presentSpriteClip2D`，使角色的权威 Transform 与碰撞不受裁切帧影响。该 Sprite
 不能同时由 `SpriteAnimationSystem` 写入；动作状态选择与事件消费仍由游戏负责。
+带 `mirrorX` 的呈现入口会连同 UV 翻转一起反射四边形中心，使非对称透明裁切帧
+仍以角色枢轴为中心镜像；挂点也应使用 AY2D 的镜像求值入口。
 
 ## 2D Tilemap 动画
 
