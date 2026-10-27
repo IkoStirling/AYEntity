@@ -717,6 +717,7 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     CHECK_NOT_NULL(a->addComponent<Transform>());
     SpriteComponent* sa = a->addComponent<SpriteComponent>();
     sa->texturePath = texPath;
+    sa->samplingQuality = 2; // nearest-texel Sprite path
     sa->layer = 0;
     sa->sortingKey = 5;
     // C: on-screen, layer 1 / key 3 — must sort AFTER A.
@@ -761,6 +762,17 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
         tc->interpolatedPosition(interpolationAlpha).x;
     CHECK_FLOAT_EQ(scene.items()[1].world.row[0].w,
                    expectedCPosition, 1e-6f);
+
+    // Switching pixel sampling must rebuild the matching Sprite material
+    // without changing scene ownership, sorting, or visibility.
+    sa->samplingQuality = 1;
+    scene.clear();
+    system.buildRenderScene(scene);
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 2);
+    sa->samplingQuality = 2;
+    scene.clear();
+    system.buildRenderScene(scene);
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 2);
 
     // Off-screen B was prepared before culling. Removing its source file and
     // revealing it must still draw from the resident cache without a hitch.

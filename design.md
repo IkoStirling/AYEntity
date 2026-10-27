@@ -3653,6 +3653,11 @@ independent `SpriteAnimationSystem` for any one Sprite.
 
 ## Named pixel clip presentation (2026-10-27)
 
+SceneOverlay Sprite samplingQuality 2 selects a nearest-texel atlas shader and
+uses a distinct material cache key from linear (0) and Retro AA (1). Clip
+presentation leaves that Sprite property under game control. Masked and
+WorldLit2D Sprite materials do not use this setting.
+
 `presentSpriteClip2D` reads a validated AY2D frame and writes the texture,
 pixel-accurate UV, quad center and size to a separate visual Spatial Entity.
 Its local parent anchor must have unit scale; gameplay actor Transform and

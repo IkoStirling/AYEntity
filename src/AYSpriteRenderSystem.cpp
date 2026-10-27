@@ -54,7 +54,9 @@ std::string spriteResourceKey(const SpriteComponent& sprite, uint32_t entityId)
             const char* mode = masked ? "overlay-resident-mask\x1f"
                 : (sprite.samplingQuality == 1
                     ? "overlay-resident-retro-aa\x1f"
-                    : "overlay-resident-linear\x1f");
+                    : sprite.samplingQuality == 2
+                        ? "overlay-resident-nearest\x1f"
+                        : "overlay-resident-linear\x1f");
             return std::string(mode) + std::to_string(entityId);
         }
         if (!sprite.opacityMaskTexturePath.empty())
@@ -62,7 +64,9 @@ std::string spriteResourceKey(const SpriteComponent& sprite, uint32_t entityId)
                 '\x1f' + sprite.opacityMaskTexturePath;
         const char* sampling = sprite.samplingQuality == 1
             ? "overlay-retro-aa\x1f"
-            : "overlay-linear\x1f";
+            : sprite.samplingQuality == 2
+                ? "overlay-nearest\x1f"
+                : "overlay-linear\x1f";
         return std::string(sampling) + sprite.texturePath;
     }
 
@@ -277,7 +281,9 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                     ? ayt::render::kPuppetMasked2DPhoskiaSource
                     : (sprite->samplingQuality == 1
                         ? ayt::render::kSpriteRetroAaPhoskiaSource
-                        : ayt::render::kTilemapPhoskiaSource);
+                        : sprite->samplingQuality == 2
+                            ? ayt::render::kSpriteNearestPhoskiaSource
+                            : ayt::render::kTilemapPhoskiaSource);
                 resources.material = renderer.createMaterialFromPhoskia(
                     shaderSource, resourceKey + "material");
                 if (resources.material.isValid()) {
