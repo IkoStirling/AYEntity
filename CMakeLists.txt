@@ -535,6 +535,7 @@ if(AY_ENABLE_RENDERER)
             src/AYTilemapRenderSystem.cpp
             src/AYSpriteAnimationSystem.cpp
             src/AYSpriteRenderSystem.cpp
+            src/AYParametricSpriteAssembly2D.cpp
         )
         add_library(AYEntity::TwoDIntegration ALIAS AYEntity2DIntegration)
         ay_configure_entity_target(AYEntity2DIntegration)

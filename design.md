@@ -1,5 +1,16 @@
 # AYEntity Design
 
+## Managed rigid puppet layer assembly (2026-10-27)
+
+`ParametricSpriteAssembly2D` is an optional World-facing owner for a validated
+rigid-only AY2D Rig; mesh layers are rejected. It creates one root plus a stable Sprite/Transform Entity per layer,
+sets root ownership independently of Spatial KeepLocal parentage, and applies
+poses only after validating the complete live topology. It stores versioned
+Entity handles, so a destroyed/reused World ID does not become an unrelated
+avatar layer. The host keeps the Rig and GPU texture leases and calls explicit
+destroy before World shutdown; this class does not own Renderer resources or
+deforming mesh presentation.
+
 ## Scene decal extraction (2026-10-27)
 
 `SceneDecalComponent` lives in the optional RenderIntegration module and is

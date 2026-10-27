@@ -14,6 +14,14 @@ viewport 批次没有 Deferred Decal pass，场景贴花只接标准主 Deferred
 
 ## Parameterized 2D Sprite avatar presenter
 
+`ParametricSpriteAssembly2D` can create one owned Sprite Entity per validated
+rigid-only rig layer under a stable avatar root. Mesh rigs are rejected. It attaches the authored parent graph
+with KeepLocal, accepts an optional external Spatial parent, and updates all
+rigid layers without recreating Entity IDs. Creation rolls back new Entities
+on failure; a changed layer/parent topology or missing component is rejected
+before presentation writes. The host explicitly destroys the assembly before
+World shutdown. Deforming mesh layers still use the separate GPU bridge.
+
 `AYEntity/ParametricSpritePresenter2D.h` applies one evaluated AY2D rig layer
 to one matching Sprite Entity. It updates local XY/Z rotation and scale, atlas
 UV, opacity, texture and stable draw ordering before SpriteRenderSystem builds
