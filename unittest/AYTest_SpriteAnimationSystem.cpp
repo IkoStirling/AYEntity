@@ -156,6 +156,7 @@ TEST_CASE(named_clip_presenter_places_visual_without_moving_actor)
     frame.trimY = 4;
     frame.pivotX = 16;
     frame.pivotY = 30;
+    frame.sockets = {{"hand", 25, 12}};
     set.clips.push_back({"idle", true, {frame}});
     ayt::ay2d::SpriteClipPlayer2D player;
     CHECK(player.select(set, "idle"));
@@ -182,6 +183,19 @@ TEST_CASE(named_clip_presenter_places_visual_without_moving_actor)
                                            visual, sprite, false));
     CHECK_FLOAT_EQ(visual.position.x, -4.0f, 1e-6f);
     CHECK(sprite.flip == 2);
+    ayt::entity::Transform attachment;
+    attachment.setPosition(0.0f, 0.0f, 3.0f);
+    CHECK(ayt::entity::presentSpriteClipSocket2D(
+        player, "hand", 2.0f, false, attachment));
+    CHECK_FLOAT_EQ(attachment.position.x, 18.0f, 1e-6f);
+    CHECK_FLOAT_EQ(attachment.position.y, 36.0f, 1e-6f);
+    CHECK_FLOAT_EQ(attachment.position.z, 3.0f, 1e-6f);
+    CHECK(ayt::entity::presentSpriteClipSocket2D(
+        player, "hand", 2.0f, true, attachment));
+    CHECK_FLOAT_EQ(attachment.position.x, -18.0f, 1e-6f);
+    CHECK_FALSE(ayt::entity::presentSpriteClipSocket2D(
+        player, "missing", 2.0f, true, attachment));
+    CHECK_FLOAT_EQ(attachment.position.x, -18.0f, 1e-6f);
 }
 
 TEST_SUITE_END

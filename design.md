@@ -3664,3 +3664,7 @@ events, save state and Pak residency are outside this presenter.
 The explicit mirrorX overload sets the horizontal UV flip and reflects the
 trimmed quad center around the authored logical pivot. The legacy overload
 does not own Sprite.flip. Games mirror sockets with AY2D's matching overload.
+`presentSpriteClipSocket2D` applies that same pivot-relative, optionally
+mirrored socket position to a sibling attachment Transform. It leaves the
+Transform unchanged on missing sockets or invalid scale. Attachment lifetime,
+visibility and gameplay effects remain with the game.

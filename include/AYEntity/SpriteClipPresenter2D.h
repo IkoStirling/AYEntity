@@ -64,4 +64,23 @@ inline bool presentSpriteClip2D(const ay2d::SpriteClipSet2D& set,
                                              mirrorX, true);
 }
 
+/// Place an attachment Transform at a named socket of the current clip frame.
+/// Parent the attachment beside the visual Sprite under the same unit-scale
+/// actor anchor, so the Sprite's trimmed-quad scale does not affect it. Missing
+/// sockets or invalid scale leave the Transform unchanged. The caller owns the
+/// attachment entity and its visibility when a socket is absent.
+inline bool presentSpriteClipSocket2D(const ay2d::SpriteClipPlayer2D& player,
+                                      std::string_view socketName,
+                                      float unitsPerPixel, bool mirrorX,
+                                      Transform& attachmentTransform) {
+    const auto* frame = player.frame();
+    if (!frame) return false;
+    float x = 0.0f, y = 0.0f;
+    if (!ay2d::spriteClipSocket2D(*frame, socketName, unitsPerPixel,
+                                  mirrorX, x, y)) return false;
+    attachmentTransform.setPresentationPose(
+        {x, y, attachmentTransform.position.z}, attachmentTransform.rotation);
+    return true;
+}
+
 } // namespace ayt::entity

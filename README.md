@@ -307,6 +307,8 @@ Sprite/Tilemap 美术和碰撞区域需要分别配置。当前仅支持轴对�
 不能同时由 `SpriteAnimationSystem` 写入；动作状态选择与事件消费仍由游戏负责。
 带 `mirrorX` 的呈现入口会连同 UV 翻转一起反射四边形中心，使非对称透明裁切帧
 仍以角色枢轴为中心镜像；挂点也应使用 AY2D 的镜像求值入口。
+`presentSpriteClipSocket2D` 可将同帧命名挂点写入另一个表现实体的局部 Transform；
+它与视觉 Sprite 应同为单位缩放锚点的子实体，挂点缺失时位置不变，游戏决定显隐。
 
 ## 2D Tilemap 动画
 
