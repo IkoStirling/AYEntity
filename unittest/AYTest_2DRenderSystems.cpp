@@ -804,6 +804,52 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
     removeFile(prewarmTexPath);
 }
 
+TEST_CASE(scene_overlay_sprite_uses_resident_puppet_textures)
+{
+    if (!shadercAvailable()) return;
+    auto* rss = registerTestRenderer();
+    CHECK_NOT_NULL(rss);
+    if (!rss) return;
+    World::instance().initialize();
+    auto* entity = World::instance().createEntity();
+    CHECK_NOT_NULL(entity);
+    CHECK_NOT_NULL(entity->addComponent<Transform>());
+    auto* sprite = entity->addComponent<SpriteComponent>();
+    CHECK_NOT_NULL(sprite);
+    const std::uint8_t white[4] = {255, 255, 255, 255};
+    auto base = rss->renderer().createTextureFromRgba8(1, 1, white);
+    auto mask = rss->renderer().createTextureFromRgba8(1, 1, white);
+    auto replacement = rss->renderer().createTextureFromRgba8(1, 1, white);
+    CHECK(base.isValid() && mask.isValid() && replacement.isValid());
+    sprite->texturePath = "pak/avatar/base.png";
+    sprite->opacityMaskTexturePath = "pak/avatar/mask.png";
+    sprite->residentAlbedoTextureId = base.id;
+    ayt::entity::SpriteRenderSystem system;
+    system.onStart();
+    ayt::render::RenderScene scene;
+    system.buildRenderScene(scene);
+    CHECK(scene.items().empty()); // Incomplete resident mask must not draw.
+    sprite->residentMaskTextureId = mask.id;
+    system.buildRenderScene(scene);
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+    const auto material = scene.items()[0].material;
+    sprite->residentAlbedoTextureId = replacement.id;
+    scene.clear();
+    system.buildRenderScene(scene);
+    CHECK_INT_EQ(static_cast<int>(scene.items().size()), 1);
+    CHECK(scene.items()[0].material.id == material.id);
+    sprite->renderDomain = 1;
+    scene.clear();
+    system.buildRenderScene(scene);
+    CHECK(scene.items().empty()); // Resident binding is overlay-only.
+    rss->renderer().destroyTexture(base);
+    rss->renderer().destroyTexture(mask);
+    rss->renderer().destroyTexture(replacement);
+    rss->shutdown();
+    unregisterTestRenderer();
+    World::instance().shutdown();
+}
+
 TEST_CASE(world_lit_sprite_authors_shadow_cast_control)
 {
     if (!shadercAvailable()) {

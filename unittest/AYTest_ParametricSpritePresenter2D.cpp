@@ -23,10 +23,14 @@ TEST_CASE(evaluated_layer_updates_sprite_entity) {
     transform.position.z = 7;
     entity::SpriteComponent sprite;
     sprite.colorRGBA.x = 0.2f;
+    sprite.residentAlbedoTextureId = 17;
+    sprite.residentMaskTextureId = 19;
     CHECK(entity::presentParametricSpriteLayer2D(
         rig, 0, pose[0], transform, sprite, 100));
     CHECK(sprite.texturePath == "mouth.png");
     CHECK(sprite.opacityMaskTexturePath == "mouth-mask.png");
+    CHECK(sprite.residentAlbedoTextureId == 0);
+    CHECK(sprite.residentMaskTextureId == 0);
     CHECK(std::abs(transform.position.x - 2) < 0.0001f);
     CHECK(std::abs(transform.position.z - 7) < 0.0001f);
     CHECK(std::abs(sprite.colorRGBA.w - 0.5f) < 0.0001f);
@@ -72,11 +76,17 @@ TEST_CASE(selected_texture_variant_updates_atlas_without_changing_layer_order) {
     CHECK(sprite.texturePath == "closed.png");
     CHECK(std::abs(sprite.sourceRectMin.x - 0.25f) < 0.0001f);
     CHECK_INT_EQ(sprite.sortingKey, 42);
+    sprite.residentAlbedoTextureId = 77;
+    pose[0].variantIndex = -1;
+    CHECK(entity::presentParametricSpriteLayer2D(
+        rig, 0, pose[0], transform, sprite, 42));
+    CHECK(sprite.texturePath == "open.png");
+    CHECK(sprite.residentAlbedoTextureId == 0);
     pose[0].variantIndex = 8;
     const auto previousRevision = transform.revision;
     CHECK_FALSE(entity::presentParametricSpriteLayer2D(
         rig, 0, pose[0], transform, sprite));
     CHECK_INT_EQ(transform.revision, previousRevision);
-    CHECK(sprite.texturePath == "closed.png");
+    CHECK(sprite.texturePath == "open.png");
 }
 TEST_SUITE_END

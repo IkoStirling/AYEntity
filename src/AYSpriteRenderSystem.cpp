@@ -48,6 +48,15 @@ ayt::render::RenderDomain2D renderDomainOf(const SpriteComponent& sprite) noexce
 std::string spriteResourceKey(const SpriteComponent& sprite, uint32_t entityId)
 {
     if (!sprite.isWorldLit()) {
+        if (sprite.residentAlbedoTextureId) {
+            const bool masked = !sprite.opacityMaskTexturePath.empty() ||
+                sprite.residentMaskTextureId != 0;
+            const char* mode = masked ? "overlay-resident-mask\x1f"
+                : (sprite.samplingQuality == 1
+                    ? "overlay-resident-retro-aa\x1f"
+                    : "overlay-resident-linear\x1f");
+            return std::string(mode) + std::to_string(entityId);
+        }
         if (!sprite.opacityMaskTexturePath.empty())
             return std::string("overlay-mask\x1f") + sprite.texturePath +
                 '\x1f' + sprite.opacityMaskTexturePath;
@@ -190,11 +199,23 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         if (!entity->worldPose(presentationPosition, presentationRotation, interpolationAlpha)) continue;
 
         const bool worldLit = renderDomain == ayt::render::RenderDomain2D::WorldLit;
-        if (worldLit && !sprite->opacityMaskTexturePath.empty()) continue;
+        const bool resident = sprite->residentAlbedoTextureId != 0;
+        const bool masked = !sprite->opacityMaskTexturePath.empty() ||
+            sprite->residentMaskTextureId != 0;
+        if ((worldLit && (masked || resident)) ||
+            (!resident && sprite->residentMaskTextureId != 0) ||
+            (resident && masked && sprite->residentMaskTextureId == 0)) continue;
         const std::string resourceKey =
             spriteResourceKey(*sprite, entity->getId());
         CachedSpriteResources& resources = _cache[resourceKey];
-        if (!resources.texture.isValid()) {
+        const auto previousAlbedo = resources.texture;
+        const auto previousMask = resources.maskTexture;
+        if (resident) {
+            resources.texture = ayt::render::TextureHandle{
+                sprite->residentAlbedoTextureId};
+            resources.maskTexture = ayt::render::TextureHandle{
+                sprite->residentMaskTextureId};
+        } else if (!resources.texture.isValid()) {
             resources.texture = worldLit
                 ? renderer.loadTexture(sprite->texturePath, /*srgb=*/true)
                 : renderer.loadTexture(sprite->texturePath);
@@ -226,14 +247,15 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                                    resources.roughnessTexture, /*srgb=*/false)
                 && loadOptionalMap(sprite->emissiveTexturePath,
                                    resources.emissiveTexture, /*srgb=*/true);
-        } else if (!sprite->opacityMaskTexturePath.empty()) {
+        } else if (masked && !resident) {
             optionalMapsReady = loadOptionalMap(sprite->opacityMaskTexturePath,
                                                 resources.maskTexture, /*srgb=*/false);
         }
         if (!resources.texture.isValid() || !optionalMapsReady) {
             continue;
         }
-        if (!resources.material.isValid()) {
+        const bool hadMaterial = resources.material.isValid();
+        if (!hadMaterial) {
             if (worldLit) {
                 ayt::render::Material2DDesc materialDesc;
                 materialDesc.albedo = resources.texture;
@@ -251,7 +273,7 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 resources.material = renderer.createMaterial2D(
                     materialDesc, resourceKey + "material");
             } else {
-                const char* shaderSource = !sprite->opacityMaskTexturePath.empty()
+                const char* shaderSource = masked
                     ? ayt::render::kPuppetMasked2DPhoskiaSource
                     : (sprite->samplingQuality == 1
                         ? ayt::render::kSpriteRetroAaPhoskiaSource
@@ -271,6 +293,14 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                              "[SpriteRenderSystem] material compile failed "
                              "(shaderc missing?)\n");
             }
+        }
+        if (hadMaterial && resident && resources.material.isValid()) {
+            if (previousAlbedo.id != resources.texture.id)
+                renderer.setMaterialTexture(resources.material, "albedoMap",
+                                            resources.texture);
+            if (masked && previousMask.id != resources.maskTexture.id)
+                renderer.setMaterialTexture(resources.material, "maskMap",
+                                            resources.maskTexture);
         }
         // Material validity alone is not enough: createMaterialFromPhoskia
         // only compiles the shader, so a sprite whose texture failed to

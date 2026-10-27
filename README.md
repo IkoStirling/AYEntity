@@ -25,6 +25,12 @@ expression; the presenter applies that selection without changing layer order.
 An authored mask texture path is copied to the Sprite. SceneOverlay loads it
 as linear alpha coverage with the same active UVs; a failed mask load skips
 the draw. WorldLit2D does not use this masked Sprite material.
+For a puppet loaded from Pak, the host may assign Renderer-owned IDs to the
+runtime-only `residentAlbedoTextureId` and `residentMaskTextureId` fields.
+SceneOverlay then binds those handles without path loading; an incomplete mask
+pair is skipped. Switching an authored texture path clears its resident ID,
+so the host must bind the newly selected variant after presentation. The host
+keeps old GPU sets alive until scene extraction and prior frames retire.
 
 ## 载具与坐骑座位归属
 

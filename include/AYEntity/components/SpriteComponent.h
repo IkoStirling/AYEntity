@@ -58,6 +58,14 @@ struct SpriteComponent : public IComponent {
 
     // Runtime-only (not serialized): render skip flag.
     bool visible = true;
+    /// Optional Renderer-owned resident texture IDs for SceneOverlay. Set
+    /// these from a live GPU texture lease, and retain that lease until the
+    /// Sprite render scene has rebound and prior frames have retired. Zero
+    /// keeps path-based loading. A mask ID is required when the authored
+    /// opacityMaskTexturePath is nonempty and an albedo ID is supplied.
+    std::uint64_t residentAlbedoTextureId = 0;
+    /// Optional resident mask paired with residentAlbedoTextureId.
+    std::uint64_t residentMaskTextureId = 0;
 
     SpriteComponent() {
         rotationZ   = 0.0f;
@@ -87,7 +95,7 @@ struct SpriteComponent : public IComponent {
 
     void setTexture(const char* path) { texturePath = path ? path : ""; }
 
-    bool isValid() const { return !texturePath.empty(); }
+    bool isValid() const { return !texturePath.empty() || residentAlbedoTextureId != 0; }
     bool isWorldLit() const noexcept { return renderDomain == 1; }
 };
 #undef AY_CURRENT_CLASS
