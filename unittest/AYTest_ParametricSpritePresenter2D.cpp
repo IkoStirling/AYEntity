@@ -10,6 +10,7 @@ TEST_CASE(evaluated_layer_updates_sprite_entity) {
     ay2d::PuppetLayer2D layer;
     layer.name = "mouth";
     layer.texturePath = "mouth.png";
+    layer.maskTexturePath = "mouth-mask.png";
     layer.renderLayer = 4;
     layer.u0 = 0.25f;
     layer.u1 = 0.75f;
@@ -25,6 +26,7 @@ TEST_CASE(evaluated_layer_updates_sprite_entity) {
     CHECK(entity::presentParametricSpriteLayer2D(
         rig, 0, pose[0], transform, sprite, 100));
     CHECK(sprite.texturePath == "mouth.png");
+    CHECK(sprite.opacityMaskTexturePath == "mouth-mask.png");
     CHECK(std::abs(transform.position.x - 2) < 0.0001f);
     CHECK(std::abs(transform.position.z - 7) < 0.0001f);
     CHECK(std::abs(sprite.colorRGBA.w - 0.5f) < 0.0001f);

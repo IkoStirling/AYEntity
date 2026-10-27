@@ -21,6 +21,9 @@ struct SpriteComponent : public IComponent {
     const char* getName() const override { return "SpriteComponent"; }
 
     AY_PROPERTY(std::string, texturePath, kAttrSerialize)
+    /// Optional SceneOverlay alpha coverage map. It samples the same UVs as
+    /// texturePath, including source rect and flip. WorldLit2D is unsupported.
+    AY_PROPERTY(std::string, opacityMaskTexturePath, kAttrSerialize)
     // Optional WorldLit2D maps. Color textures are loaded as sRGB; normal and
     // roughness data stay linear. Empty paths use renderer fallbacks.
     AY_PROPERTY(std::string, normalTexturePath, kAttrSerialize)

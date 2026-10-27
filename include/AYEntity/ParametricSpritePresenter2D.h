@@ -38,6 +38,8 @@ inline bool presentParametricSpriteLayer2D(
     transform.setScale(pose.scaleX, pose.scaleY, transform.scale.z);
     const auto& texture = variant ? variant->texturePath : layer.texturePath;
     if (sprite.texturePath != texture) sprite.texturePath = texture;
+    if (sprite.opacityMaskTexturePath != layer.maskTexturePath)
+        sprite.opacityMaskTexturePath = layer.maskTexturePath;
     sprite.sourceRectMin = math::FVector2(
         variant ? variant->u0 : layer.u0, variant ? variant->v0 : layer.v0);
     sprite.sourceRectMax = math::FVector2(

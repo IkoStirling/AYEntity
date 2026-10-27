@@ -40,6 +40,7 @@ public:
 private:
     struct CachedSpriteResources {
         ayt::render::TextureHandle  texture;   // albedo; invalid = not loaded / failed
+        ayt::render::TextureHandle  maskTexture;
         ayt::render::TextureHandle  normalTexture;
         ayt::render::TextureHandle  roughnessTexture;
         ayt::render::TextureHandle  emissiveTexture;

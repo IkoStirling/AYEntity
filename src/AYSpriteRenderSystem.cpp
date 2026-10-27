@@ -48,6 +48,9 @@ ayt::render::RenderDomain2D renderDomainOf(const SpriteComponent& sprite) noexce
 std::string spriteResourceKey(const SpriteComponent& sprite, uint32_t entityId)
 {
     if (!sprite.isWorldLit()) {
+        if (!sprite.opacityMaskTexturePath.empty())
+            return std::string("overlay-mask\x1f") + sprite.texturePath +
+                '\x1f' + sprite.opacityMaskTexturePath;
         const char* sampling = sprite.samplingQuality == 1
             ? "overlay-retro-aa\x1f"
             : "overlay-linear\x1f";
@@ -187,6 +190,7 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         if (!entity->worldPose(presentationPosition, presentationRotation, interpolationAlpha)) continue;
 
         const bool worldLit = renderDomain == ayt::render::RenderDomain2D::WorldLit;
+        if (worldLit && !sprite->opacityMaskTexturePath.empty()) continue;
         const std::string resourceKey =
             spriteResourceKey(*sprite, entity->getId());
         CachedSpriteResources& resources = _cache[resourceKey];
@@ -222,6 +226,9 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                                    resources.roughnessTexture, /*srgb=*/false)
                 && loadOptionalMap(sprite->emissiveTexturePath,
                                    resources.emissiveTexture, /*srgb=*/true);
+        } else if (!sprite->opacityMaskTexturePath.empty()) {
+            optionalMapsReady = loadOptionalMap(sprite->opacityMaskTexturePath,
+                                                resources.maskTexture, /*srgb=*/false);
         }
         if (!resources.texture.isValid() || !optionalMapsReady) {
             continue;
@@ -244,14 +251,19 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
                 resources.material = renderer.createMaterial2D(
                     materialDesc, resourceKey + "material");
             } else {
-                const char* shaderSource = sprite->samplingQuality == 1
-                    ? ayt::render::kSpriteRetroAaPhoskiaSource
-                    : ayt::render::kTilemapPhoskiaSource;
+                const char* shaderSource = !sprite->opacityMaskTexturePath.empty()
+                    ? ayt::render::kPuppetMasked2DPhoskiaSource
+                    : (sprite->samplingQuality == 1
+                        ? ayt::render::kSpriteRetroAaPhoskiaSource
+                        : ayt::render::kTilemapPhoskiaSource);
                 resources.material = renderer.createMaterialFromPhoskia(
                     shaderSource, resourceKey + "material");
                 if (resources.material.isValid()) {
                     renderer.setMaterialTexture(resources.material, "albedoMap",
                                                 resources.texture);
+                    if (resources.maskTexture.isValid())
+                        renderer.setMaterialTexture(resources.material, "maskMap",
+                                                    resources.maskTexture);
                 }
             }
             if (!resources.material.isValid() && frameIndex < 5) {

@@ -730,6 +730,7 @@ TEST_CASE(cm3_sprite_render_sorted_and_culled)
         {3.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 0.0f, 1.0f});
     SpriteComponent* sc = c->addComponent<SpriteComponent>();
     sc->texturePath = texPath;
+    sc->opacityMaskTexturePath = texPath;
     sc->layer       = 1;
     sc->sortingKey  = 3;
     // B: far off-screen — must be culled.

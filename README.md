@@ -22,6 +22,9 @@ advance tracking or animation time. Use an independent Sprite per layer and
 avoid another presentation system writing the same transform or UV in a frame.
 The evaluator may choose an authored texture/UV variant for a thresholded
 expression; the presenter applies that selection without changing layer order.
+An authored mask texture path is copied to the Sprite. SceneOverlay loads it
+as linear alpha coverage with the same active UVs; a failed mask load skips
+the draw. WorldLit2D does not use this masked Sprite material.
 
 ## 载具与坐骑座位归属
 
