@@ -3650,3 +3650,14 @@ horizontal flip bit while preserving vertical flip and all other Sprite
 properties. It does not step the action runtime, infer gameplay hits, or
 claim rollback authority. A game selects this presenter instead of the
 independent `SpriteAnimationSystem` for any one Sprite.
+
+## Named pixel clip presentation (2026-10-27)
+
+`presentSpriteClip2D` reads a validated AY2D frame and writes the texture,
+pixel-accurate UV, quad center and size to a separate visual Spatial Entity.
+Its local parent anchor must have unit scale; gameplay actor Transform and
+collision remain untouched. Replacing an atlas page clears stale resident
+texture ID. The game creates/owns the visual hierarchy, chooses clips and
+advances its presentation clock before SpriteRenderSystem. One Sprite has one
+writer: it must not also carry SpriteAnimationComponent. Root motion, gameplay
+events, save state and Pak residency are outside this presenter.

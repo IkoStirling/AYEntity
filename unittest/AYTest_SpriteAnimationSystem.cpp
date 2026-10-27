@@ -1,8 +1,10 @@
 #include <AYEntity.h>
 #include <AYEntity/SpriteAnimationSystem.h>
+#include <AYEntity/SpriteClipPresenter2D.h>
 #include <AYEntity/World.h>
 #include <AYEntity/components/SpriteAnimationComponent.h>
 #include <AYEntity/components/SpriteComponent.h>
+#include <AYEntity/components/TransformComponent.h>
 
 #include <AYTest.h>
 
@@ -139,6 +141,38 @@ TEST_CASE(negative_or_non_finite_delta_does_not_advance)
     fixture.system.onUpdate((std::numeric_limits<float>::quiet_NaN)());
     CHECK(fixture.animation->currentFrame == 0u);
     CHECK(fixture.animation->elapsedMicroseconds == 0u);
+}
+
+TEST_CASE(named_clip_presenter_places_visual_without_moving_actor)
+{
+    ayt::ay2d::SpriteClipSet2D set;
+    set.pages.push_back({"textures/actor.png", 64, 64});
+    ayt::ay2d::SpriteClipFrame2D frame;
+    frame.width = 20;
+    frame.height = 24;
+    frame.canvasWidth = 32;
+    frame.canvasHeight = 32;
+    frame.trimX = 6;
+    frame.trimY = 4;
+    frame.pivotX = 16;
+    frame.pivotY = 30;
+    set.clips.push_back({"idle", true, {frame}});
+    ayt::ay2d::SpriteClipPlayer2D player;
+    CHECK(player.select(set, "idle"));
+
+    ayt::entity::Transform actor;
+    actor.setPosition(100.0f, 200.0f, 0.0f);
+    ayt::entity::Transform visual;
+    SpriteComponent sprite;
+    CHECK(ayt::entity::presentSpriteClip2D(set, player, 2.0f,
+                                           visual, sprite));
+    CHECK_FLOAT_EQ(actor.position.x, 100.0f, 1e-6f);
+    CHECK_FLOAT_EQ(actor.position.y, 200.0f, 1e-6f);
+    CHECK_FLOAT_EQ(visual.position.x, 0.0f, 1e-6f);
+    CHECK_FLOAT_EQ(visual.position.y, 28.0f, 1e-6f);
+    CHECK_FLOAT_EQ(visual.scale.x, 40.0f, 1e-6f);
+    CHECK_FLOAT_EQ(visual.scale.y, 48.0f, 1e-6f);
+    CHECK(sprite.texturePath == "textures/actor.png");
 }
 
 TEST_SUITE_END

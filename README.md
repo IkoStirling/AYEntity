@@ -301,8 +301,10 @@ Sprite/Tilemap 美术和碰撞区域需要分别配置。当前仅支持轴对�
 更新 UV，因此本帧推进会在同一表现帧可见。暂停保留帧内时间，Once 停在末帧；场景
 重载只恢复作者参数，不恢复上次运行进度。
 
-该组件刻意只覆盖最常见的规则网格 MVP。非规则区域、逐帧时长、动画事件、命名
-片段与状态机应由后续独立 clip 资产描述，而不是继续扩张组件字段。
+该组件只覆盖规则网格。非规则区域、逐帧时长、入帧提示和命名片段使用 AY2D 的
+`SpriteClipSet2D` 与 `SpriteClipPlayer2D`；游戏在独立视觉实体上调用
+`presentSpriteClip2D`，使角色的权威 Transform 与碰撞不受裁切帧影响。该 Sprite
+不能同时由 `SpriteAnimationSystem` 写入；动作状态选择与事件消费仍由游戏负责。
 
 ## 2D Tilemap 动画
 
