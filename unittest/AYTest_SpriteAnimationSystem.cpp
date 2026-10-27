@@ -198,4 +198,35 @@ TEST_CASE(named_clip_presenter_places_visual_without_moving_actor)
     CHECK_FLOAT_EQ(attachment.position.x, -18.0f, 1e-6f);
 }
 
+TEST_CASE(sprite_visual_anchor_snap_rounds_screen_position_without_moving_input)
+{
+    ayt::entity::CameraFrame camera;
+    camera.projectionMode = ayt::entity::CameraProjection::Orthographic;
+    camera.position = {0.0f, 0.0f, -10.0f};
+    camera.verticalSize = 10.0f;
+    camera.aspect = 1.0f;
+    CHECK(ayt::entity::rebuildCameraFrame(camera));
+    const ayt::entity::CameraViewport viewport{13.0f, 17.0f, 100.0f, 100.0f};
+    const ayt::math::FVector3 anchor{0.123f, 0.267f, 0.0f};
+    ayt::math::FVector3 snapped{999.0f, 999.0f, 999.0f};
+    CHECK(ayt::entity::snapSpriteAnchorToScreenPixel2D(
+        camera, viewport, anchor, snapped));
+    CHECK_FLOAT_EQ(anchor.x, 0.123f, 1e-6f);
+    CHECK_FLOAT_EQ(anchor.y, 0.267f, 1e-6f);
+    ayt::math::FVector3 screen;
+    CHECK(ayt::entity::worldToScreen(camera, viewport, snapped, screen));
+    CHECK_FLOAT_EQ(screen.x, 64.0f, 1e-4f);
+    CHECK_FLOAT_EQ(screen.y, 64.0f, 1e-4f);
+    CHECK_FLOAT_EQ(snapped.z, anchor.z, 1e-4f);
+    camera.projectionMode = ayt::entity::CameraProjection::Perspective;
+    CHECK_FALSE(ayt::entity::snapSpriteAnchorToScreenPixel2D(
+        camera, viewport, anchor, snapped));
+    CHECK_FLOAT_EQ(snapped.x, 0.1f, 1e-4f);
+    camera.projectionMode = ayt::entity::CameraProjection::Orthographic;
+    const ayt::entity::CameraViewport invalid{0.0f, 0.0f, 0.0f, 100.0f};
+    CHECK_FALSE(ayt::entity::snapSpriteAnchorToScreenPixel2D(
+        camera, invalid, anchor, snapped));
+    CHECK_FLOAT_EQ(snapped.x, 0.1f, 1e-4f);
+}
+
 TEST_SUITE_END

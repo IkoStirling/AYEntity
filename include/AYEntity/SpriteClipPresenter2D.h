@@ -1,10 +1,33 @@
 #pragma once
 
 #include <AY2D/SpriteClip2D.h>
+#include <AYEntity/CameraFrame.h>
 #include <AYEntity/components/SpriteComponent.h>
 #include <AYEntity/components/TransformComponent.h>
 
 namespace ayt::entity {
+
+/// Quantize only a visual anchor to the active orthographic viewport's pixel
+/// grid. Gameplay pose/collision and camera are untouched. This removes
+/// subpixel anchor drift, but is not a pixel-perfect guarantee when source
+/// texels project to a non-integer size, the sprite rotates, or filtering
+/// blends samples. Failure preserves output.
+inline bool snapSpriteAnchorToScreenPixel2D(
+    const CameraFrame& camera, const CameraViewport& viewport,
+    const math::FVector3& anchor, math::FVector3& output) noexcept {
+    if (camera.projectionMode != CameraProjection::Orthographic)
+        return false;
+    math::FVector3 screen;
+    if (!worldToScreen(camera, viewport, anchor, screen)) return false;
+    const math::FVector3 snappedScreen{
+        std::round(screen.x - viewport.x) + viewport.x,
+        std::round(screen.y - viewport.y) + viewport.y, screen.z};
+    math::FVector3 candidate;
+    if (!screenToWorld(camera, viewport, snappedScreen, candidate))
+        return false;
+    output = candidate;
+    return true;
+}
 
 namespace detail {
 inline bool presentSpriteClipFrame2D(const ay2d::SpriteClipSet2D& set,

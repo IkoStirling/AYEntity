@@ -313,6 +313,9 @@ WorldLit2D Sprite 暂不使用该采样选择。
 仍以角色枢轴为中心镜像；挂点也应使用 AY2D 的镜像求值入口。
 `presentSpriteClipSocket2D` 可将同帧命名挂点写入另一个表现实体的局部 Transform；
 它与视觉 Sprite 应同为单位缩放锚点的子实体，挂点缺失时位置不变，游戏决定显隐。
+可选的 `snapSpriteAnchorToScreenPixel2D` 用当前正交相机和视口将视觉锚点
+对齐到屏幕像素网格；仅把返回坐标写入表现实体，不改变角色的物理位置。
+非整数素材缩放、旋转和采样滤镜仍可能产生像素抖动，不能据此宣称完全像素精确。
 
 ## 2D Tilemap 动画
 

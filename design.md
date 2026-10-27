@@ -3673,3 +3673,8 @@ does not own Sprite.flip. Games mirror sockets with AY2D's matching overload.
 mirrored socket position to a sibling attachment Transform. It leaves the
 Transform unchanged on missing sockets or invalid scale. Attachment lifetime,
 visibility and gameplay effects remain with the game.
+`snapSpriteAnchorToScreenPixel2D` optionally projects an interpolated visual
+anchor through an orthographic CameraFrame, rounds its viewport-local pixel
+coordinates, and unprojects at the same depth. It does not write the actor or
+camera. Rejection preserves the caller output. This only stabilizes the anchor;
+non-integer source texel footprints, rotation and filtering remain independent.
