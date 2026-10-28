@@ -229,4 +229,84 @@ TEST_CASE(sprite_visual_anchor_snap_rounds_screen_position_without_moving_input)
     CHECK_FLOAT_EQ(snapped.x, 0.1f, 1e-4f);
 }
 
+TEST_CASE(sprite_clip_attachment_follows_mirrored_socket_with_own_clock)
+{
+    ayt::ay2d::SpriteClipSet2D source;
+    source.pages.push_back({"textures/actor.png", 32, 16});
+    ayt::ay2d::SpriteClipFrame2D first;
+    first.width = 16;
+    first.height = 16;
+    first.canvasWidth = 16;
+    first.canvasHeight = 16;
+    first.pivotX = 8;
+    first.pivotY = 12;
+    first.sockets = {{"face", 11, 5}};
+    auto second = first;
+    second.x = 16;
+    second.sockets.clear();
+    source.clips.push_back({"move", true, {first, second}});
+    ayt::ay2d::SpriteClipPlayer2D sourcePlayer;
+    CHECK(sourcePlayer.select(source, "move"));
+
+    ayt::ay2d::SpriteClipSet2D effect;
+    effect.pages.push_back({"textures/face-effect.png", 16, 8});
+    ayt::ay2d::SpriteClipFrame2D effectFirst;
+    effectFirst.width = 8;
+    effectFirst.height = 8;
+    effectFirst.canvasWidth = 8;
+    effectFirst.canvasHeight = 8;
+    effectFirst.pivotX = 4;
+    effectFirst.pivotY = 4;
+    auto effectSecond = effectFirst;
+    effectSecond.x = 8;
+    effect.clips.push_back({"mosaic", true, {effectFirst, effectSecond}});
+    ayt::ay2d::SpriteClipPlayer2D effectPlayer;
+    CHECK(effectPlayer.select(effect, "mosaic"));
+
+    ayt::entity::Transform socket;
+    socket.setPosition(90.0f, 90.0f, 3.0f);
+    socket.rotation = ayt::math::FQuaternion::fromEulerAngles({0, 0, 0.25f});
+    ayt::entity::Transform visual;
+    SpriteComponent sprite;
+    sprite.visible = false;
+    CHECK(ayt::entity::presentSpriteClipAttachment2D(
+        sourcePlayer, "face", 2.0f, false, effect, effectPlayer,
+        2.0f, false, socket, visual, sprite));
+    CHECK(sprite.visible);
+    CHECK_FLOAT_EQ(socket.position.x, 6.0f, 1e-6f);
+    CHECK_FLOAT_EQ(socket.position.y, 14.0f, 1e-6f);
+    CHECK_FLOAT_EQ(socket.position.z, 3.0f, 1e-6f);
+    CHECK_FLOAT_EQ(socket.rotation.toEulerAngles().z, 0.25f, 1e-5f);
+    CHECK_FLOAT_EQ(visual.scale.x, 16.0f, 1e-6f);
+    CHECK(sprite.texturePath == "textures/face-effect.png");
+
+    (void)effectPlayer.advanceUs(100000);
+    CHECK(ayt::entity::presentSpriteClipAttachment2D(
+        sourcePlayer, "face", 2.0f, true, effect, effectPlayer,
+        2.0f, false, socket, visual, sprite));
+    CHECK_FLOAT_EQ(socket.position.x, -6.0f, 1e-6f);
+    CHECK_FLOAT_EQ(sprite.sourceRectMin.x, 0.5f, 1e-6f);
+    CHECK(sprite.flip == 0);
+    CHECK(sourcePlayer.sample().frame == 0u);
+
+    CHECK_FALSE(ayt::entity::presentSpriteClipAttachment2D(
+        sourcePlayer, "face", 2.0f, false, effect, effectPlayer,
+        0.0f, false, socket, visual, sprite));
+    CHECK_FALSE(sprite.visible);
+    CHECK_FLOAT_EQ(socket.position.x, -6.0f, 1e-6f);
+    CHECK(ayt::entity::presentSpriteClipAttachment2D(
+        sourcePlayer, "face", 2.0f, false, effect, effectPlayer,
+        2.0f, true, socket, visual, sprite));
+    CHECK(sprite.visible);
+    CHECK(sprite.flip == 1);
+
+    (void)sourcePlayer.advanceUs(100000);
+    CHECK_FALSE(ayt::entity::presentSpriteClipAttachment2D(
+        sourcePlayer, "face", 2.0f, false, effect, effectPlayer,
+        2.0f, false, socket, visual, sprite));
+    CHECK_FALSE(sprite.visible);
+    CHECK_FLOAT_EQ(socket.position.x, 6.0f, 1e-6f);
+    CHECK_FLOAT_EQ(sprite.sourceRectMin.x, 0.5f, 1e-6f);
+}
+
 TEST_SUITE_END

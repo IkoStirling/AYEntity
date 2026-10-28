@@ -106,4 +106,48 @@ inline bool presentSpriteClipSocket2D(const ay2d::SpriteClipPlayer2D& player,
     return true;
 }
 
+/// Present an independently timed Sprite clip at a socket on the current
+/// source frame. The socket Entity is a sibling of the source visual under
+/// its unit-scale anchor; the attachment visual is a child of that socket.
+/// The caller advances both players, owns both clip sets and texture leases,
+/// and may rotate the socket Transform for a continuous local effect. Source
+/// and attachment mirroring are independent. A missing socket or invalid pose
+/// hides the attachment Sprite without changing either Transform; a successful
+/// call makes it visible. This affects presentation only.
+inline bool presentSpriteClipAttachment2D(
+    const ay2d::SpriteClipPlayer2D& sourcePlayer,
+    std::string_view socketName, float sourceUnitsPerPixel,
+    bool sourceMirrorX, const ay2d::SpriteClipSet2D& attachmentSet,
+    const ay2d::SpriteClipPlayer2D& attachmentPlayer,
+    float attachmentUnitsPerPixel, bool attachmentMirrorX,
+    Transform& socketTransform, Transform& attachmentVisualTransform,
+    SpriteComponent& attachmentSprite) {
+    const auto* sourceFrame = sourcePlayer.frame();
+    const auto* attachmentFrame = attachmentPlayer.frame();
+    float socketX = 0.0f, socketY = 0.0f;
+    ay2d::SpriteClipPose2D attachmentPose;
+    if (!sourceFrame || !attachmentFrame ||
+        !ay2d::spriteClipSocket2D(*sourceFrame, socketName,
+                                  sourceUnitsPerPixel, sourceMirrorX,
+                                  socketX, socketY) ||
+        !ay2d::spriteClipPose2D(attachmentSet, *attachmentFrame,
+                                attachmentUnitsPerPixel, attachmentMirrorX,
+                                attachmentPose)) {
+        attachmentSprite.visible = false;
+        return false;
+    }
+    if (!presentSpriteClip2D(attachmentSet, attachmentPlayer,
+                             attachmentUnitsPerPixel,
+                             attachmentVisualTransform, attachmentSprite,
+                             attachmentMirrorX)) {
+        attachmentSprite.visible = false;
+        return false;
+    }
+    socketTransform.setPresentationPose(
+        {socketX, socketY, socketTransform.position.z},
+        socketTransform.rotation);
+    attachmentSprite.visible = true;
+    return true;
+}
+
 } // namespace ayt::entity

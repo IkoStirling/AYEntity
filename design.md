@@ -3673,6 +3673,16 @@ does not own Sprite.flip. Games mirror sockets with AY2D's matching overload.
 mirrored socket position to a sibling attachment Transform. It leaves the
 Transform unchanged on missing sockets or invalid scale. Attachment lifetime,
 visibility and gameplay effects remain with the game.
+`presentSpriteClipAttachment2D` composes a source player socket with a second,
+independently timed clip player. The socket Entity is a sibling of the source
+visual under the unit-scale actor anchor; its child presents the attachment
+clip. The source mirror reflects only the socket, while the attachment mirror
+controls the overlay quad separately. A missing source socket or invalid overlay
+pose hides the attachment Sprite without moving either Transform. A valid call
+updates both and makes the Sprite visible. The host advances both clocks, owns
+the hierarchy and texture residency, and may rotate the socket Transform for
+continuous visual effects. It does not infer sockets from image pixels or turn
+presentation cues into gameplay state.
 `snapSpriteAnchorToScreenPixel2D` optionally projects an interpolated visual
 anchor through an orthographic CameraFrame, rounds its viewport-local pixel
 coordinates, and unprojects at the same depth. It does not write the actor or
