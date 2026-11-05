@@ -3688,3 +3688,11 @@ anchor through an orthographic CameraFrame, rounds its viewport-local pixel
 coordinates, and unprojects at the same depth. It does not write the actor or
 camera. Rejection preserves the caller output. This only stabilizes the anchor;
 non-integer source texel footprints, rotation and filtering remain independent.
+
+
+## WorldLit2D Sprite pixel sampling
+
+Sprite samplingQuality=2 maps to the existing WorldLit payload Nearest value;
+0/1 retain Linear (Retro AA remains SceneOverlay-only). The renderer obtains
+inverse dimensions from the bound live albedo in both GBuffer and shadow
+cutout stages, so Entity does not duplicate GPU texture size/lifetime state.

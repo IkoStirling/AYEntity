@@ -369,6 +369,13 @@ void SpriteRenderSystem::buildRenderScene(ayt::render::RenderScene& scene)
         entry.payload.flip          = static_cast<uint8_t>(sprite->flip);
         entry.payload.packedSortKey = drawSortKey(sprite->layer, sprite->sortingKey);
         entry.payload.renderDomain  = renderDomain;
+        if (worldLit) {
+            // Sprite quality 2 is nearest; Retro AA remains overlay-only.
+            // The renderer resolves atlas texel size from the bound GPU image.
+            entry.payload.samplingQuality = sprite->samplingQuality == 2
+                ? ayt::render::TilemapSamplingQuality::Nearest
+                : ayt::render::TilemapSamplingQuality::Linear;
+        }
 
         entry.item.mesh     = quad;
         entry.item.material = resources.material;

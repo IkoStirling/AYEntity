@@ -21,6 +21,7 @@
 #include <AYEntity.h>
 #include <AYEntity/EntityImpl.h>
 #include <AYEntity/EntityModule.h>
+#include <AYEntity/Entity2DIntegrationModule.h>
 #include <AYEntity/World.h>
 
 #include <AYEntity/2DUvMath.h>
@@ -978,6 +979,32 @@ TEST_CASE(cm3_sprite_texture_load_failure_skips)
     World::instance().shutdown();
     removeFile(texPath);
     removeFile(mapPath);
+}
+
+
+
+TEST_CASE(world_lit_sprite_honors_nearest_without_enabling_overlay_retro_aa)
+{
+    if(!shadercAvailable())return;
+    auto& registry=ayt::entity::ComponentRegistry::instance();
+    CHECK(ayt::entity::registerEntityCoreComponents(registry).succeeded());
+    CHECK(ayt::entity::registerEntity2DComponents(registry).succeeded());
+    std::string texPath,mapPath;CHECK(bakeAssets(texPath,mapPath));
+    auto* rss=registerTestRenderer();CHECK_NOT_NULL(rss);if(!rss)return;
+    auto& world=World::instance();world.initialize();
+    auto* entity=world.createSpatialEntity();CHECK_NOT_NULL(entity);
+    auto* sprite=entity?entity->addComponent<SpriteComponent>():nullptr;CHECK_NOT_NULL(sprite);
+    if(!sprite) { rss->shutdown();unregisterTestRenderer();world.shutdown();removeFile(texPath);removeFile(mapPath);return; }
+    sprite->texturePath=texPath;sprite->renderDomain=1;sprite->samplingQuality=2;
+    ayt::entity::SpriteRenderSystem system;system.onStart();ayt::render::RenderScene scene;
+    system.buildRenderScene(scene);CHECK(scene.items().size()==1u);
+    if(!scene.items().empty())CHECK(scene.items()[0].payload->samplingQuality==ayt::render::TilemapSamplingQuality::Nearest);
+    for(int quality:{0,1}) {
+        sprite->samplingQuality=quality;scene.clear();system.buildRenderScene(scene);
+        CHECK(scene.items().size()==1u);
+        if(!scene.items().empty())CHECK(scene.items()[0].payload->samplingQuality==ayt::render::TilemapSamplingQuality::Linear);
+    }
+    rss->shutdown();unregisterTestRenderer();world.shutdown();removeFile(texPath);removeFile(mapPath);
 }
 
 TEST_SUITE_END

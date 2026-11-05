@@ -296,8 +296,9 @@ Sprite/Tilemap 美术和碰撞区域需要分别配置。当前仅支持轴对�
 ## 2D Sprite 序列帧
 
 SceneOverlay Sprite 的 `samplingQuality` 可选 0 普通线性、1 Retro AA、2 最近邻。
-最近邻保持硬像素边缘；非整数视口缩放需要平滑移动时可用 Retro AA。遮罩与
-WorldLit2D Sprite 暂不使用该采样选择。
+最近邻保持硬像素边缘；非整数视口缩放需要平滑移动时可用 Retro AA。
+WorldLit2D Sprite 也支持 2 最近邻，0/1 保持普通线性，纹素尺寸从实际 GPU 图像取得；
+Retro AA 仍只适用于 SceneOverlay，遮罩 Sprite 保持既有采样。
 
 规则网格 Sprite Sheet 使用 `SpriteComponent + SpriteAnimationComponent`。动画格从
 纹理左上角开始，按从左到右、再从上到下编号；组件提供列数、行数、起始格、帧数、

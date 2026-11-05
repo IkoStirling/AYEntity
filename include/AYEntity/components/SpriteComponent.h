@@ -44,7 +44,8 @@ struct SpriteComponent : public IComponent {
     AY_PROPERTY(int32_t, renderDomain, kAttrSerialize)
     /// SceneOverlay sampling: 0 = ordinary linear, 1 = Retro AA for stable
     /// pixel-art motion at non-integer viewport scales, 2 = hard nearest texel.
-    /// WorldLit2D and masked SceneOverlay sprites ignore this option.
+    /// WorldLit2D also accepts 2 for nearest (0/1 remain ordinary linear).
+    /// Masked SceneOverlay sprites ignore this option.
     AY_PROPERTY(int32_t, samplingQuality, kAttrSerialize)
     AY_PROPERTY(float, metallic, kAttrSerialize)
     AY_PROPERTY(float, roughness, kAttrSerialize)
